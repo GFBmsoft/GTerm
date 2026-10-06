@@ -1,0 +1,39 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GTerm", "app\GTerm.csproj", "{E017649D-8746-4438-A73B-355D5904F70C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GTerm.Tests", "tests\GTerm.Tests.csproj", "{DAFEB8BF-0E26-427C-8CFB-FE60FC5E7C5D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "vendor", "vendor", "{D85E39BD-55D7-4778-B3FB-3FD590471C02}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaTerminal", "vendor\AvaloniaTerminal\AvaloniaTerminal.csproj", "{387FCCAB-AA89-466D-A202-7DEDAD421720}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E017649D-8746-4438-A73B-355D5904F70C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E017649D-8746-4438-A73B-355D5904F70C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E017649D-8746-4438-A73B-355D5904F70C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E017649D-8746-4438-A73B-355D5904F70C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DAFEB8BF-0E26-427C-8CFB-FE60FC5E7C5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DAFEB8BF-0E26-427C-8CFB-FE60FC5E7C5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DAFEB8BF-0E26-427C-8CFB-FE60FC5E7C5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DAFEB8BF-0E26-427C-8CFB-FE60FC5E7C5D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{387FCCAB-AA89-466D-A202-7DEDAD421720}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{387FCCAB-AA89-466D-A202-7DEDAD421720}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{387FCCAB-AA89-466D-A202-7DEDAD421720}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{387FCCAB-AA89-466D-A202-7DEDAD421720}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{387FCCAB-AA89-466D-A202-7DEDAD421720} = {D85E39BD-55D7-4778-B3FB-3FD590471C02}
+	EndGlobalSection
+EndGlobal

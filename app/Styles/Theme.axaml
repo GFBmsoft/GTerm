@@ -1,0 +1,277 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+
+      <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Bg" Color="#0F1217" />
+          <SolidColorBrush x:Key="BgPanel" Color="#12151B" />
+          <SolidColorBrush x:Key="BgRaised" Color="#161A21" />
+          <SolidColorBrush x:Key="BgHover" Color="#1D222B" />
+          <SolidColorBrush x:Key="BgActive" Color="#232A35" />
+          <SolidColorBrush x:Key="Border" Color="#242A34" />
+          <SolidColorBrush x:Key="BorderSoft" Color="#1B2028" />
+          <SolidColorBrush x:Key="Text" Color="#DFE4EC" />
+          <SolidColorBrush x:Key="TextDim" Color="#8B95A6" />
+          <SolidColorBrush x:Key="TextFaint" Color="#707B8C" />
+          <!-- cores de estado: claras, para contrastar com o fundo escuro -->
+          <SolidColorBrush x:Key="Accent" Color="#4F8CFF" />
+          <SolidColorBrush x:Key="OnAccent" Color="#08121F" />
+          <SolidColorBrush x:Key="Green" Color="#3FB950" />
+          <SolidColorBrush x:Key="Red" Color="#FF7B72" />
+          <SolidColorBrush x:Key="Orange" Color="#F0883E" />
+          <SolidColorBrush x:Key="Yellow" Color="#E3B341" />
+          <SolidColorBrush x:Key="Purple" Color="#D2A8FF" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Bg" Color="#F2F4F7" />
+          <SolidColorBrush x:Key="BgPanel" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="BgRaised" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="BgHover" Color="#E8EDF3" />
+          <SolidColorBrush x:Key="BgActive" Color="#D7E3F7" />
+          <SolidColorBrush x:Key="Border" Color="#C7D0DA" />
+          <SolidColorBrush x:Key="BorderSoft" Color="#DEE4EB" />
+          <SolidColorBrush x:Key="Text" Color="#14181F" />
+          <SolidColorBrush x:Key="TextDim" Color="#44505F" />
+          <SolidColorBrush x:Key="TextFaint" Color="#61707F" />
+          <!-- as mesmas cores em tons escuros: sobre branco as claras somem -->
+          <SolidColorBrush x:Key="Accent" Color="#1F6FEB" />
+          <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Green" Color="#17803D" />
+          <SolidColorBrush x:Key="Red" Color="#C5221F" />
+          <SolidColorBrush x:Key="Orange" Color="#B44B00" />
+          <SolidColorBrush x:Key="Yellow" Color="#8A6100" />
+          <SolidColorBrush x:Key="Purple" Color="#6A35B8" />
+        </ResourceDictionary>
+
+      </ResourceDictionary.ThemeDictionaries>
+
+      <FontFamily x:Key="MonoFont">Cascadia Mono,Consolas,Courier New,monospace</FontFamily>
+      <x:Double x:Key="RowHeight">26</x:Double>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!-- base -->
+
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource Bg}" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <Style Selector="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource Text}" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
+  <Style Selector="TextBlock.dim">
+    <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+  </Style>
+
+  <Style Selector="TextBlock.faint">
+    <Setter Property="Foreground" Value="{DynamicResource TextFaint}" />
+  </Style>
+
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+  </Style>
+
+  <Style Selector="TextBlock.sectionTitle">
+    <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <!-- botões -->
+
+  <Style Selector="Button">
+    <Setter Property="Background" Value="{DynamicResource BgRaised}" />
+    <Setter Property="Foreground" Value="{DynamicResource Text}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="Height" Value="28" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+
+  <Style Selector="Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    <Setter Property="TextBlock.Foreground" Value="{DynamicResource Text}" />
+  </Style>
+
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource Accent}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnAccent}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Accent}" />
+    <Setter Property="TextBlock.Foreground" Value="{DynamicResource OnAccent}" />
+  </Style>
+
+  <Style Selector="Button.ghost">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <Style Selector="Button.tiny">
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Padding" Value="6,0" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+    <Setter Property="TextBlock.Foreground" Value="{DynamicResource Red}" />
+  </Style>
+
+  <!-- entradas -->
+
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource Bg}" />
+    <Setter Property="Foreground" Value="{DynamicResource Text}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="MinHeight" Value="28" />
+    <Setter Property="Padding" Value="7,4" />
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource Bg}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="MinHeight" Value="28" />
+  </Style>
+
+  <Style Selector="CheckBox">
+    <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+  </Style>
+
+  <!-- listas -->
+
+  <Style Selector="ListBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+
+  <Style Selector="ListBoxItem">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgHover}" />
+  </Style>
+
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgActive}" />
+  </Style>
+
+  <!-- containers -->
+
+  <Style Selector="Border.panel">
+    <Setter Property="Background" Value="{DynamicResource BgPanel}" />
+  </Style>
+
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource BgRaised}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="7" />
+  </Style>
+
+  <!-- Barra de rolagem fina e sem setas. A barra permanente do tema Fluent traz
+       setinhas nas pontas e um fundo próprio que, ao rolar, piscam como sujeira no
+       canto. Aqui sobra o indicador: largura fixa, fundo transparente e cantos
+       arredondados. A largura fixa é o que mantém o espaço reservado no layout. -->
+  <Style Selector="ScrollBar /template/ RepeatButton#PART_LineUpButton">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="ScrollBar /template/ RepeatButton#PART_LineDownButton">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+
+  <Style Selector="ScrollBar:vertical">
+    <Setter Property="Width" Value="9" />
+    <Setter Property="MinWidth" Value="9" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ScrollBar:horizontal">
+    <Setter Property="Height" Value="9" />
+    <Setter Property="MinHeight" Value="9" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ScrollBar /template/ Border">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ScrollBar /template/ Thumb">
+    <Setter Property="Background" Value="{DynamicResource Border}" />
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+
+  <Style Selector="ScrollBar:pointerover /template/ Thumb">
+    <Setter Property="Background" Value="{DynamicResource TextFaint}" />
+  </Style>
+
+  <Style Selector="Border.chip">
+    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="5,0" />
+  </Style>
+
+  <!-- botão "tiny" só com um símbolo da fonte de ícones do Windows -->
+  <Style Selector="Button.simbolo">
+    <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
+    <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+
+  <!-- estado do terminal na sidebar -->
+  <Style Selector="Ellipse.estado">
+    <Setter Property="Width" Value="7" />
+    <Setter Property="Height" Value="7" />
+    <Setter Property="Margin" Value="0,0,11,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Fill" Value="{DynamicResource TextFaint}" />
+  </Style>
+  <Style Selector="Ellipse.estado.rodando">
+    <Setter Property="Fill" Value="{DynamicResource Yellow}" />
+  </Style>
+  <Style Selector="Ellipse.estado.concluido">
+    <Setter Property="Fill" Value="{DynamicResource Green}" />
+  </Style>
+  <Style Selector="Ellipse.estado.erro">
+    <Setter Property="Fill" Value="{DynamicResource Red}" />
+  </Style>
+  <Style Selector="Ellipse.estado.aguardando">
+    <Setter Property="Fill" Value="{DynamicResource Yellow}" />
+    <Style.Animations>
+      <Animation Duration="0:0:0.6" IterationCount="INFINITE" PlaybackDirection="Alternate">
+        <KeyFrame Cue="0%">
+          <Setter Property="Opacity" Value="1" />
+        </KeyFrame>
+        <KeyFrame Cue="100%">
+          <Setter Property="Opacity" Value="0.15" />
+        </KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+</Styles>

@@ -1,0 +1,10 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GTerm.App"
+             RequestedThemeVariant="Dark">
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://AvaloniaTerminal/Styles/Colors.axaml" />
+    <StyleInclude Source="avares://GTerm/Styles/Theme.axaml" />
+  </Application.Styles>
+</Application>
