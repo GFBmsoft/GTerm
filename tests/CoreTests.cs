@@ -324,10 +324,11 @@ public class JanelaTests : IDisposable
 
     /// <summary>
     /// A janela de verdade, com a lista populada: erro de binding só aparece quando o
-    /// ItemTemplate é construído. O último projeto volta selecionado e com o shell vivo.
+    /// ItemTemplate é construído. O último projeto volta selecionado, mas parado: nada
+    /// roda (nem o comando de abertura) até o usuário mandar iniciar.
     /// </summary>
     [AvaloniaFact]
-    public async Task JanelaAbreNoUltimoProjetoComOTerminalRodando()
+    public async Task JanelaAbreNoUltimoProjetoParadoEIniciaNoBotao()
     {
         DoisProjetos();
         var janela = new MainWindow();
@@ -339,6 +340,14 @@ public class JanelaTests : IDisposable
 
             Assert.Equal(2, janela.GetVisualDescendants().OfType<ListBoxItem>().Count());
             Assert.Equal("Financeiro", vm.Selecionado?.Nome);
+            Assert.Equal("Terminal parado.", vm.Aviso);
+            Assert.False(vm.HaTerminalRodando);
+            Assert.Empty(vm.Sessoes);
+            Assert.All(vm.Projetos, p => Assert.True(p.Parado));
+
+            vm.Selecionado!.IniciarCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.Selecionado.Parado);
             Assert.Null(vm.Aviso);
             Assert.True(vm.HaTerminalRodando);
             Assert.Single(janela.GetVisualDescendants().OfType<TerminalControl>());
@@ -362,14 +371,25 @@ public class JanelaTests : IDisposable
                 // ícones de Nerd Font (branch, pasta, separador do powerline): quadrado vazio
                 // aqui significa que a fonte do terminal não os tem
                 sessao.Modelo.Feed("\r\n main  pasta  \r\n");
+                // a sugestão do Claude vem em SGR 2: tem de sair mais apagada que o texto ao lado
+                sessao.Modelo.Feed("> texto normal \x1b[2msugestão fosca\x1b[0m \x1b[32mverde \x1b[2mverde fosco\x1b[0m\r\n");
                 Dispatcher.UIThread.RunJobs();
                 Directory.CreateDirectory(shots);
                 using var frame = janela.CaptureRenderedFrame();
                 frame?.Save(Path.Combine(shots, "janela.png"));
             }
 
-            // trocar de projeto abre o segundo e mantém o primeiro vivo
+            // trocar de projeto só mostra o segundo, parado, e mantém o primeiro vivo
             vm.SelecionarVizinho(1);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+            Assert.Single(vm.Sessoes);
+            Assert.Equal("Terminal parado.", vm.Aviso);
+            Assert.False(vm.Sessoes[0].Ativa);
+
+            // o botão de iniciar da linha funciona também sem o projeto estar selecionado
+            vm.SelecionarVizinho(1);
+            vm.Projetos[1].IniciarCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.Equal("Notas", vm.Selecionado?.Nome);
             Assert.Equal(2, vm.Sessoes.Count);
@@ -393,6 +413,7 @@ public class JanelaTests : IDisposable
         try
         {
             var p = vm.Selecionado!;
+            p.IniciarCommand.Execute(null);
 
             dialogos.Resposta = false;
             await vm.EncerrarAsync(p);
@@ -405,7 +426,7 @@ public class JanelaTests : IDisposable
             await vm.EncerrarAsync(p);
             Assert.False(p.Vivo);
             Assert.Empty(vm.Sessoes);
-            Assert.Equal("Terminal encerrado.", vm.Aviso);
+            Assert.Equal("Terminal parado.", vm.Aviso);
 
             vm.AbrirSelecionadoCommand.Execute(null);
             Assert.True(p.Vivo);
@@ -508,6 +529,7 @@ public class JanelaTests : IDisposable
             Assert.True(p.TemClaude);
             Assert.True(p.EhCia);
             Assert.False(vm.Projetos[1].TemClaude);
+            p.IniciarCommand.Execute(null);
             var antes = p.Sessao;
 
             dialogos.Resposta = false;
@@ -564,9 +586,58 @@ public class JanelaTests : IDisposable
         WorkspaceStore.Save(ws);
 
         var vm = new MainViewModel(new Dialogos());
+        vm.Selecionado!.IniciarCommand.Execute(null);
 
         Assert.Contains("Pasta não encontrada", vm.Aviso);
         Assert.Empty(vm.Sessoes);
+    }
+
+    /// <summary>
+    /// Projetos da mesma conta do Claude ficam juntos, a padrão primeiro, com o e-mail e o
+    /// plano da conta no título do grupo. Sem conta à parte a lista não tem títulos.
+    /// </summary>
+    [AvaloniaFact]
+    public void ProjetosFicamJuntosPorContaDoClaude()
+    {
+        var conta = Path.Combine(_pasta, ".claude-teste");
+        Directory.CreateDirectory(conta);
+        File.WriteAllText(Path.Combine(conta, ".credentials.json"), """{"claudeAiOauth":{"subscriptionType":"pro"}}""");
+        Assert.Equal("PRO", ClaudeHooks.Plano(conta));
+
+        // o plano do perfil vale mais que o das credenciais, que fica velho depois de um upgrade
+        File.WriteAllText(Path.Combine(conta, ".claude.json"),
+            """{"oauthAccount":{"emailAddress":"equipe@exemplo.com","organizationType":"claude_team"}}""");
+
+        var ws = DoisProjetos();
+        Assert.All(new MainViewModel(new Dialogos()).Projetos, p => Assert.False(p.TemGrupo));
+
+        ws.Projetos[0].Conta = conta;
+        WorkspaceStore.Save(ws);
+
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(new[] { "Notas", "Financeiro" }, vm.Projetos.Select(p => p.Nome));
+            Assert.True(vm.Projetos[0].TemGrupo);
+            Assert.Equal("equipe@exemplo.com", vm.Projetos[1].Grupo);
+            Assert.Equal("TEAM", vm.Projetos[1].Plano);
+            Assert.Equal("Financeiro", vm.Selecionado?.Nome);
+
+            if (Environment.GetEnvironmentVariable("GTERM_SHOTS") is { Length: > 0 } shots)
+            {
+                Directory.CreateDirectory(shots);
+                using var frame = janela.CaptureRenderedFrame();
+                frame?.Save(Path.Combine(shots, "contas.png"));
+            }
+        }
+        finally
+        {
+            janela.Close();
+        }
     }
 
     private sealed class Dialogos : IDialogService

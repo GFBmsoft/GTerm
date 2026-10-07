@@ -1547,7 +1547,7 @@ public partial class TerminalControl : Grid
 
                     if (run.Blocos)
                     {
-                        var pincel = owner.ResolveColorBrush(run.ForegroundColor, isForeground: true);
+                        var pincel = owner.ResolveForegroundBrush(run);
                         for (var i = 0; i < run.Text.Length; i++)
                         {
                             var x = Alinhar(largura * (run.StartColumn + i));
@@ -1796,6 +1796,16 @@ public partial class TerminalControl : Grid
         return new SolidColorBrush(Color.FromRgb(red, green, blue));
     }
 
+    // GTerm: SGR 2 (fosco) é a cor do texto a meia força, como nos outros terminais. É como
+    // o Claude Code escreve a sugestão que o Tab completa
+    private IBrush ResolveForegroundBrush(ViewportTextRun run)
+    {
+        var brush = ResolveColorBrush(run.ForegroundColor, isForeground: true);
+        return run.Fosco && brush is ISolidColorBrush solido
+            ? new SolidColorBrush(solido.Color, solido.Opacity * 0.5)
+            : brush;
+    }
+
     private FormattedText GetOrCreateFormattedText(ViewportTextRun run)
     {
         var cacheKey = new FormattedTextCacheKey(
@@ -1803,7 +1813,8 @@ public partial class TerminalControl : Grid
             run.ForegroundColor,
             run.FontWeight,
             run.FontStyle,
-            GetTextDecorationFlags(run.TextDecorations));
+            GetTextDecorationFlags(run.TextDecorations),
+            run.Fosco);
 
         if (_formattedTextCache.TryGetValue(cacheKey, out var cached))
         {
@@ -1812,7 +1823,7 @@ public partial class TerminalControl : Grid
 
         EvictFormattedTextCacheEntriesIfNeeded();
 
-        var foregroundBrush = ResolveColorBrush(run.ForegroundColor, isForeground: true);
+        var foregroundBrush = ResolveForegroundBrush(run);
         var formattedText = new FormattedText(run.Text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, FontSize, foregroundBrush);
         if (run.TextDecorations != null)
         {
@@ -1895,7 +1906,8 @@ internal readonly record struct FormattedTextCacheKey(
     int ForegroundColor,
     FontWeight FontWeight,
     FontStyle FontStyle,
-    TextDecorationFlags TextDecorations);
+    TextDecorationFlags TextDecorations,
+    bool Fosco = false);
 
 [Flags]
 internal enum TextDecorationFlags

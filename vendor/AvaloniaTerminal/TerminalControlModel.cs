@@ -601,7 +601,8 @@ public partial class TerminalControlModel : AvaloniaObject
                 styleKey.Bold ? FontWeight.Bold : FontWeight.Normal,
                 styleKey.Italic ? FontStyle.Italic : FontStyle.Normal,
                 CreateTextDecorations(styleKey),
-                blocos));
+                blocos,
+                styleKey.Dim));
         }
 
         return runs;
@@ -647,7 +648,8 @@ public partial class TerminalControlModel : AvaloniaObject
             attribute.IsBold(),
             attribute.IsItalic(),
             attribute.IsUnderline(),
-            attribute.IsStrikethrough());
+            attribute.IsStrikethrough(),
+            attribute.IsDim());
     }
 
     private static TextDecorationCollection? CreateTextDecorations(ViewportStyleKey styleKey)
@@ -682,7 +684,8 @@ internal readonly record struct ViewportTextRun(
     FontWeight FontWeight,
     FontStyle FontStyle,
     TextDecorationCollection? TextDecorations,
-    bool Blocos = false);
+    bool Blocos = false,
+    bool Fosco = false);
 
 internal readonly record struct ViewportStyleKey(
     int ForegroundColor,
@@ -690,4 +693,5 @@ internal readonly record struct ViewportStyleKey(
     bool Bold,
     bool Italic,
     bool Underline,
-    bool Strikethrough);
+    bool Strikethrough,
+    bool Dim = false);

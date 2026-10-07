@@ -58,6 +58,18 @@
                  SelectedItem="{Binding Selecionado}">
           <ListBox.ItemTemplate>
             <DataTemplate>
+              <StackPanel>
+              <!-- título do grupo, no primeiro projeto de cada conta do Claude: quem está
+                   logado nela e o plano -->
+              <Grid ColumnDefinitions="*,Auto" Margin="17,10,12,4" IsVisible="{Binding TemGrupo}"
+                    ToolTip.Tip="{Binding Conta}">
+                <TextBlock Grid.Column="0" Text="{Binding Grupo}" FontSize="10" Classes="faint"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <Border Grid.Column="1" Classes="chip" Height="15" Margin="6,0,0,0" VerticalAlignment="Center"
+                        IsVisible="{Binding TemPlano}">
+                  <TextBlock Text="{Binding Plano}" FontSize="9" Classes="faint" VerticalAlignment="Center" />
+                </Border>
+              </Grid>
               <Border Classes="linha" ToolTip.Tip="{Binding Pasta}">
                 <Border.ContextMenu>
                   <ContextMenu>
@@ -87,17 +99,17 @@
 
                   <!-- some sem shell aberto; apagado no prompt; amarelo rodando (piscando se
                        espera por você); verde ao terminar bem; vermelho ao terminar com erro -->
-                  <!-- conta do Claude que não é a padrão: o plano dela -->
-                  <Border Grid.Column="2" Classes="chip" Height="15" Margin="0,0,7,0" VerticalAlignment="Center"
-                          IsVisible="{Binding TemSelo}" ToolTip.Tip="Conta do Claude deste projeto">
-                    <TextBlock Text="{Binding Selo}" FontSize="9" Classes="faint" VerticalAlignment="Center" />
-                  </Border>
+                  <!-- terminal parado: nada roda no projeto até o clique aqui -->
+                  <Button Grid.Column="2" Classes="tiny simbolo" Content="&#xE768;" Margin="0,0,2,0"
+                          Command="{Binding IniciarCommand}" IsVisible="{Binding Parado}"
+                          ToolTip.Tip="Iniciar o terminal deste projeto" />
 
                   <Ellipse Grid.Column="3" Classes="estado" IsVisible="{Binding Vivo}"
                            Classes.rodando="{Binding Rodando}" Classes.aguardando="{Binding Aguardando}"
                            Classes.concluido="{Binding Concluido}" Classes.erro="{Binding Erro}" />
                 </Grid>
               </Border>
+              </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
@@ -179,7 +191,7 @@
                     IsVisible="{Binding Aviso, Converter={x:Static ObjectConverters.IsNotNull}}">
           <TextBlock Text="{Binding Aviso}" Classes="dim" TextWrapping="Wrap" MaxWidth="460"
                      TextAlignment="Center" />
-          <Button Content="Abrir terminal" HorizontalAlignment="Center"
+          <Button Content="Iniciar terminal" HorizontalAlignment="Center"
                   Command="{Binding AbrirSelecionadoCommand}"
                   IsVisible="{Binding Selecionado, Converter={x:Static ObjectConverters.IsNotNull}}" />
         </StackPanel>

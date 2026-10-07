@@ -48,12 +48,24 @@ public sealed partial class ProjetoViewModel : ObservableObject
     // fundo da pílula com o nome, acima do terminal: a cor do projeto esmaecida
     public IBrush Fundo => new SolidColorBrush(CorBase, 0.22);
 
+    /// <summary>A pasta da conta do Claude deste projeto: projetos da mesma conta ficam juntos.</summary>
+    public string Conta => ClaudeHooks.PastaDaConta(Projeto.Conta);
+
     /// <summary>
-    /// Plano da conta do Claude (MAX, TEAM...) quando o projeto usa uma conta que não é a
-    /// padrão; sem dar para ler o plano, o nome da pasta dela.
+    /// O título do grupo, só no primeiro projeto de cada conta: o e-mail de quem está
+    /// logado nela. Null nos demais, e em todos quando só a conta padrão está em uso.
     /// </summary>
-    public string? Selo { get; private set; }
-    public bool TemSelo => Selo is not null;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TemGrupo))]
+    private string? _grupo;
+
+    /// <summary>Plano da conta do grupo (MAX, TEAM...), ao lado do título.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TemPlano))]
+    private string? _plano;
+
+    public bool TemGrupo => Grupo is not null;
+    public bool TemPlano => Plano is not null;
 
     /// <summary>O comando de abertura chama o cia ou o cim: os modos do Claude se aplicam.</summary>
     public bool TemClaude => Atalho is "cia" or "cim";
@@ -63,10 +75,13 @@ public sealed partial class ProjetoViewModel : ObservableObject
 
     private string Atalho => Projeto.Comando.TrimStart().Split(' ')[0].ToLowerInvariant();
 
-    /// <summary>Null até o projeto ser selecionado pela primeira vez, e depois de encerrado.</summary>
+    /// <summary>Null até o terminal do projeto ser iniciado, e depois de encerrado.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Vivo), nameof(Rodando), nameof(Aguardando), nameof(Concluido), nameof(Erro))]
+    [NotifyPropertyChangedFor(nameof(Parado), nameof(Vivo), nameof(Rodando), nameof(Aguardando), nameof(Concluido), nameof(Erro))]
     private TerminalSessao? _sessao;
+
+    /// <summary>Sem terminal: a linha mostra o botão de iniciar no lugar do ponto de estado.</summary>
+    public bool Parado => Sessao is null;
 
     /// <summary>O painel lateral deste projeto, quando aberto.</summary>
     public TerminalSessao? PainelSessao { get; set; }
@@ -84,15 +99,6 @@ public sealed partial class ProjetoViewModel : ObservableObject
     {
         Projeto = projeto;
         _main = main;
-        LerSelo();
-    }
-
-    private void LerSelo()
-    {
-        var conta = Projeto.Conta.Trim();
-        Selo = ClaudeHooks.ContaPropria(conta)
-            ? ClaudeHooks.Plano(conta) ?? Path.GetFileName(conta.TrimEnd('\\', '/'))
-            : null;
     }
 
     partial void OnSessaoChanged(TerminalSessao? oldValue, TerminalSessao? newValue)
@@ -112,14 +118,11 @@ public sealed partial class ProjetoViewModel : ObservableObject
     }
 
     /// <summary>Depois de editar: tudo aqui vem do modelo.</summary>
-    public void Atualizar()
-    {
-        LerSelo();
-        OnPropertyChanged(string.Empty);
-    }
+    public void Atualizar() => OnPropertyChanged(string.Empty);
 
     // os comandos ficam aqui porque o menu de contexto é um popup: de dentro dele não se
     // alcança o DataContext da janela por $parent
+    [RelayCommand] private void Iniciar() => _main.Iniciar(this);
     [RelayCommand] private Task Editar() => _main.EditarAsync(this);
     [RelayCommand] private Task Reiniciar() => _main.ReiniciarAsync(this);
     [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
@@ -173,6 +176,7 @@ public sealed partial class MainViewModel : ObservableObject
         _rodape = RodapePadrao;
 
         foreach (var p in _workspace.Projetos) Projetos.Add(new ProjetoViewModel(p, this));
+        Agrupar();
 
         Selecionado = Projetos.FirstOrDefault(p => p.Projeto.Id == _workspace.UltimoId);
         if (Selecionado is null) AtualizarAviso();
@@ -180,22 +184,52 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnSelecionadoChanged(ProjetoViewModel? value)
     {
-        if (value is not null)
+        // selecionar não sobe o shell: o comando de abertura (o Claude do projeto) só roda
+        // quando o usuário manda iniciar
+        if (value is not null && _workspace.UltimoId != value.Projeto.Id)
         {
-            Abrir(value);
-            if (_workspace.UltimoId != value.Projeto.Id)
-            {
-                _workspace.UltimoId = value.Projeto.Id;
-                Salvar();
-            }
-        }
-        else
-        {
-            AtualizarAviso();
+            _workspace.UltimoId = value.Projeto.Id;
+            Salvar();
         }
 
+        AtualizarAviso();
         Mostrar();
     }
+
+    /// <summary>
+    /// Junta na sidebar os projetos da mesma conta do Claude, a padrão primeiro, e põe o
+    /// título no primeiro de cada grupo. Dentro do grupo vale a ordem em que foram criados.
+    /// Com todos na conta padrão não há o que separar, e a lista fica sem títulos.
+    /// </summary>
+    private void Agrupar()
+    {
+        var padrao = ClaudeHooks.PastaDaConta(null);
+        var ordenados = Projetos
+            .OrderBy(p => !MesmaConta(p.Conta, padrao))
+            .ThenBy(p => p.Conta, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => _workspace.Projetos.IndexOf(p.Projeto))
+            .ToList();
+
+        var selecionado = Selecionado;
+        for (var i = 0; i < ordenados.Count; i++)
+        {
+            var atual = Projetos.IndexOf(ordenados[i]);
+            if (atual != i) Projetos.Move(atual, i);
+        }
+        if (Selecionado != selecionado) Selecionado = selecionado; // a lista pode soltar a seleção ao mover
+
+        var comTitulos = ordenados.Any(p => !MesmaConta(p.Conta, padrao));
+        string? anterior = null;
+        foreach (var p in ordenados)
+        {
+            var primeiro = comTitulos && !MesmaConta(p.Conta, anterior);
+            p.Grupo = primeiro ? ClaudeHooks.Usuario(p.Conta) ?? Path.GetFileName(p.Conta) : null;
+            p.Plano = primeiro ? ClaudeHooks.Plano(p.Conta) : null;
+            anterior = p.Conta;
+        }
+    }
+
+    private static bool MesmaConta(string a, string? b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Só o terminal e o painel do projeto selecionado ficam à vista.</summary>
     private void Mostrar()
@@ -278,7 +312,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void AtualizarAviso() => Aviso =
         Projetos.Count == 0 ? "Nenhum projeto ainda. Use “+” para escolher uma pasta."
         : Selecionado is null ? "Selecione um projeto."
-        : Selecionado.Sessao is null ? "Terminal encerrado."
+        : Selecionado.Sessao is null ? "Terminal parado."
         : null;
 
     private void Salvar() => WorkspaceStore.Save(_workspace);
@@ -300,7 +334,8 @@ public sealed partial class MainViewModel : ObservableObject
         _workspace.Projetos.Add(projeto);
         var vm = new ProjetoViewModel(projeto, this);
         Projetos.Add(vm);
-        Selecionado = vm; // já salva, com o projeto novo como último
+        Agrupar();
+        Iniciar(vm); // já salva, com o projeto novo como último
     }
 
     [RelayCommand]
@@ -333,12 +368,19 @@ public sealed partial class MainViewModel : ObservableObject
         Mostrar();
     }
 
-    /// <summary>Abre de novo o terminal do projeto selecionado, depois de encerrado ou de erro.</summary>
+    /// <summary>O botão no lugar do terminal parado: inicia o do projeto selecionado.</summary>
     [RelayCommand]
     private void AbrirSelecionado()
     {
-        if (Selecionado is not { } p) return;
-        Abrir(p);
+        if (Selecionado is { } p) Iniciar(p);
+    }
+
+    /// <summary>O botão de iniciar da linha: sobe o terminal do projeto e o traz para a frente.</summary>
+    /// <param name="comando">No lugar do comando de abertura do projeto, só nesta subida do shell.</param>
+    public void Iniciar(ProjetoViewModel p, string? comando = null)
+    {
+        Selecionado = p;
+        Abrir(p, comando);
         Mostrar();
     }
 
@@ -362,6 +404,7 @@ public sealed partial class MainViewModel : ObservableObject
         p.Projeto.Conta = novo.Conta;
         Salvar();
         p.Atualizar();
+        Agrupar(); // a conta pode ter mudado
     }
 
     public async Task ReiniciarAsync(ProjetoViewModel p)
@@ -404,17 +447,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void Reabrir(ProjetoViewModel p, string? comando)
     {
         Fechar(p);
-        if (Selecionado == p)
-        {
-            Abrir(p, comando);
-            Mostrar();
-        }
-        else
-        {
-            // selecionar já abriria com o comando normal: abre antes, com o da vez
-            Abrir(p, comando);
-            Selecionado = p;
-        }
+        Iniciar(p, comando);
     }
 
     public async Task EncerrarAsync(ProjetoViewModel p)
@@ -439,6 +472,7 @@ public sealed partial class MainViewModel : ObservableObject
         _workspace.Projetos.Remove(p.Projeto);
         Projetos.Remove(p); // se era o selecionado, a lista zera a seleção e o aviso se ajusta
         if (Selecionado == p) Selecionado = null;
+        Agrupar(); // o título do grupo pode ter saído junto
         Salvar();
         AtualizarAviso();
     }
