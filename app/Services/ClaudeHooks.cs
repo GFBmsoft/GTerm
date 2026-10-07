@@ -173,6 +173,27 @@ public static class ClaudeHooks
         }
     }
 
+    /// <summary>
+    /// A conta que vale para o projeto. O campo dele manda; em branco, um projeto aberto
+    /// pelo <c>cim</c> (o atalho da outra conta) fica com a única pasta <c>.claude-*</c> da
+    /// máquina, se for mesmo uma só. Sem isso ele aparecia no grupo da conta padrão.
+    /// </summary>
+    /// <param name="outras">As contas à parte que existem; null procura no perfil do usuário.</param>
+    public static string ContaDoProjeto(string? conta, string? comando, IReadOnlyList<string>? outras = null)
+    {
+        if (!string.IsNullOrWhiteSpace(conta)) return conta;
+
+        var atalho = (comando ?? "").TrimStart().Split(' ')[0];
+        if (!atalho.Equals("cim", StringComparison.OrdinalIgnoreCase)) return "";
+
+        outras ??= OutrasContas.Value;
+        return outras.Count == 1 ? outras[0] : "";
+    }
+
+    // uma vez por execução: a pergunta é feita a cada linha da sidebar, e conta nova é rara
+    private static readonly Lazy<IReadOnlyList<string>> OutrasContas = new(() =>
+        Contas(Array.Empty<string>()).Where(ContaPropria).ToList());
+
     /// <summary>Plano da assinatura da conta (MAX, TEAM...), ou null se não der para saber.</summary>
     public static string? Plano(string pastaDaConta) => Identificar(pastaDaConta).Plano;
 
@@ -248,6 +269,55 @@ public static class ClaudeHooks
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Instalado, mas não por este executável nem com os avisos desta versão: o app mudou
+    /// de pasta, ou os hooks foram instalados por outro GTerm (um build de teste). O Claude
+    /// continua chamando o caminho antigo, e o ponto da sidebar fica sem os avisos.
+    /// </summary>
+    public static bool Desatualizado(string pastaDaConta, string exe)
+    {
+        try
+        {
+            if (Ler(pastaDaConta)["hooks"] is not JsonObject hooks) return false;
+
+            var instaladas = hooks
+                .SelectMany(par => par.Value as JsonArray ?? new JsonArray())
+                .Where(Nosso)
+                .SelectMany(grupo => grupo!["hooks"]!.AsArray())
+                .Select(c => c?["command"]?.GetValue<string>() ?? "")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return instaladas.Count > 0 && !instaladas.SetEquals(Ganchos.Select(g => Comando(exe, g.Estado)));
+        }
+        catch (Exception)
+        {
+            return false; // settings.json ilegível: não é caso de regravar por cima
+        }
+    }
+
+    /// <summary>
+    /// Reinstala os hooks das contas onde eles apontam para outro executável. Só mexe onde
+    /// o usuário já tinha mandado instalar. Devolve as contas corrigidas.
+    /// </summary>
+    public static IReadOnlyList<string> Corrigir(IEnumerable<string> contas, string exe)
+    {
+        var corrigidas = new List<string>();
+        foreach (var conta in contas)
+        {
+            if (!Desatualizado(conta, exe)) continue;
+            try
+            {
+                Instalar(conta, exe);
+                corrigidas.Add(conta);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                // fica como estava; as Preferências mostram que a conta aponta para outro GTerm
+            }
+        }
+        return corrigidas;
     }
 
     /// <summary>Acrescenta os hooks (trocando os de uma instalação anterior) sem tocar no resto.</summary>

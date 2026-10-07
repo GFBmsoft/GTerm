@@ -40,6 +40,14 @@ public sealed class Atividade
 
     public EstadoDoTerminal Estado { get; private set; }
 
+    /// <summary>
+    /// Terminou, ou parou para perguntar algo: vale avisar quem está em outro projeto. O
+    /// "aguardando" por silêncio fica de fora, que é palpite e vai e volta sozinho.
+    /// </summary>
+    public bool ChamaAtencao =>
+        Estado is EstadoDoTerminal.Concluido or EstadoDoTerminal.Erro ||
+        (Estado == EstadoDoTerminal.Aguardando && !_porSilencio);
+
     /// <summary>O shell já desenhou um prompt: está pronto para receber o comando de abertura.</summary>
     public bool ViuPrompt { get; private set; }
 

@@ -1,3 +1,12 @@
+## 1.0.0.7 — 07/10/2026
+- **Aviso de atenção**: quando um projeto que não está à vista termina ou para para perguntar algo, o nome dele fica em destaque na barra lateral, o título da janela diz quem espera por você e, com o GTerm atrás de outra janela, o botão dele pisca na barra de tarefas. Dá para desligar em Preferências.
+- **Segundo terminal**: o botão novo no canto superior direito abre um shell simples embaixo do terminal do projeto, na mesma pasta, para rodar um build ou um git sem interromper o Claude. Ele é encerrado junto com o terminal do projeto.
+- Atalhos: **Ctrl+1** a **Ctrl+9** vão direto ao projeto naquela posição, e **Ctrl+Shift+P** procura o projeto pelo nome.
+- Clique direito no título de uma conta: iniciar todos os projetos dela ou encerrar todos os terminais (com confirmação). No menu do projeto, "Mover para cima" e "Mover para baixo" mudam a ordem da lista.
+- Avisos do Claude Code: se o GTerm mudou de pasta, os avisos instalados passam a apontar para o lugar novo sozinhos ao abrir. Em Preferências, a conta nessa situação mostra o botão "Corrigir".
+- Procurar atualização deixou de falhar quando o GitHub recusa a consulta por excesso de pedidos.
+- Projeto aberto com `cim` sem conta informada aparece no grupo da outra conta, quando há só uma além da padrão.
+
 ## 1.0.0.6 — 07/10/2026
 - Cor por conta do Claude: o título do grupo, o plano e os projetos da conta aparecem na mesma cor, e a pílula com o nome acima do terminal acompanha. A cor de cada conta é escolhida em Preferências, no círculo ao lado dela.
 - A cor deixou de ser escolhida projeto a projeto: o campo saiu da tela de editar projeto.

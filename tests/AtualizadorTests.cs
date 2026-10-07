@@ -79,6 +79,24 @@ public class AtualizadorTests
         Assert.Null(Atualizador.LerRelease("[]"));
     }
 
+    /// <summary>
+    /// Com a cota da API esgotada a versão vem do site: a tag está no destino do
+    /// redirecionamento de "releases/latest", e o anexo segue o nome que o workflow dá.
+    /// </summary>
+    [Fact]
+    public void SemAApiAReleaseVemDoRedirecionamentoDoSite()
+    {
+        var release = Atualizador.ReleaseDoDestino("https://github.com/GFBmsoft/GTerm/releases/tag/1.0.0.6")!;
+        Assert.Equal("1.0.0.6", release.Tag);
+        Assert.Equal("https://github.com/GFBmsoft/GTerm/releases/download/1.0.0.6/GTerm-1.0.0.6-standalone.exe",
+            release.Standalone!.Url);
+
+        // repositório sem release nenhuma cai na lista, sem tag
+        Assert.Null(Atualizador.ReleaseDoDestino("https://github.com/GFBmsoft/GTerm/releases"));
+        Assert.Null(Atualizador.ReleaseDoDestino("https://github.com/GFBmsoft/GTerm/releases/tag/rascunho"));
+        Assert.Null(Atualizador.ReleaseDoDestino(null));
+    }
+
     [Fact]
     public void TrocaGuardaOAntigoEPoeONovoNoLugar()
     {

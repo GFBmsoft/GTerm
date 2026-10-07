@@ -66,6 +66,15 @@ e por isso confirma antes.
   plano no título do grupo, que recolhe no clique; a conta vem do campo do projeto, e vazio
   é a padrão. A cor também é da conta (`Workspace.CoresDasContas`, escolhida em
   Preferências): pinta o título, o anel de cada projeto e a pílula acima do terminal.
+  Projeto aberto pelo `cim` sem conta informada fica com a única `.claude-*` da máquina
+  (`ClaudeHooks.ContaDoProjeto`).
+- **Atenção** — um projeto que termina ou para para perguntar sem estar à vista (outro
+  selecionado, ou a janela atrás de outra) fica com o nome marcado, entra na conta do
+  título da janela e faz o botão piscar na barra de tarefas (`MainViewModel.EstadoMudou`,
+  `BarraDeTarefas`). O "aguardando" por silêncio não conta: é palpite.
+- **Segundo terminal** — cada projeto pode ter um shell simples embaixo do principal
+  (`AuxiliarSessao`), sem o comando de abertura; só existe com o terminal do projeto
+  iniciado e é encerrado junto com ele.
 - **ViewModels** — CommunityToolkit.Mvvm. `MainViewModel` tem os projetos, a seleção e as
   sessões abertas; `TerminalSessao` é o shell de um projeto, criado quando o usuário manda
   iniciar (o ▶ da linha; selecionar não sobe nada) e vivo até ser encerrado.
@@ -82,8 +91,15 @@ e por isso confirma antes.
   `explorer.exe app\bin\Debug\net8.0\GTerm.exe`.
 - `Program.Main` trata `--estado` antes de tocar no Avalonia: é chamado a cada evento do
   Claude e precisa sair em ~100 ms. Nada de inicialização antes desse `if`.
-- Os hooks apontam para o caminho do executável que os instalou. Mudou o app de pasta:
-  reinstalar em Preferências.
+- Os hooks apontam para o caminho do executável que os instalou. Uma versão publicada
+  corrige isso sozinha ao abrir (`MainViewModel.CorrigirHooks`); build local não, para não
+  tomar os hooks do GTerm instalado, e mostra "Corrigir" em Preferências.
+- Terminal que não está à vista não se mede, e o shell espera a medida para subir: por
+  isso as sessões dos projetos emprestam a medida umas às outras (`TerminalSessao.Medir`).
+  Painel e segundo terminal têm outro tamanho e ficam de fora.
+- A versão nova é procurada na API do GitHub e, se ela recusar (cota de 60 consultas por
+  hora por IP), no redirecionamento de `releases/latest` do site. Não espere workflow
+  consultando a API em laço: gasta a cota do app instalado na mesma máquina.
 - Não rode o `cia`/`cim` nem o `claude` do usuário em testes: gastam a cota dele.
 - Com o app aberto o `dotnet build` falha (exe em uso). Para testar sem fechar:
   `dotnet test --artifacts-path <pasta temporária>`.

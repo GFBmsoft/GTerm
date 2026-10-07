@@ -22,15 +22,22 @@ public sealed record Arranque(string Linha, string Pasta, Dictionary<string, str
         return new Arranque(linha, projeto.Pasta, ComConta(ambiente, projeto), comando ?? projeto.Comando);
     }
 
+    /// <summary>
+    /// O segundo terminal do projeto: o mesmo shell, pasta e conta, sem o comando de
+    /// abertura. É onde se roda um build ou um git sem interromper o Claude.
+    /// </summary>
+    public static Arranque DoAuxiliar(Projeto projeto) => DoProjeto(projeto, "");
+
     /// <summary>O painel lateral: o script das preferências, na mesma pasta e conta.</summary>
     public static Arranque DoPainel(Projeto projeto, string script) =>
         new(Shells.Painel(script), projeto.Pasta, ComConta(null, projeto), null);
 
     private static Dictionary<string, string?>? ComConta(Dictionary<string, string?>? ambiente, Projeto projeto)
     {
-        if (!ClaudeHooks.ContaPropria(projeto.Conta)) return ambiente;
+        var conta = ClaudeHooks.ContaDoProjeto(projeto.Conta, projeto.Comando);
+        if (!ClaudeHooks.ContaPropria(conta)) return ambiente;
         ambiente ??= new Dictionary<string, string?>();
-        ambiente["CLAUDE_CONFIG_DIR"] = projeto.Conta.Trim();
+        ambiente["CLAUDE_CONFIG_DIR"] = conta.Trim();
         return ambiente;
     }
 }
@@ -71,6 +78,23 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
 
     /// <summary>Rodando, aguardando, concluído ou erro: a cor do ponto na sidebar.</summary>
     [ObservableProperty] private EstadoDoTerminal _estado;
+
+    /// <summary>O estado atual é dos que pedem aviso: terminou ou está perguntando algo.</summary>
+    public bool ChamaAtencao => !Encerrada && _atividade.ChamaAtencao;
+
+    /// <summary>O terminal foi medido na tela, com estas colunas e linhas.</summary>
+    public event Action<int, int>? Mediu;
+
+    /// <summary>
+    /// Empresta a medida de outro terminal a um que espera a tela para subir o shell. Os
+    /// terminais dos projetos ocupam todos o mesmo espaço, e um que nunca foi mostrado não
+    /// tem como se medir: sem isto, o shell dele só subiria ao ser selecionado.
+    /// </summary>
+    public void Medir(int colunas, int linhas)
+    {
+        if (_tamanhoConhecido || _esperandoTela is null) return;
+        Modelo.Resize(colunas, linhas, 1, 1); // célula de 1x1: vira colunas x linhas, e avisa
+    }
 
     public TerminalSessao(Projeto projeto) : this(() => Arranque.DoProjeto(projeto))
     {
@@ -118,6 +142,8 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
             {
                 _pty?.Redimensionar(colunas, linhas);
             }
+
+            Mediu?.Invoke(colunas, linhas);
         };
 
         _relogio.Tick += (_, _) =>

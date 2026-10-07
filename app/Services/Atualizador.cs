@@ -138,11 +138,14 @@ public static class Atualizador
         http.DefaultRequestHeaders.UserAgent.Add(
             new System.Net.Http.Headers.ProductInfoHeaderValue("GTerm", "1.0"));
 
+        // achada pelo site, a release não diz o tamanho: vale o que o servidor anuncia
+        var esperado = arquivo.Tamanho;
         using (var resp = await http.GetAsync(arquivo.Url, HttpCompletionOption.ResponseHeadersRead))
         {
             resp.EnsureSuccessStatusCode();
 
             var total = resp.Content.Headers.ContentLength ?? arquivo.Tamanho;
+            if (esperado <= 0) esperado = total;
             await using var origem = await resp.Content.ReadAsStreamAsync();
             await using var saida = File.Create(destino);
 
@@ -157,14 +160,14 @@ public static class Atualizador
             }
         }
 
-        // Sem assinatura para conferir, o tamanho anunciado pela API é a única checagem
+        // Sem assinatura para conferir, o tamanho anunciado é a única checagem
         // que dá para fazer — pega download cortado, que é a falha provável.
         var baixado = new FileInfo(destino).Length;
-        if (arquivo.Tamanho > 0 && baixado != arquivo.Tamanho)
+        if (esperado > 0 && baixado != esperado)
         {
             File.Delete(destino);
             throw new InvalidOperationException(
-                $"O download veio incompleto ({baixado:N0} de {arquivo.Tamanho:N0} bytes).");
+                $"O download veio incompleto ({baixado:N0} de {esperado:N0} bytes).");
         }
 
         return destino;
@@ -235,7 +238,11 @@ public static class Atualizador
         return texto.Split('-')[0].Split('.').Length == 4 ? texto : "";
     }
 
-    /// <summary>Última release publicada. O repositório é público: a consulta não leva token.</summary>
+    /// <summary>
+    /// Última release publicada. O repositório é público: a consulta não leva token, e por
+    /// isso divide com tudo o mais que sai do mesmo IP a cota de 60 consultas por hora da
+    /// API. Com a cota esgotada (ou a API fora do ar) a resposta vem do site, que não conta.
+    /// </summary>
     public static async Task<Release?> UltimaReleaseAsync()
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
@@ -245,10 +252,57 @@ public static class Atualizador
         using var resp = await http.GetAsync($"https://api.github.com/repos/{Slug}/releases/latest");
         // 404 é "ainda não há release", não erro
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
-        if (!resp.IsSuccessStatusCode)
-            throw new InvalidOperationException($"O GitHub respondeu {(int)resp.StatusCode} ao procurar a atualização.");
+        if (!resp.IsSuccessStatusCode) return await UltimaReleasePeloSiteAsync();
 
         return LerRelease(await resp.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// O endereço "releases/latest" do site redireciona para a página da release mais nova,
+    /// e a tag está no destino. Não se segue o redirecionamento: só o destino interessa.
+    /// </summary>
+    private static async Task<Release?> UltimaReleasePeloSiteAsync()
+    {
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = TimeSpan.FromSeconds(20),
+        };
+        http.DefaultRequestHeaders.UserAgent.Add(
+            new System.Net.Http.Headers.ProductInfoHeaderValue("GTerm", "1.0"));
+
+        using var resp = await http.GetAsync($"https://github.com/{Slug}/releases/latest");
+        if ((int)resp.StatusCode is < 300 or >= 400)
+            throw new InvalidOperationException($"O GitHub respondeu {(int)resp.StatusCode} ao procurar a atualização.");
+
+        return ReleaseDoDestino(resp.Headers.Location?.ToString());
+    }
+
+    /// <summary>
+    /// A release a partir do destino do redirecionamento. Os anexos seguem o nome que o
+    /// workflow dá a eles; sem release o site manda para a lista vazia, e não há tag.
+    /// </summary>
+    public static Release? ReleaseDoDestino(string? destino)
+    {
+        const string marca = "/releases/tag/";
+        var i = destino?.IndexOf(marca, StringComparison.OrdinalIgnoreCase) ?? -1;
+        if (i < 0) return null;
+
+        var tag = Uri.UnescapeDataString(destino![(i + marca.Length)..].Trim('/'));
+        if (Numeros(tag) is null) return null;
+
+        return new Release
+        {
+            Tag = tag,
+            Url = $"https://github.com/{Slug}/releases/tag/{tag}",
+            Arquivos = new()
+            {
+                new ReleaseAsset
+                {
+                    Nome = $"GTerm-{tag}-standalone.exe",
+                    Url = $"https://github.com/{Slug}/releases/download/{tag}/GTerm-{tag}-standalone.exe",
+                },
+            },
+        };
     }
 
     /// <summary>Separado da rede para poder ser testado com uma resposta de verdade.</summary>

@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:term="using:AvaloniaTerminal"
         x:Class="GTerm.Views.MainWindow"
-        Title="GTerm" Width="1200" Height="720" MinWidth="640" MinHeight="360"
+        Title="{Binding Titulo}" Width="1200" Height="720" MinWidth="640" MinHeight="360"
         Icon="/Assets/app.ico" Background="{DynamicResource BgPanel}"
         WindowStartupLocation="CenterScreen">
 
@@ -31,6 +31,12 @@
       <Setter Property="Margin" Value="8,8,8,2" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- terminou ou espera por você sem estar à vista: o nome se destaca até ser visto -->
+    <Style Selector="TextBlock.atencao">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{DynamicResource Yellow}" />
     </Style>
 
     <Style Selector="Border.linha">
@@ -73,6 +79,12 @@
                    logado nela e o plano. O clique recolhe ou abre os projetos da conta -->
               <Button Classes="grupo" Command="{Binding AlternarGrupoCommand}" IsVisible="{Binding TemGrupo}"
                       ToolTip.Tip="{Binding DicaDoGrupo}">
+                <Button.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Iniciar todos os projetos da conta" Command="{Binding IniciarGrupoCommand}" />
+                    <MenuItem Header="Encerrar todos os terminais da conta" Command="{Binding EncerrarGrupoCommand}" />
+                  </ContextMenu>
+                </Button.ContextMenu>
                 <Grid ColumnDefinitions="Auto,Auto,*,Auto">
                   <TextBlock Grid.Column="0" Text="{Binding Chevron}" FontSize="8" Classes="faint"
                              FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets"
@@ -98,6 +110,8 @@
                 <Border.ContextMenu>
                   <ContextMenu>
                     <MenuItem Header="Editar…" Command="{Binding EditarCommand}" />
+                    <MenuItem Header="Mover para cima" Command="{Binding SubirCommand}" />
+                    <MenuItem Header="Mover para baixo" Command="{Binding DescerCommand}" />
                     <MenuItem Header="Reiniciar terminal" Command="{Binding ReiniciarCommand}" />
                     <MenuItem Header="Encerrar terminal" Command="{Binding EncerrarCommand}" />
                     <!-- os modos do cia/cim: só fazem sentido se o comando de abertura for um deles -->
@@ -119,7 +133,8 @@
                   <!-- a cor da conta do projeto: a mesma da pílula com o nome dele acima do terminal -->
                   <Ellipse Grid.Column="0" Width="8" Height="8" Margin="9,0,9,0" VerticalAlignment="Center"
                            StrokeThickness="1.5" Stroke="{Binding Cor}" />
-                  <TextBlock Grid.Column="1" Text="{Binding Nome}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                  <TextBlock Grid.Column="1" Text="{Binding Nome}" VerticalAlignment="Center" Margin="0,0,6,0"
+                             Classes.atencao="{Binding PedeAtencao}" TextTrimming="CharacterEllipsis" />
 
                   <!-- some sem shell aberto; apagado no prompt; amarelo rodando (piscando se
                        espera por você); verde ao terminar bem; vermelho ao terminar com erro -->
@@ -148,7 +163,7 @@
 
     <Grid Grid.Column="1" RowDefinitions="Auto,*">
 
-      <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,7,10,6"
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,7,10,6"
             IsVisible="{Binding Selecionado, Converter={x:Static ObjectConverters.IsNotNull}}">
         <!-- a cor da conta de novo: a pílula com o nome diz em qual terminal se está digitando -->
         <Border Grid.Column="0" CornerRadius="11" Height="22" Padding="11,0" BorderThickness="1"
@@ -163,13 +178,16 @@
         <Button Grid.Column="3" Classes="tiny simbolo" Content="&#xE90C;"
                 Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
                 ToolTip.Tip="Abre ou fecha o painel lateral deste projeto" />
+        <Button Grid.Column="4" Classes="tiny simbolo" Content="&#xE756;"
+                Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
+                ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude" />
       </Grid>
 
       <!-- o terminal encaixado num cartão: a janela em volta é a moldura, no tom da
            sidebar. O recorte arredonda também o conteúdo do terminal -->
       <Border Grid.Row="1" Margin="0,0,8,8" CornerRadius="10" ClipToBounds="True"
               Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
-      <Grid ColumnDefinitions="*,Auto">
+      <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
 
         <!-- um terminal por projeto aberto, todos vivos; só o do selecionado aparece -->
         <ItemsControl Grid.Column="0" x:Name="Sessoes" ItemsSource="{Binding Sessoes}" Margin="10,7,3,8">
@@ -189,9 +207,31 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
 
+        <!-- segundo terminal do projeto, embaixo do principal: um shell simples, para o
+             build ou o git que não podem esperar o Claude terminar -->
+        <Border Grid.Row="1" Grid.Column="0" Height="230" IsVisible="{Binding AuxiliarVisivel}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+          <ItemsControl x:Name="Auxiliares" ItemsSource="{Binding Auxiliares}" Margin="10,7,3,8">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <Grid />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <term:TerminalControl Model="{Binding Modelo}" IsVisible="{Binding Ativa}"
+                                      RightClickAction="CopyOrPaste" CaretStyle="Bar"
+                                      DefaultBackground="{DynamicResource Bg}" CaretBrush="{DynamicResource Text}"
+                                      FontFamily="{Binding $parent[ItemsControl].DataContext.Fonte}"
+                                      FontSize="{Binding $parent[ItemsControl].DataContext.TamanhoDaFonte}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
+
         <!-- painel lateral (o consumo do Claude, por exemplo): outro terminal, estreito,
              rodando o script das preferências na pasta e na conta do projeto -->
-        <Border Grid.Column="1" Width="330" IsVisible="{Binding PainelVisivel}"
+        <Border Grid.Column="1" Grid.RowSpan="2" Width="330" IsVisible="{Binding PainelVisivel}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
           <ItemsControl x:Name="Paineis" ItemsSource="{Binding Paineis}" Margin="8,7,3,8">
             <ItemsControl.ItemsPanel>

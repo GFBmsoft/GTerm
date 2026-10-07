@@ -197,8 +197,19 @@ public class ClaudeTests
                 json["hooks"]!["Notification"]![0]!["matcher"]!.GetValue<string>());
             Assert.Contains("\"model\": \"opus\"", File.ReadAllText(arquivo + ".antes-do-gterm"));
 
+            // o app mudou de pasta: os hooks continuam lá, mas chamam o executável antigo
+            const string novo = @"D:\Programas\GTerm\GTerm.exe";
+            Assert.False(ClaudeHooks.Desatualizado(conta, @"d:\apps\gterm\GTerm.exe"));
+            Assert.True(ClaudeHooks.Desatualizado(conta, novo));
+            Assert.Equal(new[] { conta }, ClaudeHooks.Corrigir(new[] { conta }, novo));
+            Assert.Empty(ClaudeHooks.Corrigir(new[] { conta }, novo));
+            json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(arquivo))!;
+            Assert.Equal("D:/Programas/GTerm/GTerm.exe --estado concluido",
+                json["hooks"]!["Stop"]![1]!["hooks"]![0]!["command"]!.GetValue<string>());
+
             ClaudeHooks.Remover(conta);
             Assert.False(ClaudeHooks.Instalado(conta));
+            Assert.False(ClaudeHooks.Desatualizado(conta, novo)); // sem hooks não há o que corrigir
             json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(arquivo))!;
             Assert.Equal("echo do-usuario", json["hooks"]!["Stop"]![0]!["hooks"]![0]!["command"]!.GetValue<string>());
             Assert.Null(json["hooks"]!["Notification"]);
@@ -736,6 +747,165 @@ public class JanelaTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Iniciar a conta inteira sobe também o shell dos projetos que não estão à vista (que
+    /// não têm tela para se medir). Um deles termina um comando sem ninguém olhando: o nome
+    /// fica marcado e o título da janela avisa, até o projeto ser visto. De quebra, os
+    /// atalhos de número, a ordem da lista, o segundo terminal e a tela de busca.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task ContaInteiraSobeEProjetoForaDaVistaChamaAtencao()
+    {
+        var ws = DoisProjetos();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            vm.JanelaAtiva = true;
+
+            vm.SelecionarPorNumero(2);
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+            vm.SelecionarPorNumero(9); // não há nono projeto: fica onde está
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+            vm.SelecionarPorNumero(1);
+
+            vm.Projetos[0].DescerCommand.Execute(null);
+            Assert.Equal(new[] { "Notas", "Financeiro" }, vm.Projetos.Select(p => p.Nome));
+            Assert.Equal(new[] { "Notas", "Financeiro" }, WorkspaceStore.Load().Projetos.Select(p => p.Nome));
+            vm.Projetos[0].SubirCommand.Execute(null); // já é o primeiro
+            vm.Projetos[1].SubirCommand.Execute(null);
+            Assert.Equal(new[] { "Financeiro", "Notas" }, vm.Projetos.Select(p => p.Nome));
+            Assert.Equal("Financeiro", vm.Selecionado?.Nome);
+
+            vm.Projetos[1].IniciarGrupoCommand.Execute(null);
+            Assert.Equal(2, vm.Sessoes.Count);
+            Assert.Equal("Financeiro", vm.Selecionado?.Nome);
+            var oculta = vm.Projetos[1].Sessao!;
+
+            async Task<bool> Esperar(Func<bool> condicao)
+            {
+                var relogio = Stopwatch.StartNew();
+                do
+                {
+                    await Task.Delay(100);
+                    Dispatcher.UIThread.RunJobs();
+                } while (!condicao() && relogio.Elapsed < TimeSpan.FromSeconds(20));
+                return condicao();
+            }
+
+            bool NaTela(TerminalSessao s, string texto) =>
+                Enumerable.Range(0, s.Modelo.Terminal.Rows).Any(i => s.Modelo.Terminal.Engine.GetLine(i).Contains(texto));
+
+            Assert.True(await Esperar(() => NaTela(oculta, Path.GetFileName(_pasta))),
+                "o shell do projeto que não está à vista não subiu");
+            Assert.Equal(vm.Sessoes[0].Modelo.Terminal.Cols, oculta.Modelo.Terminal.Cols);
+
+            // um comando termina no projeto que ninguém está olhando
+            Assert.Equal("GTerm", vm.Titulo);
+            oculta.Modelo.Send("echo pronto-para-ver\r");
+            Assert.True(await Esperar(() => vm.Projetos[1].PedeAtencao), "o projeto fora da vista não chamou atenção");
+            Assert.Equal("GTerm — Notas espera por você", vm.Titulo);
+            Assert.False(vm.Projetos[0].PedeAtencao);
+
+            // segundo terminal do projeto à vista: outro shell, embaixo do principal
+            Assert.True(vm.PodeAuxiliar);
+            await vm.AlternarAuxiliarCommand.ExecuteAsync(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.AuxiliarVisivel);
+            Assert.True(WorkspaceStore.Load().Projetos[0].Auxiliar);
+            var auxiliar = vm.Selecionado!.AuxiliarSessao!;
+            Assert.True(await Esperar(() => NaTela(auxiliar, Path.GetFileName(_pasta))), "o segundo terminal não subiu");
+
+            if (Environment.GetEnvironmentVariable("GTERM_SHOTS") is { Length: > 0 } shots)
+            {
+                Directory.CreateDirectory(shots);
+                using var frame = janela.CaptureRenderedFrame();
+                frame?.Save(Path.Combine(shots, "auxiliar.png"));
+            }
+
+            // ir até o projeto é vê-lo: a marca sai, e ele não tem segundo terminal
+            vm.SelecionarPorNumero(2);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.Projetos[1].PedeAtencao);
+            Assert.Equal("GTerm", vm.Titulo);
+            Assert.False(vm.AuxiliarVisivel);
+
+            var busca = new BuscaWindow(ws.Projetos);
+            try
+            {
+                busca.Show();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(2, busca.GetVisualDescendants().OfType<ListBoxItem>().Count());
+                if (Environment.GetEnvironmentVariable("GTERM_SHOTS") is { Length: > 0 } pasta)
+                {
+                    using var frame = busca.CaptureRenderedFrame();
+                    frame?.Save(Path.Combine(pasta, "busca.png"));
+                }
+            }
+            finally
+            {
+                busca.Close();
+            }
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Encerrar a conta inteira e fechar o segundo terminal matam shells: só com
+    /// confirmação. A busca leva ao projeto escolhido, e o cim sem conta informada fica com
+    /// a única conta à parte da máquina.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task EncerrarAContaEOSegundoTerminalSoComConfirmacao()
+    {
+        var ws = DoisProjetos();
+        var dialogos = new Dialogos { Busca = projetos => projetos[1] };
+        var vm = new MainViewModel(dialogos);
+        try
+        {
+            vm.Projetos[0].IniciarGrupoCommand.Execute(null);
+            Assert.Equal(2, vm.Sessoes.Count);
+
+            await vm.AlternarAuxiliarCommand.ExecuteAsync(null);
+            Assert.True(vm.AuxiliarVisivel);
+            Assert.Equal(0, dialogos.Perguntas); // abrir não pergunta nada
+
+            await vm.AlternarAuxiliarCommand.ExecuteAsync(null);
+            Assert.True(vm.AuxiliarVisivel);
+            Assert.Equal(1, dialogos.Perguntas);
+
+            await vm.Projetos[1].EncerrarGrupoCommand.ExecuteAsync(null);
+            Assert.Equal(2, vm.Sessoes.Count);
+            Assert.Equal(2, dialogos.Perguntas);
+
+            await vm.BuscarAsync();
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+
+            dialogos.Resposta = true;
+            await vm.Projetos[1].EncerrarGrupoCommand.ExecuteAsync(null);
+            Assert.Empty(vm.Sessoes);
+            Assert.Empty(vm.Auxiliares); // o segundo terminal vai junto com o do projeto
+            Assert.False(vm.HaTerminalRodando);
+            Assert.Equal("Terminal parado.", vm.Aviso);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+        }
+
+        var bm = Path.Combine(_pasta, ".claude-bm");
+        Assert.Equal(bm, ClaudeHooks.ContaDoProjeto("", "cim Financeiro -SemMenu", new[] { bm }));
+        Assert.Equal("", ClaudeHooks.ContaDoProjeto("", "cim", new[] { bm, bm + "2" })); // duas: não dá para adivinhar
+        Assert.Equal("", ClaudeHooks.ContaDoProjeto("", "cia Financeiro", new[] { bm }));
+        Assert.Equal(@"C:\outra", ClaudeHooks.ContaDoProjeto(@"C:\outra", "cim", new[] { bm }));
+    }
+
     private sealed class Dialogos : IDialogService
     {
         public bool Resposta;
@@ -752,6 +922,8 @@ public class JanelaTests : IDisposable
         public Task<Preferencias?> PreferenciasAsync(Preferencias atuais, System.Collections.Generic.IReadOnlyList<string> contas) =>
             Task.FromResult<Preferencias?>(PreferenciasNovas);
         public Task<string?> PromptAsync(string title, string label) => Task.FromResult(Texto);
+        public Task<Projeto?> BuscarProjetoAsync(IReadOnlyList<Projeto> projetos) => Task.FromResult(Busca?.Invoke(projetos));
+        public Func<IReadOnlyList<Projeto>, Projeto?>? Busca;
         public string? Texto;
         public Preferencias? PreferenciasNovas;
     }

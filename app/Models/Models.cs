@@ -28,6 +28,9 @@ public sealed class Projeto
 
     /// <summary>O painel lateral estava aberto: volta aberto.</summary>
     public bool Painel { get; set; }
+
+    /// <summary>O segundo terminal estava aberto: volta aberto.</summary>
+    public bool Auxiliar { get; set; }
 }
 
 public sealed class Workspace
@@ -52,6 +55,12 @@ public sealed class Workspace
 
     /// <summary>A cor de cada conta do Claude (pela pasta dela): pinta o grupo e os projetos dele.</summary>
     public Dictionary<string, string> CoresDasContas { get; set; } = new();
+
+    /// <summary>
+    /// Piscar na barra de tarefas e contar no título quando um projeto que não está à vista
+    /// termina ou fica esperando por você.
+    /// </summary>
+    public bool AvisarAtencao { get; set; } = true;
 
     /// <summary>Quando a API do GitHub foi consultada pela última vez, e o que ela disse.</summary>
     public string UltimaChecagem { get; set; } = "";

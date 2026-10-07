@@ -165,6 +165,82 @@ public sealed class ProjetoWindow : DialogWindow
     }
 }
 
+// ---------------------------------------------------------------------- busca
+
+/// <summary>
+/// Vai a um projeto pelo nome: digitar filtra, as setas andam na lista e o Enter escolhe.
+/// Devolve null quando o usuário desiste.
+/// </summary>
+public sealed class BuscaWindow : DialogWindow
+{
+    public BuscaWindow(IReadOnlyList<Projeto> projetos) : base("Ir para o projeto", 420)
+    {
+        var caixa = new TextBox { Watermark = "Nome ou pasta do projeto" };
+        var lista = new ListBox
+        {
+            MaxHeight = 300,
+            Margin = new Thickness(0, 8, 0, 0),
+            ItemsSource = projetos,
+            SelectedIndex = 0,
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<Projeto>((p, _) => new StackPanel
+            {
+                Margin = new Thickness(2, 3),
+                Children =
+                {
+                    new TextBlock { Text = p?.Nome },
+                    new TextBlock { Text = p?.Pasta, FontSize = 11, Classes = { "faint" }, TextTrimming = TextTrimming.CharacterEllipsis },
+                },
+            }),
+        };
+
+        caixa.TextChanged += (_, _) =>
+        {
+            var termo = (caixa.Text ?? "").Trim();
+            lista.ItemsSource = projetos
+                .Where(p => p.Nome.Contains(termo, StringComparison.CurrentCultureIgnoreCase) ||
+                            p.Pasta.Contains(termo, StringComparison.CurrentCultureIgnoreCase))
+                // o que começa pelo que foi digitado vem na frente
+                .OrderBy(p => !p.Nome.StartsWith(termo, StringComparison.CurrentCultureIgnoreCase))
+                .ToList();
+            lista.SelectedIndex = 0;
+        };
+
+        // o teclado fica na caixa: as setas e o Enter chegam aqui e mexem na lista
+        caixa.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            switch (e.Key)
+            {
+                case Avalonia.Input.Key.Down:
+                    lista.SelectedIndex = Math.Min(lista.SelectedIndex + 1, lista.ItemCount - 1);
+                    break;
+                case Avalonia.Input.Key.Up:
+                    lista.SelectedIndex = Math.Max(lista.SelectedIndex - 1, 0);
+                    break;
+                case Avalonia.Input.Key.Enter:
+                    Close(lista.SelectedItem as Projeto);
+                    break;
+                case Avalonia.Input.Key.Escape:
+                    Close(null);
+                    break;
+                default:
+                    return;
+            }
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        lista.DoubleTapped += (_, _) =>
+        {
+            if (lista.SelectedItem is Projeto p) Close(p);
+        };
+
+        var cancelar = Btn("Cancelar");
+        cancelar.Click += (_, _) => Close(null);
+
+        Compose("Ir para o projeto", new Control[] { caixa, lista }, new[] { cancelar });
+        Opened += (_, _) => caixa.Focus();
+    }
+}
+
 // --------------------------------------------------------------- preferências
 
 /// <summary>Preferências do aplicativo. Devolve null quando o usuário cancela.</summary>
@@ -199,6 +275,12 @@ public sealed class PreferenciasWindow : DialogWindow
             Watermark = @"Ex.: & 'C:\Scripts\claude-stats.ps1' -Slim -Live",
         };
 
+        var avisarBox = new CheckBox
+        {
+            Content = "Avisar quando um projeto fora da vista terminar ou esperar por mim",
+            IsChecked = atuais.Avisar,
+        };
+
         var notas = Btn("Notas da versão");
         notas.Click += (_, _) => new NotasWindow().ShowDialog(this);
 
@@ -209,7 +291,8 @@ public sealed class PreferenciasWindow : DialogWindow
             (fonteBox.Text ?? "").Trim(),
             (double)(tamanhoBox.Value ?? (decimal)atuais.Tamanho),
             (painelBox.Text ?? "").Trim(),
-            cores));
+            cores,
+            avisarBox.IsChecked == true));
 
         var corpo = new List<Control>
         {
@@ -219,6 +302,9 @@ public sealed class PreferenciasWindow : DialogWindow
             Field("Tamanho", tamanhoBox),
             Field("Painel lateral (script de PowerShell)", painelBox),
             Label("Roda na pasta e na conta do projeto, sem carregar o perfil. Em branco, o botão do painel some."),
+            avisarBox,
+            Label("O nome do projeto fica em destaque na barra lateral, o título da janela diz quantos esperam e, " +
+                  "com o GTerm atrás de outra janela, o botão dele pisca na barra de tarefas."),
             new Border { Height = 14 },
             new TextBlock { Text = "CONTAS DO CLAUDE CODE", Classes = { "sectionTitle" }, Margin = new Thickness(0, 0, 0, 6) },
             Label("A cor ao lado de cada conta pinta o grupo dela na barra lateral e os projetos que a usam. " +
@@ -287,12 +373,16 @@ public sealed class PreferenciasWindow : DialogWindow
 
         var situacao = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0) };
         var botao = new Button { MinWidth = 84 };
+        var exe = Environment.ProcessPath ?? "GTerm.exe";
 
         void Atualizar(string? erro = null)
         {
             var instalado = ClaudeHooks.Instalado(conta);
-            botao.Content = instalado ? "Remover" : "Instalar";
-            situacao.Text = erro ?? (instalado ? "instalado" : "não instalado");
+            // instalados por outro GTerm (outra pasta, um build de teste): o Claude chama o
+            // executável errado, e o que resolve é instalar de novo a partir deste
+            var deOutro = instalado && ClaudeHooks.Desatualizado(conta, exe);
+            botao.Content = deOutro ? "Corrigir" : instalado ? "Remover" : "Instalar";
+            situacao.Text = erro ?? (deOutro ? "aponta para outro GTerm" : instalado ? "instalado" : "não instalado");
             situacao.Classes.Set("faint", erro is null);
         }
 
@@ -300,8 +390,8 @@ public sealed class PreferenciasWindow : DialogWindow
         {
             try
             {
-                if (ClaudeHooks.Instalado(conta)) ClaudeHooks.Remover(conta);
-                else ClaudeHooks.Instalar(conta, Environment.ProcessPath ?? "GTerm.exe");
+                if (ClaudeHooks.Instalado(conta) && !ClaudeHooks.Desatualizado(conta, exe)) ClaudeHooks.Remover(conta);
+                else ClaudeHooks.Instalar(conta, exe);
                 Atualizar();
             }
             catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException)

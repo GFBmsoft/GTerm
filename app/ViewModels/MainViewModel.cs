@@ -25,6 +25,9 @@ public interface IDialogService
     /// <summary>Devolve as preferências escolhidas, ou null quando o usuário cancela.</summary>
     /// <param name="contas">Pastas de configuração do Claude onde os avisos podem ser instalados.</param>
     Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas);
+
+    /// <summary>A busca pelo nome: devolve o projeto escolhido, ou null quando o usuário desiste.</summary>
+    Task<Projeto?> BuscarProjetoAsync(IReadOnlyList<Projeto> projetos);
 }
 
 public sealed record ProjetoEditado(string Nome, string Pasta, string Shell, string Comando, string Conta);
@@ -32,8 +35,9 @@ public sealed record ProjetoEditado(string Nome, string Pasta, string Shell, str
 /// <param name="Fonte">Vazia usa a lista padrão.</param>
 /// <param name="PainelComando">Script do painel lateral; vazio, sem painel.</param>
 /// <param name="Cores">A cor de cada conta do Claude, pela pasta dela; null não mexe em nenhuma.</param>
+/// <param name="Avisar">Chamar a atenção quando um projeto fora da vista termina ou espera por você.</param>
 public sealed record Preferencias(string Fonte, double Tamanho, string PainelComando,
-    IReadOnlyDictionary<string, string>? Cores = null);
+    IReadOnlyDictionary<string, string>? Cores = null, bool Avisar = true);
 
 /// <summary>Linha da sidebar: o projeto e, se já foi aberto, o terminal dele.</summary>
 public sealed partial class ProjetoViewModel : ObservableObject
@@ -56,7 +60,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public IBrush Fundo => new SolidColorBrush(CorBase, 0.22);
 
     /// <summary>A pasta da conta do Claude deste projeto: projetos da mesma conta ficam juntos.</summary>
-    public string Conta => ClaudeHooks.PastaDaConta(Projeto.Conta);
+    public string Conta => ClaudeHooks.PastaDaConta(ClaudeHooks.ContaDoProjeto(Projeto.Conta, Projeto.Comando));
 
     /// <summary>
     /// O título do grupo, só no primeiro projeto de cada conta: o nome de quem está logado
@@ -103,6 +107,15 @@ public sealed partial class ProjetoViewModel : ObservableObject
     /// <summary>O painel lateral deste projeto, quando aberto.</summary>
     public TerminalSessao? PainelSessao { get; set; }
 
+    /// <summary>O segundo terminal deste projeto, quando aberto.</summary>
+    public TerminalSessao? AuxiliarSessao { get; set; }
+
+    /// <summary>
+    /// Terminou ou ficou esperando por você enquanto outro projeto (ou outra janela) estava
+    /// na frente: o nome fica em destaque até o projeto ser visto.
+    /// </summary>
+    [ObservableProperty] private bool _pedeAtencao;
+
     /// <summary>Há um shell aberto: é o que pede confirmação antes de encerrar.</summary>
     public bool Vivo => Sessao is { Encerrada: false };
 
@@ -132,6 +145,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
         OnPropertyChanged(nameof(Aguardando));
         OnPropertyChanged(nameof(Concluido));
         OnPropertyChanged(nameof(Erro));
+        _main.EstadoMudou(this);
     }
 
     /// <summary>Depois de editar: tudo aqui vem do modelo.</summary>
@@ -145,6 +159,12 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [RelayCommand] private Task Reiniciar() => _main.ReiniciarAsync(this);
     [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
     [RelayCommand] private Task Remover() => _main.RemoverAsync(this);
+    [RelayCommand] private void Subir() => _main.Mover(this, -1);
+    [RelayCommand] private void Descer() => _main.Mover(this, 1);
+
+    // menu do título do grupo: valem para todos os projetos da conta deste
+    [RelayCommand] private void IniciarGrupo() => _main.IniciarGrupo(this);
+    [RelayCommand] private Task EncerrarGrupo() => _main.EncerrarGrupoAsync(this);
 
     // modos do Claude: o comando de abertura do projeto com um parâmetro a mais do cia/cim
     [RelayCommand] private Task SessaoNova() => _main.AbrirComAsync(this, "-Novo");
@@ -179,7 +199,15 @@ public sealed partial class MainViewModel : ObservableObject
     // área privada do Unicode, que a Cascadia Mono pura não tem
     public const string FontePadrao = "CaskaydiaCove NFM,CaskaydiaMono Nerd Font,JetBrainsMono NFM,Cascadia Mono,Consolas";
 
-    public bool HaTerminalRodando => Projetos.Any(p => p.Vivo);
+    /// <summary>Segundos terminais abertos, um por projeto; também só aparece o do selecionado.</summary>
+    public ObservableCollection<TerminalSessao> Auxiliares { get; } = new();
+
+    public bool HaTerminalRodando => Projetos.Any(p => p.Vivo || p.AuxiliarSessao is { Encerrada: false });
+
+    public bool AuxiliarVisivel => Selecionado?.AuxiliarSessao is not null;
+
+    /// <summary>O segundo terminal acompanha o do projeto: só existe com ele iniciado.</summary>
+    public bool PodeAuxiliar => Selecionado?.Sessao is not null;
 
     /// <summary>Há um script de painel nas preferências: o botão do painel aparece.</summary>
     public bool TemPainel => !string.IsNullOrWhiteSpace(_workspace.PainelComando);
@@ -212,6 +240,58 @@ public sealed partial class MainViewModel : ObservableObject
 
         AtualizarAviso();
         Mostrar();
+        Visto();
+    }
+
+    // ------------------------------------------------------------ atenção
+
+    /// <summary>A janela está na frente, com o teclado. Quem informa é a própria janela.</summary>
+    public bool JanelaAtiva
+    {
+        get => _janelaAtiva;
+        set
+        {
+            _janelaAtiva = value;
+            Visto();
+        }
+    }
+    private bool _janelaAtiva = true;
+
+    /// <summary>Um projeto fora da vista passou a pedir atenção: a janela pisca na barra de tarefas.</summary>
+    public event Action? PedirAtencao;
+
+    /// <summary>O título da janela conta os projetos à espera: aparece na barra de tarefas e no Alt+Tab.</summary>
+    public string Titulo => Projetos.Count(p => p.PedeAtencao) switch
+    {
+        0 => "GTerm",
+        1 => "GTerm — " + Projetos.First(p => p.PedeAtencao).Nome + " espera por você",
+        var n => $"GTerm — {n} projetos esperam por você",
+    };
+
+    /// <summary>
+    /// O estado do terminal de um projeto mudou. Terminou ou parou para perguntar sem
+    /// ninguém olhando (outro projeto selecionado, ou a janela atrás de outra): marca o
+    /// projeto e chama. Voltou a rodar: não há mais o que ver.
+    /// </summary>
+    public void EstadoMudou(ProjetoViewModel p)
+    {
+        if (p.Sessao?.ChamaAtencao != true)
+            p.PedeAtencao = false;
+        else if (_workspace.AvisarAtencao && !p.PedeAtencao && !(JanelaAtiva && Selecionado == p))
+        {
+            p.PedeAtencao = true;
+            PedirAtencao?.Invoke();
+        }
+
+        OnPropertyChanged(nameof(Titulo));
+    }
+
+    // o projeto selecionado, com a janela na frente, está sendo visto
+    private void Visto()
+    {
+        if (!JanelaAtiva || Selecionado is not { PedeAtencao: true } p) return;
+        p.PedeAtencao = false;
+        OnPropertyChanged(nameof(Titulo));
     }
 
     /// <summary>
@@ -273,6 +353,20 @@ public sealed partial class MainViewModel : ObservableObject
         return _workspace.CoresDasContas[chave ?? conta] = GroupPalette.ProximaLivre(_workspace.CoresDasContas.Values);
     }
 
+    /// <summary>
+    /// Os hooks do Claude guardam o caminho do executável que os instalou. Na abertura de
+    /// uma versão publicada, as contas onde eles apontam para outro lugar (o app mudou de
+    /// pasta, ou foram instalados por um build de teste) passam a apontar para este. Build
+    /// local não corrige sozinho: tomaria os hooks do GTerm instalado a cada teste.
+    /// </summary>
+    public IReadOnlyList<string> CorrigirHooks()
+    {
+        if (Atualizador.VersaoEmUso.Length == 0 || Environment.ProcessPath is not { Length: > 0 } exe)
+            return Array.Empty<string>();
+
+        return ClaudeHooks.Corrigir(ClaudeHooks.Contas(_workspace.Projetos.Select(p => p.Conta)), exe);
+    }
+
     /// <summary>O clique no título do grupo: recolhe ou abre os projetos da conta, e lembra.</summary>
     public void AlternarGrupo(ProjetoViewModel p)
     {
@@ -289,7 +383,10 @@ public sealed partial class MainViewModel : ObservableObject
     {
         foreach (var s in Sessoes) s.Ativa = s == Selecionado?.Sessao;
         foreach (var s in Paineis) s.Ativa = s == Selecionado?.PainelSessao;
+        foreach (var s in Auxiliares) s.Ativa = s == Selecionado?.AuxiliarSessao;
         OnPropertyChanged(nameof(PainelVisivel));
+        OnPropertyChanged(nameof(AuxiliarVisivel));
+        OnPropertyChanged(nameof(PodeAuxiliar));
     }
 
     /// <summary>Abre o terminal do projeto se ainda não houver um.</summary>
@@ -320,10 +417,50 @@ public sealed partial class MainViewModel : ObservableObject
 
             p.Sessao = sessao;
             Sessoes.Add(sessao);
+
+            // um terminal que não está à vista não se mede, e o shell dele espera a medida
+            // para subir: pega a de quem já foi medido, e passa adiante a sua quando tiver
+            sessao.Mediu += (colunas, linhas) =>
+            {
+                foreach (var s in Sessoes) s.Medir(colunas, linhas);
+            };
+            if (_medida is { } m) sessao.Medir(m.Colunas, m.Linhas);
+            sessao.Mediu += (colunas, linhas) => _medida = (colunas, linhas);
         }
 
         if (p.Projeto.Painel) AbrirPainel(p);
-        Aviso = null;
+        if (p.Projeto.Auxiliar) AbrirAuxiliar(p);
+        if (Selecionado == p) Aviso = null;
+    }
+
+    // colunas e linhas da área dos terminais dos projetos, da última vez que um foi medido
+    private (int Colunas, int Linhas)? _medida;
+
+    private void AbrirAuxiliar(ProjetoViewModel p)
+    {
+        if (p.AuxiliarSessao is not null) return;
+
+        var auxiliar = new TerminalSessao(() => Arranque.DoAuxiliar(p.Projeto));
+        try
+        {
+            auxiliar.Iniciar(esperarTela: true);
+        }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception)
+        {
+            auxiliar.Dispose(); // sem a pasta não há terminal; o aviso do principal já diz o porquê
+            return;
+        }
+
+        p.AuxiliarSessao = auxiliar;
+        Auxiliares.Add(auxiliar);
+    }
+
+    private void FecharAuxiliar(ProjetoViewModel p)
+    {
+        if (p.AuxiliarSessao is not { } auxiliar) return;
+        Auxiliares.Remove(auxiliar);
+        p.AuxiliarSessao = null;
+        auxiliar.Dispose();
     }
 
     private void AbrirPainel(ProjetoViewModel p)
@@ -356,10 +493,13 @@ public sealed partial class MainViewModel : ObservableObject
     private void Fechar(ProjetoViewModel p)
     {
         FecharPainel(p);
+        FecharAuxiliar(p);
         if (p.Sessao is not { } sessao) return;
         Sessoes.Remove(sessao);
         p.Sessao = null;
         sessao.Dispose();
+        p.PedeAtencao = false;
+        OnPropertyChanged(nameof(Titulo));
     }
 
     private void AtualizarAviso() => Aviso =
@@ -396,13 +536,14 @@ public sealed partial class MainViewModel : ObservableObject
         var contas = ClaudeHooks.Contas(_workspace.Projetos.Select(p => p.Conta));
         var novas = await _dialogos.PreferenciasAsync(
             new Preferencias(_workspace.Fonte ?? "", _workspace.TamanhoDaFonte, _workspace.PainelComando ?? "",
-                contas.ToDictionary(c => c, CorDa, StringComparer.OrdinalIgnoreCase)),
+                contas.ToDictionary(c => c, CorDa, StringComparer.OrdinalIgnoreCase), _workspace.AvisarAtencao),
             contas);
         if (novas is null) return;
 
         _workspace.Fonte = novas.Fonte.Trim();
         _workspace.TamanhoDaFonte = Math.Clamp(novas.Tamanho, 8, 32);
         _workspace.PainelComando = novas.PainelComando.Trim();
+        _workspace.AvisarAtencao = novas.Avisar;
         foreach (var (conta, cor) in novas.Cores ?? new Dictionary<string, string>())
         {
             if (GroupPalette.Normalizar(cor) is not { } valida) continue;
@@ -427,6 +568,85 @@ public sealed partial class MainViewModel : ObservableObject
         if (p.Projeto.Painel) AbrirPainel(p);
         else FecharPainel(p);
         Mostrar();
+    }
+
+    /// <summary>
+    /// Abre ou esconde o segundo terminal do projeto selecionado, e lembra a escolha. Ele
+    /// só aparece com o terminal do projeto iniciado, e é encerrado junto com ele.
+    /// </summary>
+    [RelayCommand]
+    private async Task AlternarAuxiliar()
+    {
+        if (Selecionado is not { Sessao: not null } p) return;
+
+        if (p.AuxiliarSessao is { Encerrada: false } &&
+            !await _dialogos.ConfirmAsync("Fechar o segundo terminal",
+                $"Fechar o segundo terminal de “{p.Nome}”? O que estiver rodando nele será interrompido."))
+            return;
+
+        p.Projeto.Auxiliar = p.AuxiliarSessao is null;
+        Salvar();
+        if (p.Projeto.Auxiliar) AbrirAuxiliar(p);
+        else FecharAuxiliar(p);
+        Mostrar();
+    }
+
+    /// <summary>O menu do título do grupo: sobe o terminal de todos os projetos da conta.</summary>
+    public void IniciarGrupo(ProjetoViewModel doGrupo)
+    {
+        var grupo = Projetos.Where(p => MesmaConta(p.Conta, doGrupo.Conta)).ToList();
+        foreach (var p in grupo) Abrir(p);
+
+        // sem nenhum à vista, mostra o primeiro: é a tela dele que dá a medida aos outros
+        if (Selecionado?.Sessao is null) Selecionado = grupo.FirstOrDefault(p => p.Sessao is not null) ?? Selecionado;
+        Mostrar();
+        AtualizarAviso();
+    }
+
+    public async Task EncerrarGrupoAsync(ProjetoViewModel doGrupo)
+    {
+        var abertos = Projetos.Where(p => MesmaConta(p.Conta, doGrupo.Conta) && p.Sessao is not null).ToList();
+        if (abertos.Count == 0) return;
+
+        if (abertos.Any(p => p.Vivo) && !await _dialogos.ConfirmAsync("Encerrar os terminais da conta",
+                $"Encerrar os {abertos.Count} terminais abertos desta conta ({string.Join(", ", abertos.Select(p => p.Nome))})? " +
+                "O que estiver rodando neles será interrompido."))
+            return;
+
+        foreach (var p in abertos) Fechar(p);
+        Mostrar();
+        AtualizarAviso();
+    }
+
+    /// <summary>Sobe ou desce o projeto uma posição dentro da conta dele, e grava a ordem.</summary>
+    public void Mover(ProjetoViewModel p, int passo)
+    {
+        var vizinho = Projetos.ElementAtOrDefault(Projetos.IndexOf(p) + passo);
+        if (vizinho is null || !MesmaConta(vizinho.Conta, p.Conta)) return;
+
+        // a ordem na tela vem da ordem no workspace: é lá que os dois trocam de lugar
+        var a = _workspace.Projetos.IndexOf(p.Projeto);
+        var b = _workspace.Projetos.IndexOf(vizinho.Projeto);
+        (_workspace.Projetos[a], _workspace.Projetos[b]) = (_workspace.Projetos[b], _workspace.Projetos[a]);
+        Salvar();
+        Agrupar();
+    }
+
+    /// <summary>Ctrl+1 a Ctrl+9: o projeto naquela posição da lista, contando só os que estão à vista.</summary>
+    public void SelecionarPorNumero(int numero)
+    {
+        if (Projetos.Where(p => p.Visivel).ElementAtOrDefault(numero - 1) is { } p) Selecionado = p;
+    }
+
+    /// <summary>Ctrl+Shift+P: procura o projeto pelo nome e vai até ele.</summary>
+    public async Task BuscarAsync()
+    {
+        if (Projetos.Count == 0) return;
+        if (await _dialogos.BuscarProjetoAsync(Projetos.Select(p => p.Projeto).ToList()) is not { } achado) return;
+        if (Projetos.FirstOrDefault(p => p.Projeto == achado) is not { } vm) return;
+
+        if (!vm.Visivel) AlternarGrupo(vm); // está numa conta recolhida: abre o grupo para a linha aparecer
+        Selecionado = vm;
     }
 
     /// <summary>O botão no lugar do terminal parado: inicia o do projeto selecionado.</summary>
@@ -664,9 +884,10 @@ public sealed partial class MainViewModel : ObservableObject
                 return;
             }
 
-            var mb = arquivo.Tamanho / 1024d / 1024d;
+            // achada pelo site (API sem cota), a release não traz o tamanho
+            var tamanho = arquivo.Tamanho > 0 ? $" ({arquivo.Tamanho / 1024d / 1024d:N0} MB)" : "";
             if (!await _dialogos.ConfirmAsync("Atualizar o GTerm",
-                    $"Baixar a versão {AtualizacaoTag} ({mb:N0} MB) e reiniciar o aplicativo?\n\n" +
+                    $"Baixar a versão {AtualizacaoTag}{tamanho} e reiniciar o aplicativo?\n\n" +
                     "Todos os terminais abertos serão encerrados, com o que estiver rodando neles. " +
                     "O executável atual é guardado como cópia e volta sozinho se algo falhar."))
                 return;

@@ -34,6 +34,7 @@ public partial class MainWindow : Window, IDialogService
         Opened += (_, _) =>
         {
             Focar();
+            _vm.CorrigirHooks();
             _ = _vm.VerificarAtualizacaoAsync(); // em segundo plano, no máximo uma consulta por dia
         };
 
@@ -42,6 +43,16 @@ public partial class MainWindow : Window, IDialogService
         // janela: na 1.0.0.1 esse caminho deixou o app aberto, parado em "100%". Com o
         // processo morto o Windows fecha os pseudoconsoles, e os shells vão junto
         _vm.Sair = () => System.Environment.Exit(0);
+
+        // um projeto que não está à vista terminou ou espera por você: com a janela atrás
+        // de outra, o botão dela pisca na barra de tarefas até ela vir para a frente
+        Activated += (_, _) => _vm.JanelaAtiva = true;
+        Deactivated += (_, _) => _vm.JanelaAtiva = false;
+        _vm.PedirAtencao += () =>
+        {
+            if (!IsActive && TryGetPlatformHandle()?.Handle is { } janela)
+                Services.BarraDeTarefas.Piscar(janela);
+        };
 
         // em túnel: o terminal consome o teclado todo, então a janela olha antes dele
         AddHandler(KeyDownEvent, AoTeclar, RoutingStrategies.Tunnel);
@@ -54,8 +65,20 @@ public partial class MainWindow : Window, IDialogService
 
     private void AoTeclar(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Tab || !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
-        _vm.SelecionarVizinho(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Alt)) return;
+        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+
+        if (e.Key == Key.Tab)
+            _vm.SelecionarVizinho(shift ? -1 : 1);
+        else if (!shift && e.Key is >= Key.D1 and <= Key.D9)
+            _vm.SelecionarPorNumero(e.Key - Key.D1 + 1);
+        else if (!shift && e.Key is >= Key.NumPad1 and <= Key.NumPad9)
+            _vm.SelecionarPorNumero(e.Key - Key.NumPad1 + 1);
+        else if (shift && e.Key == Key.P) // com Shift: Ctrl+P sozinho é do shell e do Claude
+            _ = _vm.BuscarAsync();
+        else
+            return;
+
         e.Handled = true;
     }
 
@@ -96,6 +119,9 @@ public partial class MainWindow : Window, IDialogService
 
     public async Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas) =>
         await new PreferenciasWindow(atuais, contas).ShowDialog<Preferencias?>(this);
+
+    public async Task<Projeto?> BuscarProjetoAsync(IReadOnlyList<Projeto> projetos) =>
+        await new BuscaWindow(projetos).ShowDialog<Projeto?>(this);
 
     public async Task<ProjetoEditado?> EditarProjetoAsync(Projeto projeto) =>
         await new ProjetoWindow(projeto).ShowDialog<ProjetoEditado?>(this);
