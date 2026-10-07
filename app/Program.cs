@@ -11,6 +11,8 @@ internal static class Program
         // chamado pelos hooks do Claude Code a cada evento: grava o estado e sai, sem janela
         if (ClaudeHooks.Avisar(args)) return;
 
+        ClaudeHooks.LimparHeranca();
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

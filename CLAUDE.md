@@ -73,10 +73,11 @@ e por isso confirma antes.
 
 ## Regras
 
-- **Não abra o app para o usuário testar com `dotnet run` de dentro do Claude Code**: os
-  shells herdam `NO_COLOR=1` e as variáveis `CLAUDE_*` da sessão, o PowerShell passa a
-  tirar as cores do prompt (parece que o oh-my-posh não carregou) e um `claude` aberto lá
-  dentro se acha sessão filha. Compile e abra pelo Explorer:
+- Aberto de dentro de uma sessão do Claude Code, o app herdaria `NO_COLOR=1` e as
+  `CLAUDE_*` dela, e os shells herdariam do app: prompt e Claude sem cor (parece que o
+  oh-my-posh não carregou) e um `claude` aberto lá dentro se achando sessão filha. Por
+  isso `Program.Main` chama `ClaudeHooks.LimparHeranca()` antes de subir a janela. Ainda
+  assim, para o usuário testar, prefira abrir pelo Explorer:
   `explorer.exe app\bin\Debug\net8.0\GTerm.exe`.
 - `Program.Main` trata `--estado` antes de tocar no Avalonia: é chamado a cada evento do
   Claude e precisa sair em ~100 ms. Nada de inicialização antes desse `if`.

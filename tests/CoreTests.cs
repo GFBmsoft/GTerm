@@ -593,6 +593,22 @@ public class JanelaTests : IDisposable
     }
 
     /// <summary>
+    /// Aberto de dentro de uma sessão do Claude, o app não repassa aos shells o que herdou
+    /// dela: foi o que deixou o prompt e o Claude sem cor depois de uma atualização.
+    /// </summary>
+    [Theory]
+    [InlineData("NO_COLOR", true)]
+    [InlineData("CLAUDECODE", true)]
+    [InlineData("CLAUDE_CODE_CHILD_SESSION", true)]
+    [InlineData("CLAUDE_CONFIG_DIR", true)]
+    [InlineData("GTERM_ESTADO", true)]
+    [InlineData("GTERM_HOME", false)]
+    [InlineData("PATH", false)]
+    [InlineData("POSH_THEMES_PATH", false)]
+    public void SoAHerancaDoClaudeSaiDoAmbiente(string nome, bool herdada) =>
+        Assert.Equal(herdada, ClaudeHooks.Herdada(nome));
+
+    /// <summary>
     /// Projetos da mesma conta do Claude ficam juntos, a padrão primeiro, com o e-mail e o
     /// plano da conta no título do grupo. Sem conta à parte a lista não tem títulos.
     /// </summary>

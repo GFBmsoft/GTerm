@@ -65,6 +65,32 @@ public static class ClaudeHooks
         return true;
     }
 
+    /// <summary>
+    /// Aberto de dentro de uma sessão do Claude Code (um terminal do próprio GTerm, por
+    /// exemplo), o app herda o ambiente dela, e os shells herdam do app: com NO_COLOR o
+    /// prompt e o Claude saem sem cor, e com as CLAUDE_* um claude aberto ali se acha
+    /// sessão filha. A herança passa também pela atualização, que reabre o app a partir
+    /// do processo antigo. Tirar aqui, uma vez, vale para tudo que o app abrir depois.
+    /// </summary>
+    public static void LimparHeranca()
+    {
+        if (Environment.GetEnvironmentVariable("CLAUDECODE") is null) return;
+
+        foreach (var nome in Environment.GetEnvironmentVariables().Keys.Cast<string>().ToList())
+            if (Herdada(nome))
+                Environment.SetEnvironmentVariable(nome, null);
+    }
+
+    /// <summary>
+    /// Variável que só existe por causa da sessão do Claude de onde o app foi aberto. O
+    /// CLAUDE_CONFIG_DIR entra: a conta é a do projeto, não a de quem abriu o app.
+    /// </summary>
+    public static bool Herdada(string nome) =>
+        nome.Equals("NO_COLOR", StringComparison.OrdinalIgnoreCase) ||
+        nome.Equals("CLAUDECODE", StringComparison.OrdinalIgnoreCase) ||
+        nome.Equals(VarDoArquivo, StringComparison.OrdinalIgnoreCase) ||
+        nome.StartsWith("CLAUDE_", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>O que a sessão lê do arquivo: só o nome do estado.</summary>
     public static string Evento(string conteudo) => conteudo.Split(' ')[0].Trim();
 

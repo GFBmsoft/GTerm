@@ -1,3 +1,6 @@
+## 1.0.0.5 — 07/10/2026
+- Cores no terminal: quando o aplicativo era aberto de dentro de um terminal com o Claude Code, o prompt (oh-my-posh), os scripts de abertura e o próprio Claude saíam sem cor, e isso continuava depois de uma atualização automática. Agora os terminais nascem com as cores normais em qualquer caso. Vale a partir da próxima abertura: se ainda estiver sem cor logo depois de atualizar, feche e abra o aplicativo uma vez.
+
 ## 1.0.0.4 — 07/10/2026
 - Sem mudanças no aplicativo: versão publicada para conferir a atualização automática corrigida na 1.0.0.3.
 
