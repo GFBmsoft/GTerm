@@ -607,6 +607,9 @@ public class JanelaTests : IDisposable
         // o plano do perfil vale mais que o das credenciais, que fica velho depois de um upgrade
         File.WriteAllText(Path.Combine(conta, ".claude.json"),
             """{"oauthAccount":{"emailAddress":"equipe@exemplo.com","organizationType":"claude_team"}}""");
+        Assert.Equal("equipe@exemplo.com", ClaudeHooks.Identificar(conta).Rotulo(conta));
+        File.WriteAllText(Path.Combine(conta, ".claude.json"),
+            """{"oauthAccount":{"displayName":"Equipe Exemplo","emailAddress":"equipe@exemplo.com","organizationType":"claude_team"}}""");
 
         var ws = DoisProjetos();
         Assert.All(new MainViewModel(new Dialogos()).Projetos, p => Assert.False(p.TemGrupo));
@@ -623,16 +626,38 @@ public class JanelaTests : IDisposable
 
             Assert.Equal(new[] { "Notas", "Financeiro" }, vm.Projetos.Select(p => p.Nome));
             Assert.True(vm.Projetos[0].TemGrupo);
-            Assert.Equal("equipe@exemplo.com", vm.Projetos[1].Grupo);
+            Assert.Equal("Equipe Exemplo", vm.Projetos[1].Grupo);
+            Assert.Contains("equipe@exemplo.com", vm.Projetos[1].DicaDoGrupo);
             Assert.Equal("TEAM", vm.Projetos[1].Plano);
             Assert.Equal("Financeiro", vm.Selecionado?.Nome);
 
-            if (Environment.GetEnvironmentVariable("GTERM_SHOTS") is { Length: > 0 } shots)
+            void Foto(string nome)
             {
+                if (Environment.GetEnvironmentVariable("GTERM_SHOTS") is not { Length: > 0 } shots) return;
                 Directory.CreateDirectory(shots);
                 using var frame = janela.CaptureRenderedFrame();
-                frame?.Save(Path.Combine(shots, "contas.png"));
+                frame?.Save(Path.Combine(shots, nome));
             }
+            Foto("contas.png");
+
+            // o clique no título recolhe a conta: a linha some, o Ctrl+Tab passa por cima e
+            // a escolha fica gravada
+            vm.Projetos[1].AlternarGrupoCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.Projetos[1].Visivel);
+            Assert.True(vm.Projetos[0].Visivel);
+            Assert.Equal("Equipe Exemplo", vm.Projetos[1].Grupo);
+            Assert.Single(WorkspaceStore.Load().ContasRecolhidas);
+            Foto("contas-recolhida.png");
+
+            vm.SelecionarVizinho(1);
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+            vm.SelecionarVizinho(1);
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+
+            vm.Projetos[1].AlternarGrupoCommand.Execute(null);
+            Assert.True(vm.Projetos[1].Visivel);
+            Assert.Empty(WorkspaceStore.Load().ContasRecolhidas);
         }
         finally
         {

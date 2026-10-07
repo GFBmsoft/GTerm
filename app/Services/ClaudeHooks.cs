@@ -8,6 +8,14 @@ using System.Text.Json.Nodes;
 
 namespace GTerm.Services;
 
+/// <summary>Quem está logado numa conta do Claude; cada campo é null quando não dá para saber.</summary>
+public sealed record Identidade(string? Nome, string? Email, string? Plano)
+{
+    /// <summary>Como a conta é chamada na tela: o nome de quem está logado, senão o e-mail, senão a pasta.</summary>
+    public string Rotulo(string pastaDaConta) =>
+        Nome ?? Email ?? Path.GetFileName(pastaDaConta.TrimEnd('\\', '/'));
+}
+
 /// <summary>
 /// Liga o Claude Code ao ponto de estado da sidebar. Cada terminal nasce com a variável
 /// <see cref="VarDoArquivo"/> apontando um arquivo só dele; os hooks instalados no
@@ -139,21 +147,53 @@ public static class ClaudeHooks
         }
     }
 
-    /// <summary>E-mail de quem está logado na conta, ou null se não der para saber.</summary>
-    public static string? Usuario(string pastaDaConta) => DoPerfil(pastaDaConta, "emailAddress");
-
     /// <summary>Plano da assinatura da conta (MAX, TEAM...), ou null se não der para saber.</summary>
-    public static string? Plano(string pastaDaConta)
+    public static string? Plano(string pastaDaConta) => Identificar(pastaDaConta).Plano;
+
+    /// <summary>Quem está logado na conta: lê o perfil uma vez só, que o arquivo é grande.</summary>
+    public static Identidade Identificar(string pastaDaConta)
     {
-        // o perfil na frente: o subscriptionType das credenciais só muda num login novo, e
-        // continua dizendo "pro" numa conta que já passou para o Max
-        if (DoPerfil(pastaDaConta, "organizationType") is { } tipo)
+        JsonNode? perfil = null;
+        try
         {
-            const string prefixo = "claude_";
-            return (tipo.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase) ? tipo[prefixo.Length..] : tipo)
-                .ToUpperInvariant();
+            // a conta padrão guarda o .claude.json na raiz do perfil; as outras, dentro da pasta
+            var arquivo = Path.Combine(ContaPropria(pastaDaConta) ? pastaDaConta : Perfil, ".claude.json");
+            if (File.Exists(arquivo)) perfil = JsonNode.Parse(File.ReadAllText(arquivo))?["oauthAccount"];
+        }
+        catch (Exception)
+        {
+            // sem perfil legível a conta aparece pelo nome da pasta
         }
 
+        string? Campo(string nome)
+        {
+            try
+            {
+                var valor = perfil?[nome]?.GetValue<string>();
+                return string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        return new Identidade(Campo("displayName"), Campo("emailAddress"),
+            PlanoDoPerfil(Campo("organizationType")) ?? PlanoDasCredenciais(pastaDaConta));
+    }
+
+    // o perfil na frente: o subscriptionType das credenciais só muda num login novo, e
+    // continua dizendo "pro" numa conta que já passou para o Max
+    private static string? PlanoDoPerfil(string? tipo)
+    {
+        if (tipo is null) return null;
+        const string prefixo = "claude_";
+        return (tipo.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase) ? tipo[prefixo.Length..] : tipo)
+            .ToUpperInvariant();
+    }
+
+    private static string? PlanoDasCredenciais(string pastaDaConta)
+    {
         try
         {
             var arquivo = Path.Combine(pastaDaConta, ".credentials.json");
@@ -168,22 +208,6 @@ public static class ClaudeHooks
         }
     }
 
-    /// <summary>Um campo do <c>oauthAccount</c> do <c>.claude.json</c> da conta, ou null.</summary>
-    private static string? DoPerfil(string pastaDaConta, string campo)
-    {
-        try
-        {
-            // a conta padrão guarda o .claude.json na raiz do perfil; as outras, dentro da pasta
-            var arquivo = Path.Combine(ContaPropria(pastaDaConta) ? pastaDaConta : Perfil, ".claude.json");
-            if (!File.Exists(arquivo)) return null;
-            var valor = JsonNode.Parse(File.ReadAllText(arquivo))?["oauthAccount"]?[campo]?.GetValue<string>();
-            return string.IsNullOrWhiteSpace(valor) ? null : valor;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
 
     private static string Arquivo(string pastaDaConta) => Path.Combine(pastaDaConta, "settings.json");
 

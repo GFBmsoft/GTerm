@@ -52,8 +52,8 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public string Conta => ClaudeHooks.PastaDaConta(Projeto.Conta);
 
     /// <summary>
-    /// O título do grupo, só no primeiro projeto de cada conta: o e-mail de quem está
-    /// logado nela. Null nos demais, e em todos quando só a conta padrão está em uso.
+    /// O título do grupo, só no primeiro projeto de cada conta: o nome de quem está logado
+    /// nela. Null nos demais, e em todos quando só a conta padrão está em uso.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TemGrupo))]
@@ -64,8 +64,18 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(TemPlano))]
     private string? _plano;
 
+    /// <summary>O e-mail e a pasta da conta, na dica do título do grupo.</summary>
+    [ObservableProperty] private string? _dicaDoGrupo;
+
+    /// <summary>O grupo da conta está recolhido: a linha do projeto some, o título fica.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Visivel), nameof(Chevron))]
+    private bool _recolhido;
+
     public bool TemGrupo => Grupo is not null;
     public bool TemPlano => Plano is not null;
+    public bool Visivel => !Recolhido;
+    public string Chevron => Recolhido ? "" : "";
 
     /// <summary>O comando de abertura chama o cia ou o cim: os modos do Claude se aplicam.</summary>
     public bool TemClaude => Atalho is "cia" or "cim";
@@ -123,6 +133,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     // os comandos ficam aqui porque o menu de contexto é um popup: de dentro dele não se
     // alcança o DataContext da janela por $parent
     [RelayCommand] private void Iniciar() => _main.Iniciar(this);
+    [RelayCommand] private void AlternarGrupo() => _main.AlternarGrupo(this);
     [RelayCommand] private Task Editar() => _main.EditarAsync(this);
     [RelayCommand] private Task Reiniciar() => _main.ReiniciarAsync(this);
     [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
@@ -223,10 +234,32 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var p in ordenados)
         {
             var primeiro = comTitulos && !MesmaConta(p.Conta, anterior);
-            p.Grupo = primeiro ? ClaudeHooks.Usuario(p.Conta) ?? Path.GetFileName(p.Conta) : null;
-            p.Plano = primeiro ? ClaudeHooks.Plano(p.Conta) : null;
+            var quem = primeiro ? Quem(p.Conta) : null;
+            p.Grupo = quem?.Rotulo(p.Conta);
+            p.Plano = quem?.Plano;
+            p.DicaDoGrupo = quem is null ? null : (quem.Email is null ? "" : quem.Email + "\n") + p.Conta;
+            p.Recolhido = comTitulos && _workspace.ContasRecolhidas.Any(c => MesmaConta(p.Conta, c));
             anterior = p.Conta;
         }
+    }
+
+    // o .claude.json é grande e recolher um grupo refaz os títulos: lido uma vez por conta
+    private readonly Dictionary<string, Identidade> _identidades = new(StringComparer.OrdinalIgnoreCase);
+
+    private Identidade Quem(string conta)
+    {
+        if (!_identidades.TryGetValue(conta, out var quem))
+            _identidades[conta] = quem = ClaudeHooks.Identificar(conta);
+        return quem;
+    }
+
+    /// <summary>O clique no título do grupo: recolhe ou abre os projetos da conta, e lembra.</summary>
+    public void AlternarGrupo(ProjetoViewModel p)
+    {
+        if (_workspace.ContasRecolhidas.RemoveAll(c => MesmaConta(p.Conta, c)) == 0)
+            _workspace.ContasRecolhidas.Add(p.Conta);
+        Salvar();
+        Agrupar();
     }
 
     private static bool MesmaConta(string a, string? b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
@@ -387,9 +420,16 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Ctrl+Tab e Ctrl+Shift+Tab: dá a volta na lista.</summary>
     public void SelecionarVizinho(int passo)
     {
-        if (Projetos.Count == 0) return;
         var atual = Selecionado is null ? -1 : Projetos.IndexOf(Selecionado);
-        Selecionado = Projetos[((atual + passo) % Projetos.Count + Projetos.Count) % Projetos.Count];
+
+        // pula os projetos de grupo recolhido: selecionar uma linha que não se vê confunde
+        for (var i = 1; i <= Projetos.Count; i++)
+        {
+            var p = Projetos[((atual + passo * i) % Projetos.Count + Projetos.Count) % Projetos.Count];
+            if (!p.Visivel) continue;
+            Selecionado = p;
+            return;
+        }
     }
 
     public async Task EditarAsync(ProjetoViewModel p)
@@ -558,7 +598,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (Atualizador.VersaoEmUso.Length == 0)
         {
-            Rodape = "Build local: não há versão para comparar";
+            Rodape = "Build local, sem versão";
             return;
         }
 
@@ -566,7 +606,8 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Rodape = "Procurando atualização…";
             await VerificarAtualizacaoAsync(forcar: true);
-            if (!TemAtualizacao) Rodape = "Você já está na versão mais recente";
+            // o rodapé tem a largura da sidebar: frase inteira ali sai cortada
+            if (!TemAtualizacao) Rodape = RodapePadrao + "  ✓";
         }
         catch (Exception e)
         {

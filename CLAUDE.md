@@ -62,8 +62,9 @@ e por isso confirma antes.
   cada meio segundo e, enquanto o Claude está aberto, é isso que manda no estado. Cada
   projeto tem ainda um comando de abertura (o `cia`/`cim` do usuário), uma conta
   (`CLAUDE_CONFIG_DIR`) e um painel lateral que roda o script das preferências. A sidebar
-  junta os projetos por conta (`MainViewModel.Agrupar`), com o e-mail e o plano no título
-  do grupo; a conta vem do campo do projeto, e vazio é a padrão.
+  junta os projetos por conta (`MainViewModel.Agrupar`), com o nome de quem está logado e o
+  plano no título do grupo, que recolhe no clique; a conta vem do campo do projeto, e vazio
+  é a padrão.
 - **ViewModels** — CommunityToolkit.Mvvm. `MainViewModel` tem os projetos, a seleção e as
   sessões abertas; `TerminalSessao` é o shell de um projeto, criado quando o usuário manda
   iniciar (o ▶ da linha; selecionar não sobe nada) e vivo até ser encerrado.

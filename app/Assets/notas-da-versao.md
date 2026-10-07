@@ -1,3 +1,8 @@
+## 1.0.0.2 — 07/10/2026
+- Barra lateral: o grupo de cada conta do Claude mostra o nome de quem está logado (o e-mail fica na dica) e o plano em destaque. Clicar no título recolhe ou abre os projetos da conta, e a escolha fica guardada.
+- Preferências: cada conta aparece com nome, e-mail e plano, além da pasta.
+- Rodapé: depois de procurar atualização, um ✓ ao lado da versão diz que você já está na mais recente, no lugar da frase que saía cortada.
+
 ## 1.0.0.1 — 07/10/2026
 - Primeira versão publicada: vários terminais numa janela só, um por projeto, na barra lateral em vez de abas. Encerrar um terminal, remover um projeto ou fechar a janela com algo rodando sempre pede confirmação.
 - Nada roda sozinho ao abrir o aplicativo: cada projeto fica parado até você clicar no **▶** da linha dele.

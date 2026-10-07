@@ -45,6 +45,9 @@ public sealed class Workspace
     /// </summary>
     public string PainelComando { get; set; } = "";
 
+    /// <summary>Contas do Claude (a pasta de cada uma) com o grupo recolhido na sidebar.</summary>
+    public List<string> ContasRecolhidas { get; set; } = new();
+
     /// <summary>Quando a API do GitHub foi consultada pela última vez, e o que ela disse.</summary>
     public string UltimaChecagem { get; set; } = "";
     public string UltimaTagVista { get; set; } = "";

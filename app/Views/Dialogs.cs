@@ -285,8 +285,22 @@ public sealed class PreferenciasWindow : DialogWindow
         };
         Atualizar();
 
-        var linha = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(0, 0, 0, 6) };
-        var caminho = new TextBlock { Text = conta, VerticalAlignment = VerticalAlignment.Center, Classes = { "mono" }, FontSize = 12 };
+        // quem está logado na conta em cima, a pasta dela embaixo: só a pasta não diz de quem é
+        var quem = ClaudeHooks.Identificar(conta);
+        var identificacao = string.Join("  ·  ",
+            new[] { quem.Nome, quem.Email, quem.Plano }.Where(t => t is not null));
+
+        var linha = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(0, 0, 0, 8) };
+        var caminho = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 1 };
+        if (identificacao.Length > 0)
+            caminho.Children.Add(new TextBlock { Text = identificacao, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis });
+        caminho.Children.Add(new TextBlock
+        {
+            Text = conta,
+            Classes = { "mono", "faint" },
+            FontSize = 11,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
         Grid.SetColumn(situacao, 1);
         Grid.SetColumn(botao, 2);
         linha.Children.Add(caminho);
