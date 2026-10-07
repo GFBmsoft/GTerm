@@ -1,3 +1,7 @@
+## 1.0.0.6 — 07/10/2026
+- Cor por conta do Claude: o título do grupo, o plano e os projetos da conta aparecem na mesma cor, e a pílula com o nome acima do terminal acompanha. A cor de cada conta é escolhida em Preferências, no círculo ao lado dela.
+- A cor deixou de ser escolhida projeto a projeto: o campo saiu da tela de editar projeto.
+
 ## 1.0.0.5 — 07/10/2026
 - Cores no terminal: quando o aplicativo era aberto de dentro de um terminal com o Claude Code, o prompt (oh-my-posh), os scripts de abertura e o próprio Claude saíam sem cor, e isso continuava depois de uma atualização automática. Agora os terminais nascem com as cores normais em qualquer caso. Vale a partir da próxima abertura: se ainda estiver sem cor logo depois de atualizar, feche e abra o aplicativo uma vez.
 

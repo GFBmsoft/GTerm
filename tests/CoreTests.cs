@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -647,6 +648,10 @@ public class JanelaTests : IDisposable
             Assert.Equal("TEAM", vm.Projetos[1].Plano);
             Assert.Equal("Financeiro", vm.Selecionado?.Nome);
 
+            // cada conta com a sua cor, e o projeto com a da conta dele
+            Assert.Equal(GroupPalette.Cores[0], vm.Projetos[0].CorDaConta);
+            Assert.Equal(GroupPalette.Cores[1], vm.Projetos[1].CorDaConta);
+
             void Foto(string nome)
             {
                 if (Environment.GetEnvironmentVariable("GTERM_SHOTS") is not { Length: > 0 } shots) return;
@@ -678,6 +683,56 @@ public class JanelaTests : IDisposable
         finally
         {
             janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// A cor é da conta: escolhida nas preferências, repinta os projetos dela e fica gravada.
+    /// A tela das preferências abre com as contas e a paleta de cada uma montadas.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task CorDaContaVemDasPreferenciasEPintaOsProjetos()
+    {
+        var conta = Path.Combine(_pasta, ".claude-teste");
+        Directory.CreateDirectory(conta);
+        var ws = DoisProjetos();
+        ws.Projetos[0].Conta = conta;
+        WorkspaceStore.Save(ws);
+
+        var padrao = ClaudeHooks.PastaDaConta(null);
+        var dialogos = new Dialogos
+        {
+            PreferenciasNovas = new Preferencias("", 13, "",
+                new Dictionary<string, string> { [conta.ToUpperInvariant()] = "#db4c9b" }),
+        };
+        var vm = new MainViewModel(dialogos);
+        var financeiro = vm.Projetos.Single(p => p.Nome == "Financeiro");
+        var notas = vm.Projetos.Single(p => p.Nome == "Notas");
+        Assert.NotEqual(notas.CorDaConta, financeiro.CorDaConta);
+
+        await vm.AbrirPreferenciasCommand.ExecuteAsync(null);
+
+        Assert.Equal("#DB4C9B", financeiro.CorDaConta);
+        Assert.Equal(GroupPalette.Cores[0], notas.CorDaConta);
+        Assert.Equal("#DB4C9B", new MainViewModel(new Dialogos()).Projetos.Single(p => p.Nome == "Financeiro").CorDaConta);
+
+        var tela = new PreferenciasWindow(
+            new Preferencias("", 13, "", new Dictionary<string, string> { [padrao] = "#1F9D55", [conta] = "#DB4C9B" }),
+            new[] { padrao, conta });
+        try
+        {
+            tela.Show();
+            Dispatcher.UIThread.RunJobs();
+            if (Environment.GetEnvironmentVariable("GTERM_SHOTS") is { Length: > 0 } shots)
+            {
+                Directory.CreateDirectory(shots);
+                using var frame = tela.CaptureRenderedFrame();
+                frame?.Save(Path.Combine(shots, "preferencias.png"));
+            }
+        }
+        finally
+        {
+            tela.Close();
         }
     }
 

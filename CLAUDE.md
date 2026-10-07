@@ -64,7 +64,8 @@ e por isso confirma antes.
   (`CLAUDE_CONFIG_DIR`) e um painel lateral que roda o script das preferências. A sidebar
   junta os projetos por conta (`MainViewModel.Agrupar`), com o nome de quem está logado e o
   plano no título do grupo, que recolhe no clique; a conta vem do campo do projeto, e vazio
-  é a padrão.
+  é a padrão. A cor também é da conta (`Workspace.CoresDasContas`, escolhida em
+  Preferências): pinta o título, o anel de cada projeto e a pílula acima do terminal.
 - **ViewModels** — CommunityToolkit.Mvvm. `MainViewModel` tem os projetos, a seleção e as
   sessões abertas; `TerminalSessao` é o shell de um projeto, criado quando o usuário manda
   iniciar (o ▶ da linha; selecionar não sobe nada) e vivo até ser encerrado.

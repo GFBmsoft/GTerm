@@ -126,8 +126,6 @@ public sealed class ProjetoWindow : DialogWindow
 {
     public ProjetoWindow(Projeto projeto) : base("Editar projeto", 480)
     {
-        var escolhida = GroupPalette.Normalizar(projeto.Cor) ?? GroupPalette.Padrao;
-
         var nomeBox = new TextBox { Text = projeto.Nome };
         var pastaBox = new TextBox { Text = projeto.Pasta };
         var comandoBox = new TextBox { Text = projeto.Comando, Watermark = "Ex.: cia Financeiro -SemMenu -SemPainel" };
@@ -139,39 +137,13 @@ public sealed class ProjetoWindow : DialogWindow
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
-        var swatches = new WrapPanel();
-        var botoes = new List<Button>();
-        foreach (var c in GroupPalette.Cores.Append(escolhida).Distinct())
-        {
-            var b = new Button
-            {
-                Width = 28,
-                Height = 28,
-                Margin = new Thickness(0, 0, 6, 6),
-                CornerRadius = new CornerRadius(14),
-                Background = new SolidColorBrush(Color.Parse(c)),
-                BorderBrush = Brushes.White,
-                BorderThickness = new Thickness(c == escolhida ? 3 : 0),
-                Padding = new Thickness(0),
-                Tag = c,
-            };
-            b.Click += (_, _) =>
-            {
-                escolhida = c;
-                foreach (var outro in botoes)
-                    outro.BorderThickness = new Thickness(outro.Tag as string == c ? 3 : 0);
-            };
-            botoes.Add(b);
-            swatches.Children.Add(b);
-        }
-
         var cancelar = Btn("Cancelar");
         var salvar = Btn("Salvar", true);
         cancelar.Click += (_, _) => Close(null);
         salvar.Click += (_, _) =>
         {
             if (string.IsNullOrWhiteSpace(nomeBox.Text) || string.IsNullOrWhiteSpace(pastaBox.Text)) return;
-            Close(new ProjetoEditado(nomeBox.Text!.Trim(), pastaBox.Text!.Trim().Trim('"'), escolhida,
+            Close(new ProjetoEditado(nomeBox.Text!.Trim(), pastaBox.Text!.Trim().Trim('"'),
                 (shellBox.SelectedItem as Shell)?.Id ?? Shells.Padrao,
                 (comandoBox.Text ?? "").Trim(), (contaBox.Text ?? "").Trim().Trim('"')));
         };
@@ -181,7 +153,6 @@ public sealed class ProjetoWindow : DialogWindow
             {
                 Field("Nome", nomeBox),
                 Field("Pasta", pastaBox),
-                Field("Cor", swatches),
                 Field("Shell", shellBox),
                 Field("Comando ao abrir", comandoBox),
                 Field("Outra conta do Claude (pasta de configuração)", contaBox),
@@ -220,6 +191,8 @@ public sealed class PreferenciasWindow : DialogWindow
             Width = 130,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
+        var cores = new Dictionary<string, string>(
+            atuais.Cores ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
         var painelBox = new TextBox
         {
             Text = atuais.PainelComando,
@@ -235,7 +208,8 @@ public sealed class PreferenciasWindow : DialogWindow
         salvar.Click += (_, _) => Close(new Preferencias(
             (fonteBox.Text ?? "").Trim(),
             (double)(tamanhoBox.Value ?? (decimal)atuais.Tamanho),
-            (painelBox.Text ?? "").Trim()));
+            (painelBox.Text ?? "").Trim(),
+            cores));
 
         var corpo = new List<Control>
         {
@@ -246,19 +220,71 @@ public sealed class PreferenciasWindow : DialogWindow
             Field("Painel lateral (script de PowerShell)", painelBox),
             Label("Roda na pasta e na conta do projeto, sem carregar o perfil. Em branco, o botão do painel some."),
             new Border { Height = 14 },
-            new TextBlock { Text = "AVISOS DO CLAUDE CODE", Classes = { "sectionTitle" }, Margin = new Thickness(0, 0, 0, 6) },
+            new TextBlock { Text = "CONTAS DO CLAUDE CODE", Classes = { "sectionTitle" }, Margin = new Thickness(0, 0, 0, 6) },
+            Label("A cor ao lado de cada conta pinta o grupo dela na barra lateral e os projetos que a usam. " +
+                  "Clique nela para trocar."),
             Label("Instala hooks no settings.json da conta para o ponto da sidebar mostrar o estado real " +
                   "do Claude: rodando, esperando por você ou concluído. Vale para as sessões abertas depois. " +
                   "Uma cópia do arquivo original fica ao lado dele (settings.json.antes-do-gterm)."),
         };
-        corpo.AddRange(contas.Select(LinhaDaConta));
+        corpo.AddRange(contas.Select(c => LinhaDaConta(c, cores)));
 
         Compose("Preferências", corpo, new[] { notas, cancelar, salvar });
     }
 
-    /// <summary>Uma conta: onde fica, se os avisos estão instalados e o botão que troca isso na hora.</summary>
-    private static Control LinhaDaConta(string conta)
+    /// <summary>
+    /// Uma conta: a cor dela, onde fica, se os avisos estão instalados e o botão que troca
+    /// isso na hora. A cor só vale ao salvar as preferências.
+    /// </summary>
+    private static Control LinhaDaConta(string conta, Dictionary<string, string> cores)
     {
+        var cor = new Button
+        {
+            Width = 20,
+            Height = 20,
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(0),
+            BorderThickness = new Thickness(0),
+            Margin = new Thickness(0, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(cor, "Cor da conta na barra lateral");
+
+        var paleta = new WrapPanel { MaxWidth = 170 };
+        var flyout = new Flyout { Content = paleta };
+        cor.Flyout = flyout;
+
+        void Pintar()
+        {
+            var atual = GroupPalette.Normalizar(cores.GetValueOrDefault(conta)) ?? GroupPalette.Padrao;
+            cor.Background = new SolidColorBrush(Color.Parse(atual));
+            foreach (var b in paleta.Children.OfType<Button>())
+                b.BorderThickness = new Thickness(b.Tag as string == atual ? 3 : 0);
+        }
+
+        foreach (var c in GroupPalette.Cores)
+        {
+            var b = new Button
+            {
+                Width = 28,
+                Height = 28,
+                Margin = new Thickness(3),
+                CornerRadius = new CornerRadius(14),
+                Background = new SolidColorBrush(Color.Parse(c)),
+                BorderBrush = Brushes.White,
+                Padding = new Thickness(0),
+                Tag = c,
+            };
+            b.Click += (_, _) =>
+            {
+                cores[conta] = c;
+                Pintar();
+                flyout.Hide();
+            };
+            paleta.Children.Add(b);
+        }
+        Pintar();
+
         var situacao = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0) };
         var botao = new Button { MinWidth = 84 };
 
@@ -290,7 +316,7 @@ public sealed class PreferenciasWindow : DialogWindow
         var identificacao = string.Join("  ·  ",
             new[] { quem.Nome, quem.Email, quem.Plano }.Where(t => t is not null));
 
-        var linha = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(0, 0, 0, 8) };
+        var linha = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), Margin = new Thickness(0, 0, 0, 8) };
         var caminho = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 1 };
         if (identificacao.Length > 0)
             caminho.Children.Add(new TextBlock { Text = identificacao, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis });
@@ -301,8 +327,10 @@ public sealed class PreferenciasWindow : DialogWindow
             FontSize = 11,
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
-        Grid.SetColumn(situacao, 1);
-        Grid.SetColumn(botao, 2);
+        Grid.SetColumn(caminho, 1);
+        Grid.SetColumn(situacao, 2);
+        Grid.SetColumn(botao, 3);
+        linha.Children.Add(cor);
         linha.Children.Add(caminho);
         linha.Children.Add(situacao);
         linha.Children.Add(botao);

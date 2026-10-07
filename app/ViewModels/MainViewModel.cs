@@ -27,11 +27,13 @@ public interface IDialogService
     Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas);
 }
 
-public sealed record ProjetoEditado(string Nome, string Pasta, string Cor, string Shell, string Comando, string Conta);
+public sealed record ProjetoEditado(string Nome, string Pasta, string Shell, string Comando, string Conta);
 
 /// <param name="Fonte">Vazia usa a lista padrão.</param>
 /// <param name="PainelComando">Script do painel lateral; vazio, sem painel.</param>
-public sealed record Preferencias(string Fonte, double Tamanho, string PainelComando);
+/// <param name="Cores">A cor de cada conta do Claude, pela pasta dela; null não mexe em nenhuma.</param>
+public sealed record Preferencias(string Fonte, double Tamanho, string PainelComando,
+    IReadOnlyDictionary<string, string>? Cores = null);
 
 /// <summary>Linha da sidebar: o projeto e, se já foi aberto, o terminal dele.</summary>
 public sealed partial class ProjetoViewModel : ObservableObject
@@ -42,10 +44,15 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public string Nome => Projeto.Nome;
     public string Pasta => Projeto.Pasta;
     public string NomeDoShell => Shells.Achar(Projeto.Shell).Nome;
-    private Color CorBase => Color.Parse(GroupPalette.Normalizar(Projeto.Cor) ?? GroupPalette.Padrao);
+    /// <summary>A cor da conta do Claude do projeto: a do grupo e de todas as linhas dele.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Cor), nameof(Fundo))]
+    private string _corDaConta = GroupPalette.Padrao;
+
+    private Color CorBase => Color.Parse(CorDaConta);
     public IBrush Cor => new SolidColorBrush(CorBase);
 
-    // fundo da pílula com o nome, acima do terminal: a cor do projeto esmaecida
+    // fundo da pílula com o nome, acima do terminal, e do plano no título: a cor esmaecida
     public IBrush Fundo => new SolidColorBrush(CorBase, 0.22);
 
     /// <summary>A pasta da conta do Claude deste projeto: projetos da mesma conta ficam juntos.</summary>
@@ -239,6 +246,7 @@ public sealed partial class MainViewModel : ObservableObject
             p.Plano = quem?.Plano;
             p.DicaDoGrupo = quem is null ? null : (quem.Email is null ? "" : quem.Email + "\n") + p.Conta;
             p.Recolhido = comTitulos && _workspace.ContasRecolhidas.Any(c => MesmaConta(p.Conta, c));
+            p.CorDaConta = CorDa(p.Conta);
             anterior = p.Conta;
         }
     }
@@ -251,6 +259,18 @@ public sealed partial class MainViewModel : ObservableObject
         if (!_identidades.TryGetValue(conta, out var quem))
             _identidades[conta] = quem = ClaudeHooks.Identificar(conta);
         return quem;
+    }
+
+    /// <summary>
+    /// A cor da conta. Quem ainda não tem ganha a primeira livre da paleta, na ordem em que
+    /// as contas aparecem (a padrão primeiro), e fica com ela.
+    /// </summary>
+    private string CorDa(string conta)
+    {
+        var chave = _workspace.CoresDasContas.Keys.FirstOrDefault(c => MesmaConta(conta, c));
+        if (chave is not null && GroupPalette.Normalizar(_workspace.CoresDasContas[chave]) is { } cor) return cor;
+
+        return _workspace.CoresDasContas[chave ?? conta] = GroupPalette.ProximaLivre(_workspace.CoresDasContas.Values);
     }
 
     /// <summary>O clique no título do grupo: recolhe ou abre os projetos da conta, e lembra.</summary>
@@ -361,7 +381,6 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Nome = nome.Length > 0 ? nome : pasta,
             Pasta = pasta,
-            Cor = GroupPalette.ProximaLivre(_workspace.Projetos.Select(p => p.Cor)),
         };
 
         _workspace.Projetos.Add(projeto);
@@ -374,18 +393,27 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task AbrirPreferencias()
     {
+        var contas = ClaudeHooks.Contas(_workspace.Projetos.Select(p => p.Conta));
         var novas = await _dialogos.PreferenciasAsync(
-            new Preferencias(_workspace.Fonte ?? "", _workspace.TamanhoDaFonte, _workspace.PainelComando ?? ""),
-            ClaudeHooks.Contas(_workspace.Projetos.Select(p => p.Conta)));
+            new Preferencias(_workspace.Fonte ?? "", _workspace.TamanhoDaFonte, _workspace.PainelComando ?? "",
+                contas.ToDictionary(c => c, CorDa, StringComparer.OrdinalIgnoreCase)),
+            contas);
         if (novas is null) return;
 
         _workspace.Fonte = novas.Fonte.Trim();
         _workspace.TamanhoDaFonte = Math.Clamp(novas.Tamanho, 8, 32);
         _workspace.PainelComando = novas.PainelComando.Trim();
+        foreach (var (conta, cor) in novas.Cores ?? new Dictionary<string, string>())
+        {
+            if (GroupPalette.Normalizar(cor) is not { } valida) continue;
+            var chave = _workspace.CoresDasContas.Keys.FirstOrDefault(c => MesmaConta(conta, c)) ?? conta;
+            _workspace.CoresDasContas[chave] = valida;
+        }
         Salvar();
         OnPropertyChanged(nameof(Fonte));
         OnPropertyChanged(nameof(TamanhoDaFonte));
         OnPropertyChanged(nameof(TemPainel));
+        Agrupar(); // repinta as linhas com a cor nova da conta
     }
 
     /// <summary>Abre ou fecha o painel lateral do projeto selecionado, e lembra a escolha.</summary>
@@ -438,7 +466,6 @@ public sealed partial class MainViewModel : ObservableObject
 
         p.Projeto.Nome = novo.Nome;
         p.Projeto.Pasta = novo.Pasta;
-        p.Projeto.Cor = novo.Cor;
         p.Projeto.Shell = novo.Shell;
         p.Projeto.Comando = novo.Comando;
         p.Projeto.Conta = novo.Conta;

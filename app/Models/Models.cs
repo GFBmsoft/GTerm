@@ -10,6 +10,8 @@ public sealed class Projeto
     public string Id { get; set; } = Guid.NewGuid().ToString("n");
     public string Nome { get; set; } = "";
     public string Pasta { get; set; } = "";
+
+    /// <summary>Do tempo em que a cor era por projeto. Hoje a cor é a da conta; fica só para não se perder.</summary>
     public string Cor { get; set; } = GroupPalette.Padrao;
 
     /// <summary>Um dos ids de <see cref="Shells.Todos"/>.</summary>
@@ -47,6 +49,9 @@ public sealed class Workspace
 
     /// <summary>Contas do Claude (a pasta de cada uma) com o grupo recolhido na sidebar.</summary>
     public List<string> ContasRecolhidas { get; set; } = new();
+
+    /// <summary>A cor de cada conta do Claude (pela pasta dela): pinta o grupo e os projetos dele.</summary>
+    public Dictionary<string, string> CoresDasContas { get; set; } = new();
 
     /// <summary>Quando a API do GitHub foi consultada pela última vez, e o que ela disse.</summary>
     public string UltimaChecagem { get; set; } = "";

@@ -73,19 +73,23 @@
                    logado nela e o plano. O clique recolhe ou abre os projetos da conta -->
               <Button Classes="grupo" Command="{Binding AlternarGrupoCommand}" IsVisible="{Binding TemGrupo}"
                       ToolTip.Tip="{Binding DicaDoGrupo}">
-                <Grid ColumnDefinitions="Auto,*,Auto">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto">
                   <TextBlock Grid.Column="0" Text="{Binding Chevron}" FontSize="8" Classes="faint"
                              FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets"
                              VerticalAlignment="Center" Margin="0,1,6,0" />
-                  <TextBlock Grid.Column="1" Text="{Binding Grupo}" FontSize="11" FontWeight="SemiBold" Classes="dim"
+                  <!-- a cor da conta: ponto cheio e nome no título, anel em cada projeto dela -->
+                  <Ellipse Grid.Column="1" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
+                           Fill="{Binding Cor}" />
+                  <TextBlock Grid.Column="2" Text="{Binding Grupo}" FontSize="11" FontWeight="SemiBold"
+                             Foreground="{Binding Cor}"
                              TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <!-- o plano em evidência: a cor de destaque, esmaecida no fundo -->
-                  <Panel Grid.Column="2" Height="15" Margin="6,0,0,0" VerticalAlignment="Center"
+                  <!-- o plano em evidência: a cor da conta, esmaecida no fundo -->
+                  <Panel Grid.Column="3" Height="15" Margin="6,0,0,0" VerticalAlignment="Center"
                          IsVisible="{Binding TemPlano}">
-                    <Border CornerRadius="8" Background="{DynamicResource Accent}" Opacity="0.18" />
-                    <Border Classes="chip" BorderBrush="{DynamicResource Accent}">
+                    <Border CornerRadius="8" Background="{Binding Fundo}" />
+                    <Border Classes="chip" BorderBrush="{Binding Cor}">
                       <TextBlock Text="{Binding Plano}" FontSize="9" FontWeight="SemiBold"
-                                 Foreground="{DynamicResource Accent}" VerticalAlignment="Center" />
+                                 Foreground="{Binding Cor}" VerticalAlignment="Center" />
                     </Border>
                   </Panel>
                 </Grid>
@@ -112,9 +116,9 @@
                 </Border.ContextMenu>
 
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                  <!-- a cor do projeto: a mesma da pílula com o nome dele acima do terminal -->
+                  <!-- a cor da conta do projeto: a mesma da pílula com o nome dele acima do terminal -->
                   <Ellipse Grid.Column="0" Width="8" Height="8" Margin="9,0,9,0" VerticalAlignment="Center"
-                           Fill="{Binding Cor}" />
+                           StrokeThickness="1.5" Stroke="{Binding Cor}" />
                   <TextBlock Grid.Column="1" Text="{Binding Nome}" VerticalAlignment="Center" Margin="0,0,6,0" />
 
                   <!-- some sem shell aberto; apagado no prompt; amarelo rodando (piscando se
@@ -146,7 +150,7 @@
 
       <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,7,10,6"
             IsVisible="{Binding Selecionado, Converter={x:Static ObjectConverters.IsNotNull}}">
-        <!-- a única cor da janela: a pílula com o nome diz em qual terminal se está digitando -->
+        <!-- a cor da conta de novo: a pílula com o nome diz em qual terminal se está digitando -->
         <Border Grid.Column="0" CornerRadius="11" Height="22" Padding="11,0" BorderThickness="1"
                 Background="{Binding Selecionado.Fundo}" BorderBrush="{Binding Selecionado.Cor}">
           <TextBlock Text="{Binding Selecionado.Nome}" FontWeight="SemiBold" FontSize="12"
