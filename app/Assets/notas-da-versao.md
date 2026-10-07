@@ -1,3 +1,6 @@
+## 1.0.0.3 — 07/10/2026
+- Atualização: depois de baixar, o aplicativo abre a versão nova e fecha a antiga sozinho. Antes ficava parado em "Baixando… 100%" e era preciso fechar e abrir à mão. Vale a partir da próxima atualização.
+
 ## 1.0.0.2 — 07/10/2026
 - Barra lateral: o grupo de cada conta do Claude mostra o nome de quem está logado (o e-mail fica na dica) e o plano em destaque. Clicar no título recolhe ou abre os projetos da conta, e a escolha fica guardada.
 - Preferências: cada conta aparece com nome, e-mail e plano, além da pasta.

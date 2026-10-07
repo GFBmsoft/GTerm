@@ -527,7 +527,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private Release? _release;
 
-    /// <summary>Fecha a janela sem perguntar pelos terminais; a MainWindow é quem sabe fazer.</summary>
+    /// <summary>Encerra o aplicativo sem perguntar pelos terminais, depois de uma atualização.</summary>
     public Action? Sair { get; set; }
 
     /// <summary>Tag da release mais nova que a versão em uso; vazia quando não há.</summary>
@@ -621,6 +621,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     private async Task AtualizarAgoraAsync()
     {
+        var trocado = false;
         try
         {
             _release ??= await Atualizador.UltimaReleaseAsync();
@@ -643,20 +644,30 @@ public sealed partial class MainViewModel : ObservableObject
                     "O executável atual é guardado como cópia e volta sozinho se algo falhar."))
                 return;
 
-            var progresso = new Progress<double>(p => Rodape = $"Baixando… {p:P0}");
+            // os avisos de progresso chegam pela fila da tela, e os últimos chegam depois
+            // de o download terminar: sem a trava, um "100%" atrasado cobria o que viesse
+            // em seguida, inclusive a mensagem de erro
+            var baixando = true;
+            var progresso = new Progress<double>(p =>
+            {
+                if (baixando) Rodape = $"Baixando… {p:P0}";
+            });
             var baixado = await Atualizador.BaixarAsync(arquivo, Path.GetDirectoryName(exe!)!, progresso);
+            baixando = false;
 
             Rodape = "Instalando…";
+            await Task.Delay(50); // dá à tela a vez de mostrar o texto antes da troca
             Atualizador.Trocar(exe!, baixado);
-            Atualizador.Reabrir(exe!);
+            trocado = true;
+            await Atualizador.ReabrirAsync(exe!);
 
             // o novo processo já está subindo; este sai para liberar o arquivo
-            EncerrarTudo();
             Sair?.Invoke();
         }
         catch (Exception e)
         {
-            Rodape = "Não foi possível atualizar: " + e.Message;
+            // com o executável já trocado só faltou reabrir: não é para tentar de novo
+            Rodape = trocado ? "Atualizado: feche e abra de novo" : "Não foi possível atualizar: " + e.Message;
         }
     }
 }

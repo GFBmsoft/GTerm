@@ -37,12 +37,11 @@ public partial class MainWindow : Window, IDialogService
             _ = _vm.VerificarAtualizacaoAsync(); // em segundo plano, no máximo uma consulta por dia
         };
 
-        // atualização instalada: o aviso de que os terminais fecham já foi confirmado
-        _vm.Sair = () =>
-        {
-            _fechamentoConfirmado = true;
-            Close();
-        };
+        // atualização instalada: o aviso de que os terminais fecham já foi confirmado, e o
+        // executável novo já está subindo. Sai direto, sem passar pelo fechamento da
+        // janela: na 1.0.0.1 esse caminho deixou o app aberto, parado em "100%". Com o
+        // processo morto o Windows fecha os pseudoconsoles, e os shells vão junto
+        _vm.Sair = () => System.Environment.Exit(0);
 
         // em túnel: o terminal consome o teclado todo, então a janela olha antes dele
         AddHandler(KeyDownEvent, AoTeclar, RoutingStrategies.Tunnel);

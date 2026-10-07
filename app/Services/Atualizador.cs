@@ -195,6 +195,26 @@ public static class Atualizador
     public static void Reabrir(string exe) =>
         Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
 
+    /// <summary>
+    /// Abre o executável recém-trocado, insistindo por alguns segundos: logo depois de
+    /// gravado ele pode estar preso pelo antivírus, e o Windows recusa a abertura.
+    /// </summary>
+    public static async Task ReabrirAsync(string exe)
+    {
+        for (var tentativa = 1; ; tentativa++)
+        {
+            try
+            {
+                Reabrir(exe);
+                return;
+            }
+            catch (System.ComponentModel.Win32Exception) when (tentativa < 6)
+            {
+                await Task.Delay(1500);
+            }
+        }
+    }
+
     // ------------------------------------------------------------ versão e release
 
     /// <summary>Versão em execução, quando carimbada pelo workflow; vazia em build local.</summary>
