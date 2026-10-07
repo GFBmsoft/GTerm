@@ -1,3 +1,6 @@
+## 1.0.0.4 — 07/10/2026
+- Sem mudanças no aplicativo: versão publicada para conferir a atualização automática corrigida na 1.0.0.3.
+
 ## 1.0.0.3 — 07/10/2026
 - Atualização: depois de baixar, o aplicativo abre a versão nova e fecha a antiga sozinho. Antes ficava parado em "Baixando… 100%" e era preciso fechar e abrir à mão. Vale a partir da próxima atualização.
 
