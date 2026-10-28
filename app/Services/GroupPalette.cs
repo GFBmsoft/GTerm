@@ -25,12 +25,11 @@ public static class GroupPalette
 
     public static string Padrao => Cores[0];
 
-    /// <summary>Primeira cor ainda não usada; repete o ciclo quando todas estão em uso.</summary>
-    public static string ProximaLivre(IEnumerable<string> emUso)
-    {
-        var usadas = new HashSet<string>(emUso, StringComparer.OrdinalIgnoreCase);
-        return Cores.FirstOrDefault(c => !usadas.Contains(c)) ?? Cores[usadas.Count % Cores.Length];
-    }
+    /// <summary>
+    /// A cor de quem não escolheu uma, tirada do nome: estável entre execuções (o
+    /// GetHashCode não é) e a mesma conta do GTest, para o projeto ter a mesma cor nos dois.
+    /// </summary>
+    public static string DoNome(string nome) => Cores[(nome ?? "").Sum(c => c) % Cores.Length];
 
     /// <summary>Aceita "#RGB", "#RRGGBB" e nomes já normalizados; devolve null se não for cor.</summary>
     public static string? Normalizar(string? texto)

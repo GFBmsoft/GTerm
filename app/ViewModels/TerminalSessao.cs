@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using AvaloniaTerminal;
@@ -10,10 +11,27 @@ using GTerm.Services;
 
 namespace GTerm.ViewModels;
 
-/// <summary>O que é preciso para subir um shell.</summary>
+/// <summary>O que é preciso para subir um shell (ou o Claude direto).</summary>
 /// <param name="Comando">Digitado assim que o shell mostra o primeiro prompt; vazio, nada.</param>
-public sealed record Arranque(string Linha, string Pasta, Dictionary<string, string?>? Ambiente, string? Comando)
+/// <param name="AoSair">O aviso quando o processo termina; null é o de shell.</param>
+public sealed record Arranque(string Linha, string Pasta, Dictionary<string, string?>? Ambiente, string? Comando,
+    string? AoSair = null)
 {
+    /// <summary>
+    /// O terminal do projeto: o Claude Code direto no pseudoconsole, sem shell no meio, na
+    /// pasta e na conta do projeto. Os argumentos vêm de <see cref="Cia.Decidir"/>.
+    /// </summary>
+    /// <param name="claude">O executável, já entre aspas, ou o que os testes põem no lugar.</param>
+    public static Arranque DoClaude(Projeto projeto, string claude, string argumentos)
+    {
+        // por padrão o Claude esconde o cursor do terminal e desenha o dele, um bloco em
+        // vídeo invertido; com esta variável ele usa o do terminal, a barra do GTerm
+        var ambiente = ComConta(null, projeto) ?? new Dictionary<string, string?>();
+        ambiente["CLAUDE_CODE_NATIVE_CURSOR"] = "1";
+        return new((claude + " " + argumentos).Trim(), projeto.Pasta, ambiente, null,
+            "Claude encerrado — Enter retoma a sessão");
+    }
+
     /// <summary>O terminal do projeto: o shell dele, na pasta e na conta do Claude dele.</summary>
     /// <param name="comando">No lugar do comando de abertura do projeto, só desta vez.</param>
     public static Arranque DoProjeto(Projeto projeto, string? comando = null)
@@ -81,6 +99,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
 
     /// <summary>O estado atual é dos que pedem aviso: terminou ou está perguntando algo.</summary>
     public bool ChamaAtencao => !Encerrada && _atividade.ChamaAtencao;
+
 
     /// <summary>O terminal foi medido na tela, com estas colunas e linhas.</summary>
     public event Action<int, int>? Mediu;
@@ -191,6 +210,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         _atividade.Reiniciar();
         Estado = _atividade.Estado;
         _relogio.Start();
+        var aoSair = arranque.AoSair ?? "processo encerrado — Enter abre outro";
 
         pty.Encerrou += () => _ui.Post(() =>
         {
@@ -199,7 +219,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
             _relogio.Stop();
             _atividade.Reiniciar();
             Estado = _atividade.Estado;
-            Modelo.Feed("\r\n\x1b[2m[processo encerrado — Enter abre outro]\x1b[0m\r\n");
+            Modelo.Feed("\r\n\x1b[2m[" + aoSair + "]\x1b[0m\r\n");
         });
 
         Task.Run(() => LerSaida(pty));
@@ -260,6 +280,58 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         if (_comando is not { } comando || !_atividade.ViuPrompt) return;
         _comando = null;
         Modelo.Send(comando + "\r"); // passa pela entrada: o estado já vira "rodando"
+    }
+
+    private Task<bool>? _saida;
+
+    /// <summary>
+    /// Pede ao programa que saia sozinho, digitando como o usuário faria: Ctrl+C larga o que
+    /// estiver escrito na entrada (ou interrompe o que estiver rodando) e o comando de saída
+    /// vai em seguida. Devolve se ele saiu no prazo; se não, quem chamou encerra à força.
+    /// </summary>
+    public Task<bool> SairAsync(string comando, TimeSpan prazo)
+    {
+        if (_saida is not { IsCompleted: false }) _saida = Sair(comando, prazo);
+        return _saida;
+    }
+
+    private async Task<bool> Sair(string comando, TimeSpan prazo)
+    {
+        if (Encerrada) return true;
+        if (_pty is not { } pty) return false; // ainda esperando a tela: não há o que pedir
+
+        var saiu = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Mudou(object? _, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Encerrada) && Encerrada) saiu.TrySetResult();
+        }
+
+        // entre um passo e outro o processo pode ter saído, ou a sessão ter sido descartada
+        async Task<bool> Teclar(string texto, int pausa)
+        {
+            if (Encerrada || _pty != pty) return false;
+            pty.Escrever(Encoding.UTF8.GetBytes(texto));
+            await Task.Delay(pausa);
+            return true;
+        }
+
+        PropertyChanged += Mudou;
+        try
+        {
+            // interrompido logo depois do envio, o Claude pode devolver a mensagem à entrada,
+            // e o segundo Ctrl+C a limpa. A pausa entre os dois passa da janela do "Ctrl+C de
+            // novo para sair". O Enter vai depois de outra: junto com o texto, chegaria como
+            // parte dele
+            var ocupado = Estado is EstadoDoTerminal.Rodando or EstadoDoTerminal.Aguardando;
+            if ((!ocupado || await Teclar("\x03", 1500)) &&
+                await Teclar("\x03", 300) && await Teclar(comando, 200) && await Teclar("\r", 0))
+                await Task.WhenAny(saiu.Task, Task.Delay(prazo));
+            return Encerrada;
+        }
+        finally
+        {
+            PropertyChanged -= Mudou;
+        }
     }
 
     private void LerAvisoDoClaude()

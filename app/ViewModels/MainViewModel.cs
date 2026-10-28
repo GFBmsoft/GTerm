@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GTerm.Models;
@@ -12,97 +14,188 @@ using GTerm.Services;
 
 namespace GTerm.ViewModels;
 
-/// <summary>Diálogos e seletor de pasta, implementados pela MainWindow.</summary>
+/// <summary>Diálogos, implementados pela MainWindow.</summary>
 public interface IDialogService
 {
     Task<bool> ConfirmAsync(string title, string message);
     Task<string?> PromptAsync(string title, string label);
-    Task<string?> PickFolderAsync(string title);
-
-    /// <summary>Devolve os dados editados, ou null quando o usuário cancela.</summary>
-    Task<ProjetoEditado?> EditarProjetoAsync(Projeto projeto);
 
     /// <summary>Devolve as preferências escolhidas, ou null quando o usuário cancela.</summary>
     /// <param name="contas">Pastas de configuração do Claude onde os avisos podem ser instalados.</param>
     Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas);
-
-    /// <summary>A busca pelo nome: devolve o projeto escolhido, ou null quando o usuário desiste.</summary>
-    Task<Projeto?> BuscarProjetoAsync(IReadOnlyList<Projeto> projetos);
 }
-
-public sealed record ProjetoEditado(string Nome, string Pasta, string Shell, string Comando, string Conta);
 
 /// <param name="Fonte">Vazia usa a lista padrão.</param>
 /// <param name="PainelComando">Script do painel lateral; vazio, sem painel.</param>
-/// <param name="Cores">A cor de cada conta do Claude, pela pasta dela; null não mexe em nenhuma.</param>
 /// <param name="Avisar">Chamar a atenção quando um projeto fora da vista termina ou espera por você.</param>
-public sealed record Preferencias(string Fonte, double Tamanho, string PainelComando,
-    IReadOnlyDictionary<string, string>? Cores = null, bool Avisar = true);
+public sealed record Preferencias(string Fonte, double Tamanho, string PainelComando, bool Avisar = true);
 
-/// <summary>Linha da sidebar: o projeto e, se já foi aberto, o terminal dele.</summary>
+/// <summary>Uma linha da árvore: o título de um grupo ou um projeto dentro dele.</summary>
+public abstract class LinhaDaArvore : ObservableObject
+{
+    /// <summary>Só a linha de projeto se escolhe: o título abre e fecha no clique, e as setas passam por ele.</summary>
+    public abstract bool Selecionavel { get; }
+}
+
+/// <summary>Título de grupo, minimalista como no GTest: seta, ponto e nome na cor dele, e a contagem.</summary>
+public sealed partial class GrupoDaArvore : LinhaDaArvore
+{
+    private readonly MainViewModel _main;
+
+    public GrupoDaArvore(MainViewModel main, string id, string titulo, string cor)
+    {
+        _main = main;
+        Id = id;
+        Titulo = titulo;
+        Cor = new SolidColorBrush(Color.Parse(cor));
+    }
+
+    public string Id { get; }
+    public string Titulo { get; }
+    public IBrush Cor { get; }
+
+    [ObservableProperty] private int _contagem;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Seta))]
+    private bool _recolhido;
+
+    /// <summary>Seta do Segoe Fluent: para a direita recolhido, para baixo aberto.</summary>
+    public string Seta => Recolhido ? "" : "";
+
+    public override bool Selecionavel => false;
+
+    [RelayCommand] private void Alternar() => _main.AlternarGrupo(this);
+}
+
+/// <summary>Um projeto num grupo. O mesmo projeto aparece em mais de um (favorito, recente e na base).</summary>
+public sealed partial class LinhaDoProjeto : LinhaDaArvore
+{
+    private readonly MainViewModel _main;
+
+    public LinhaDoProjeto(MainViewModel main, ProjetoViewModel projeto, string grupo)
+    {
+        _main = main;
+        Projeto = projeto;
+        Grupo = grupo;
+    }
+
+    public ProjetoViewModel Projeto { get; }
+    public string Grupo { get; }
+
+    /// <summary>Só nos favoritos a ordem é do usuário: lá a linha sobe e desce.</summary>
+    public bool NosFavoritos => Grupo == MainViewModel.GrupoFavoritos;
+
+    /// <summary>À direita do nome, apagado: o número do favorito, quando foi aberto, a base.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TemExtra))]
+    private string _extra = "";
+
+    public bool TemExtra => Extra.Length > 0;
+
+    public override bool Selecionavel => true;
+
+    [RelayCommand] private void Subir() => _main.MoverFavorito(Projeto, -1);
+    [RelayCommand] private void Descer() => _main.MoverFavorito(Projeto, 1);
+}
+
+/// <summary>Um projeto das bases do cia e, se já foi aberto, o terminal dele.</summary>
 public sealed partial class ProjetoViewModel : ObservableObject
 {
     private readonly MainViewModel _main;
 
+    public ProjetoViewModel(ProjetoDoCia info, Projeto projeto, bool daBmsoft, MainViewModel main)
+    {
+        Info = info;
+        Projeto = projeto;
+        EhDaBmsoft = daBmsoft;
+        _main = main;
+        var (glifo, cor) = Cia.Icone(info.Tipo);
+        Icone = glifo;
+        CorDoIcone = new SolidColorBrush(Color.Parse(cor));
+        _corHex = GroupPalette.Normalizar(projeto.Cor) ?? GroupPalette.DoNome(info.Nome);
+    }
+
+    public ProjetoDoCia Info { get; }
+
+    /// <summary>O que o projeto lembra (painel, segundo terminal) e de onde sai o arranque do shell.</summary>
     public Projeto Projeto { get; }
-    public string Nome => Projeto.Nome;
-    public string Pasta => Projeto.Pasta;
-    public string NomeDoShell => Shells.Achar(Projeto.Shell).Nome;
-    /// <summary>A cor da conta do Claude do projeto: a do grupo e de todas as linhas dele.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Cor), nameof(Fundo))]
-    private string _corDaConta = GroupPalette.Padrao;
 
-    private Color CorBase => Color.Parse(CorDaConta);
-    public IBrush Cor => new SolidColorBrush(CorBase);
+    public string Nome => Info.Nome;
+    public string Pasta => Info.Pasta;
 
-    // fundo da pílula com o nome, acima do terminal, e do plano no título: a cor esmaecida
-    public IBrush Fundo => new SolidColorBrush(CorBase, 0.22);
-
-    /// <summary>A pasta da conta do Claude deste projeto: projetos da mesma conta ficam juntos.</summary>
-    public string Conta => ClaudeHooks.PastaDaConta(ClaudeHooks.ContaDoProjeto(Projeto.Conta, Projeto.Comando));
+    /// <summary>O tipo (Delphi, C#, Go...) em Nerd Font, na cor do Terminal-Icons, como no cia.</summary>
+    public string Icone { get; }
+    public IBrush CorDoIcone { get; }
 
     /// <summary>
-    /// O título do grupo, só no primeiro projeto de cada conta: o nome de quem está logado
-    /// nela. Null nos demais, e em todos quando só a conta padrão está em uso.
+    /// Da primeira base, a da BMSoft: lá o cia abre na delphi-writer, e pedido do Mantis e
+    /// pull request fazem sentido. Nas outras (Private) ele abre no /retomar.
+    /// </summary>
+    public bool EhDaBmsoft { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RotuloDoFavorito))]
+    private bool _favorito;
+
+    public string RotuloDoFavorito => Favorito ? "Tirar dos favoritos" : "Favoritar";
+
+    /// <summary>
+    /// A cor do projeto, a da aba dele. Sem escolha, uma da paleta tirada do nome, pela
+    /// mesma conta do GTest: o projeto tem a mesma cor nos dois.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TemGrupo))]
-    private string? _grupo;
+    [NotifyPropertyChangedFor(nameof(Cor), nameof(Fundo), nameof(FundoDaAba), nameof(BordaDaAba), nameof(FundoDaBarra), nameof(BordaDaBarra))]
+    private string _corHex;
 
-    /// <summary>Plano da conta do grupo (MAX, TEAM...), ao lado do título.</summary>
+    private Color CorBase => Color.Parse(CorHex);
+    public IBrush Cor => new SolidColorBrush(CorBase);
+
+    // fundo da aba da frente: a cor esmaecida
+    public IBrush Fundo => new SolidColorBrush(CorBase, 0.22);
+
+    // a barra dos botões, embaixo das abas: o tom da aba, mais leve
+    public IBrush FundoDaBarra => new SolidColorBrush(CorBase, 0.09);
+    public IBrush BordaDaBarra => new SolidColorBrush(CorBase, 0.35);
+
+    /// <summary>A aba dele é a da frente: ganha o fundo e o contorno na cor do projeto.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TemPlano))]
-    private string? _plano;
+    [NotifyPropertyChangedFor(nameof(FundoDaAba), nameof(BordaDaAba))]
+    private bool _aVista;
 
-    /// <summary>O e-mail e a pasta da conta, na dica do título do grupo.</summary>
-    [ObservableProperty] private string? _dicaDoGrupo;
+    public IBrush FundoDaAba => AVista ? Fundo : Brushes.Transparent;
+    public IBrush BordaDaAba => AVista ? Cor : Brushes.Transparent;
 
-    /// <summary>O grupo da conta está recolhido: a linha do projeto some, o título fica.</summary>
+    /// <summary>A sessão que o cia retoma; null sem sessão com conversa.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Visivel), nameof(Chevron))]
-    private bool _recolhido;
+    [NotifyPropertyChangedFor(nameof(RotuloDeAbrir), nameof(TextoDaSessao))]
+    private UltimaSessao? _ultimaSessao;
 
-    public bool TemGrupo => Grupo is not null;
-    public bool TemPlano => Plano is not null;
-    public bool Visivel => !Recolhido;
-    public string Chevron => Recolhido ? "" : "";
+    /// <summary>A sessão já foi procurada: até lá, o texto embaixo do botão fica vazio.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TextoDaSessao))]
+    private bool _sessaoLida;
 
-    /// <summary>O comando de abertura chama o cia ou o cim: os modos do Claude se aplicam.</summary>
-    public bool TemClaude => Atalho is "cia" or "cim";
+    public string RotuloDeAbrir => UltimaSessao is null ? "Abrir o Claude" : "Retomar a sessão";
 
-    /// <summary>Pedido do Mantis e pull request só existem no cia.</summary>
-    public bool EhCia => Atalho == "cia";
-
-    private string Atalho => Projeto.Comando.TrimStart().Split(' ')[0].ToLowerInvariant();
+    /// <summary>Embaixo do botão de abrir: o que o cia vai fazer.</summary>
+    public string TextoDaSessao => !SessaoLida ? ""
+        : UltimaSessao is { } s
+            ? $"“{s.Titulo}” · {Cia.Quando(s.Quando, DateTime.Now)} · {Cia.Tamanho(s.KB)}" +
+              (s.KB >= Cia.CompactarKB ? " · abre com /compact" : "")
+            : "Nenhuma sessão com conversa: abre " +
+              (EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto");
 
     /// <summary>Null até o terminal do projeto ser iniciado, e depois de encerrado.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Parado), nameof(Vivo), nameof(Rodando), nameof(Aguardando), nameof(Concluido), nameof(Erro))]
+    [NotifyPropertyChangedFor(nameof(Parado), nameof(TemTerminal), nameof(Vivo), nameof(Rodando), nameof(Aguardando), nameof(Concluido), nameof(Erro))]
     private TerminalSessao? _sessao;
 
-    /// <summary>Sem terminal: a linha mostra o botão de iniciar no lugar do ponto de estado.</summary>
+    /// <summary>Sem terminal: a linha mostra o botão de abrir no lugar do ponto de estado.</summary>
     public bool Parado => Sessao is null;
+
+    /// <summary>Tem terminal, vivo ou encerrado: o menu oferece encerrar.</summary>
+    public bool TemTerminal => Sessao is not null;
 
     /// <summary>O painel lateral deste projeto, quando aberto.</summary>
     public TerminalSessao? PainelSessao { get; set; }
@@ -119,17 +212,11 @@ public sealed partial class ProjetoViewModel : ObservableObject
     /// <summary>Há um shell aberto: é o que pede confirmação antes de encerrar.</summary>
     public bool Vivo => Sessao is { Encerrada: false };
 
-    // um por cor do ponto na sidebar; nenhum ligado = terminal parado no prompt
+    // um por cor do ponto na árvore; nenhum ligado = terminal parado no prompt
     public bool Rodando => Sessao?.Estado == EstadoDoTerminal.Rodando;
     public bool Aguardando => Sessao?.Estado == EstadoDoTerminal.Aguardando;
     public bool Concluido => Sessao?.Estado == EstadoDoTerminal.Concluido;
     public bool Erro => Sessao?.Estado == EstadoDoTerminal.Erro;
-
-    public ProjetoViewModel(Projeto projeto, MainViewModel main)
-    {
-        Projeto = projeto;
-        _main = main;
-    }
 
     partial void OnSessaoChanged(TerminalSessao? oldValue, TerminalSessao? newValue)
     {
@@ -148,37 +235,47 @@ public sealed partial class ProjetoViewModel : ObservableObject
         _main.EstadoMudou(this);
     }
 
-    /// <summary>Depois de editar: tudo aqui vem do modelo.</summary>
-    public void Atualizar() => OnPropertyChanged(string.Empty);
-
     // os comandos ficam aqui porque o menu de contexto é um popup: de dentro dele não se
     // alcança o DataContext da janela por $parent
-    [RelayCommand] private void Iniciar() => _main.Iniciar(this);
-    [RelayCommand] private void AlternarGrupo() => _main.AlternarGrupo(this);
-    [RelayCommand] private Task Editar() => _main.EditarAsync(this);
-    [RelayCommand] private Task Reiniciar() => _main.ReiniciarAsync(this);
-    [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
-    [RelayCommand] private Task Remover() => _main.RemoverAsync(this);
-    [RelayCommand] private void Subir() => _main.Mover(this, -1);
-    [RelayCommand] private void Descer() => _main.Mover(this, 1);
-
-    // menu do título do grupo: valem para todos os projetos da conta deste
-    [RelayCommand] private void IniciarGrupo() => _main.IniciarGrupo(this);
-    [RelayCommand] private Task EncerrarGrupo() => _main.EncerrarGrupoAsync(this);
-
-    // modos do Claude: o comando de abertura do projeto com um parâmetro a mais do cia/cim
-    [RelayCommand] private Task SessaoNova() => _main.AbrirComAsync(this, "-Novo");
-    [RelayCommand] private Task SemSkill() => _main.AbrirComAsync(this, "-Limpo");
-    [RelayCommand] private Task PullRequest() => _main.AbrirComAsync(this, "-Pr");
+    [RelayCommand] private Task Iniciar() => _main.IniciarAsync(this);
+    [RelayCommand] private Task AbrirClaude() => _main.AbrirAsync(this);
+    [RelayCommand] private Task SessaoNova() => _main.AbrirAsync(this, "-Novo");
+    [RelayCommand] private Task SemSkill() => _main.AbrirAsync(this, "-Limpo");
+    [RelayCommand] private Task PullRequest() => _main.AbrirAsync(this, "-Pr");
     [RelayCommand] private Task Pedido() => _main.AbrirPedidoAsync(this);
+    [RelayCommand] private void Favoritar() => _main.AlternarFavorito(this);
+    [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
+
+    /// <summary>O clique na aba: traz o projeto para a frente.</summary>
+    [RelayCommand] private void Mostrar() => _main.Selecionado = this;
+
+    /// <summary>A cor da aba, escolhida no menu dela.</summary>
+    [RelayCommand] private void EscolherCor(string hex) => _main.MudarCor(this, hex);
 }
 
 public sealed partial class MainViewModel : ObservableObject
 {
+    public const string GrupoFavoritos = "favoritos";
+    public const string GrupoRecentes = "recentes";
+    public const string GrupoResultados = "resultados";
+
     private readonly IDialogService _dialogos;
     private readonly Workspace _workspace;
 
+    // os vigias de pasta avisam de outra thread
+    private readonly Dispatcher _ui = Dispatcher.UIThread;
+
+    /// <summary>Todos os projetos das bases, na ordem delas.</summary>
     public ObservableCollection<ProjetoViewModel> Projetos { get; } = new();
+
+    /// <summary>A árvore achatada: títulos de grupo e, dos grupos abertos, os projetos.</summary>
+    public ObservableCollection<LinhaDaArvore> Linhas { get; } = new();
+
+    /// <summary>A linha escolhida na árvore. Mudar de linha muda o projeto à vista.</summary>
+    [ObservableProperty] private LinhaDaArvore? _linhaSelecionada;
+
+    /// <summary>O que se digita em cima da árvore: com texto, ela vira a lista dos que batem.</summary>
+    [ObservableProperty] private string _filtro = "";
 
     /// <summary>Terminais abertos, todos vivos; só o do projeto selecionado aparece.</summary>
     public ObservableCollection<TerminalSessao> Sessoes { get; } = new();
@@ -190,6 +287,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>O que aparece no lugar do terminal quando não há um para mostrar.</summary>
     [ObservableProperty] private string? _aviso;
+
+    /// <summary>O projeto à vista não tem terminal: no lugar dele, os jeitos de abrir o Claude.</summary>
+    public bool MostrarParado => Selecionado is { Sessao: null };
 
     /// <summary>A escolhida na frente e, atrás, a lista padrão: é o que cobre fonte desinstalada.</summary>
     public string Fonte => _workspace.Fonte is { Length: > 0 } f ? f + "," + FontePadrao : FontePadrao;
@@ -214,33 +314,335 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool PainelVisivel => Selecionado?.PainelSessao is not null;
 
+    /// <summary>Os projetos com o Claude aberto, na ordem em que foram abertos: as abas e o Ctrl+Tab.</summary>
+    public ObservableCollection<ProjetoViewModel> Abertos { get; } = new();
+
+    /// <summary>O projeto da aba da frente: a barra embaixo das abas tem os botões dele.</summary>
+    public ProjetoViewModel? AbaAtiva => Selecionado is { Sessao: not null } p ? p : null;
+
+    public bool TemAbaAtiva => AbaAtiva is not null;
+
+    private EstadoDoCia _estado = EstadoDoCia.Vazio;
+    private List<ProjetoViewModel> _favoritos = new();
+
     public MainViewModel(IDialogService dialogos)
     {
         _dialogos = dialogos;
         _workspace = WorkspaceStore.Load();
         Atualizador.LimparAntigo();
         _rodape = RodapePadrao;
+        _releitura = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _releitura.Tick += (_, _) => Reler();
 
-        foreach (var p in _workspace.Projetos) Projetos.Add(new ProjetoViewModel(p, this));
-        Agrupar();
+        CarregarProjetos();
+        CarregarEstado();
+        Remontar();
+        Vigiar();
 
-        Selecionado = Projetos.FirstOrDefault(p => p.Projeto.Id == _workspace.UltimoId);
+        Selecionado = Projetos.FirstOrDefault(p => Mesma(p.Pasta, _workspace.UltimaPasta));
         if (Selecionado is null) AtualizarAviso();
     }
 
     partial void OnSelecionadoChanged(ProjetoViewModel? value)
     {
-        // selecionar não sobe o shell: o comando de abertura (o Claude do projeto) só roda
-        // quando o usuário manda iniciar
-        if (value is not null && _workspace.UltimoId != value.Projeto.Id)
+        // selecionar não sobe o shell: o Claude do projeto só abre quando o usuário manda
+        if (value is not null && !Mesma(_workspace.UltimaPasta, value.Pasta))
         {
-            _workspace.UltimoId = value.Projeto.Id;
+            _workspace.UltimaPasta = value.Pasta;
             Salvar();
         }
 
+        MarcarLinha();
         AtualizarAviso();
         Mostrar();
         Visto();
+        OnPropertyChanged(nameof(MostrarParado));
+        if (value is { Sessao: null }) _ = CarregarSessaoAsync(value);
+    }
+
+    partial void OnLinhaSelecionadaChanged(LinhaDaArvore? value)
+    {
+        // a lista solta a seleção quando a linha some (grupo recolhido): o projeto continua à vista
+        if (value is LinhaDoProjeto l && l.Projeto != Selecionado) Selecionado = l.Projeto;
+    }
+
+    partial void OnFiltroChanged(string value) => Remontar();
+
+    /// <summary>
+    /// A sessão que o cia vai retomar, para o botão de abrir dizer o que acontece. Lida fora
+    /// da tela: os .jsonl das sessões passam de megabytes.
+    /// </summary>
+    internal async Task CarregarSessaoAsync(ProjetoViewModel p)
+    {
+        var conta = ClaudeHooks.PastaDaConta(p.Projeto.Conta);
+        p.UltimaSessao = await Task.Run(() => Cia.UltimaSessao(p.Pasta, conta));
+        p.SessaoLida = true;
+    }
+
+    // ------------------------------------------------------------ projetos e árvore
+
+    private static bool Mesma(string? a, string? b) =>
+        string.Equals(a?.Trim().TrimEnd('\\', '/'), b?.Trim().TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Os projetos das bases. Quem já existia fica com o mesmo view model (e o terminal
+    /// dele); a pasta que sumiu com o terminal aberto continua até o terminal ser encerrado.
+    /// </summary>
+    private void CarregarProjetos()
+    {
+        var primeira = _workspace.Bases.FirstOrDefault();
+
+        var novos = Cia.Projetos(_workspace.Bases)
+            .Select(info => Projetos.FirstOrDefault(p => Mesma(p.Pasta, info.Pasta)) ??
+                            new ProjetoViewModel(info, PreferenciasDe(info), Mesma(info.Base, primeira), this))
+            .ToList();
+        novos.AddRange(Abertos.Where(p => !novos.Contains(p)));
+
+        Projetos.Clear();
+        foreach (var p in novos) Projetos.Add(p);
+    }
+
+    private Projeto PreferenciasDe(ProjetoDoCia info)
+    {
+        var p = _workspace.Projetos.FirstOrDefault(x => Mesma(x.Pasta, info.Pasta)) ?? new Projeto { Pasta = info.Pasta };
+
+        // o cia vale para todos: o shell é o das preferências, sem comando próprio nem outra conta
+        p.Nome = info.Nome;
+        p.Shell = _workspace.Shell;
+        p.Comando = "";
+        p.Conta = "";
+        return p;
+    }
+
+    // só entra no workspace quem tem algo a lembrar
+    private void Guardar(ProjetoViewModel p)
+    {
+        if (!_workspace.Projetos.Contains(p.Projeto)) _workspace.Projetos.Add(p.Projeto);
+    }
+
+    /// <summary>Favoritos e recentes do cia. Arquivo ilegível no momento: fica o que já havia.</summary>
+    private void CarregarEstado()
+    {
+        if (Cia.LerEstado(_workspace.EstadoDoCia) is { } lido) _estado = lido;
+
+        _favoritos = _estado.Favoritos.Select(Achar).OfType<ProjetoViewModel>().Distinct().ToList();
+        foreach (var p in Projetos) p.Favorito = _favoritos.Contains(p);
+    }
+
+    /// <summary>Pelo caminho; no formato antigo do estado do cia, pelo nome (vale a primeira base).</summary>
+    private ProjetoViewModel? Achar(string referencia) =>
+        Projetos.FirstOrDefault(p => Mesma(p.Pasta, referencia)) ??
+        Projetos.FirstOrDefault(p => p.Nome.Equals(referencia, StringComparison.OrdinalIgnoreCase));
+
+    // linhas já criadas, por grupo e pasta: a mesma linha volta igual e a lista não perde a seleção
+    private readonly Dictionary<string, LinhaDaArvore> _cache = new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly string[] CoresDasBases = { "#2F7BE8", "#8B5CF6", "#E07B00" };
+
+    /// <summary>
+    /// Monta a árvore como o dashboard do cia: Favoritos, Recentes e uma pasta por base. Os
+    /// abertos não entram: o lugar deles são as abas. Com filtro, só os que batem.
+    /// </summary>
+    private void Remontar()
+    {
+        var novas = new List<LinhaDaArvore>();
+        var agora = DateTime.Now;
+
+        void Grupo(string id, string titulo, string cor, IEnumerable<(ProjetoViewModel P, string Extra)> itens,
+            bool sempreAberto = false)
+        {
+            var lista = itens.ToList();
+            var g = (GrupoDaArvore)(_cache.TryGetValue("g|" + id, out var achado)
+                ? achado
+                : _cache["g|" + id] = new GrupoDaArvore(this, id, titulo, cor));
+            g.Contagem = lista.Count;
+            g.Recolhido = !sempreAberto && EstaRecolhido(id);
+            novas.Add(g);
+            if (g.Recolhido) return;
+
+            foreach (var (p, extra) in lista)
+            {
+                var chave = "p|" + id + "|" + p.Pasta;
+                var l = (LinhaDoProjeto)(_cache.TryGetValue(chave, out var existente)
+                    ? existente
+                    : _cache[chave] = new LinhaDoProjeto(this, p, id));
+                l.Extra = extra;
+                novas.Add(l);
+            }
+        }
+
+        if (Filtro.Trim() is { Length: > 0 } termo)
+        {
+            Grupo(GrupoResultados, "Resultados", "#2F7BE8", Projetos
+                    .Where(p => p.Nome.Contains(termo, StringComparison.CurrentCultureIgnoreCase))
+                    .OrderBy(p => !p.Nome.StartsWith(termo, StringComparison.CurrentCultureIgnoreCase)) // estável: o resto fica na ordem das bases
+                    .Select(p => (p, Path.GetFileName(p.Info.Base))),
+                sempreAberto: true);
+        }
+        else
+        {
+            Grupo(GrupoFavoritos, "Favoritos", "#B08500",
+                _favoritos.Select((p, i) => (p, i < 9 ? (i + 1).ToString() : "")));
+
+            Grupo(GrupoRecentes, "Recentes", "#0E9384", _estado.Recentes
+                .Select(r => (P: Achar(r.Referencia), R: r))
+                .Where(x => x.P is not null)
+                .DistinctBy(x => x.P)
+                .Take(8)
+                .Select(x => (x.P!, string.Join(" ", new[]
+                {
+                    x.R.Quando is { } q ? Cia.Quando(q, agora) : "",
+                    x.R.Pedido.Length > 0 ? "#" + x.R.Pedido : "",
+                }.Where(t => t.Length > 0)))));
+
+            for (var i = 0; i < _workspace.Bases.Count; i++)
+            {
+                var b = _workspace.Bases[i];
+                if (string.IsNullOrWhiteSpace(b)) continue;
+                Grupo(IdDaBase(b), Path.GetFileName(b.Trim().TrimEnd('\\', '/')), CoresDasBases[i % CoresDasBases.Length],
+                    Projetos.Where(p => Mesma(p.Info.Base, b)).Select(p => (p, "")));
+            }
+        }
+
+        // troca só o que mudou: a lista mantém a rolagem e a linha escolhida
+        for (var i = 0; i < novas.Count; i++)
+        {
+            if (i < Linhas.Count && ReferenceEquals(Linhas[i], novas[i])) continue;
+            var j = Linhas.IndexOf(novas[i]);
+            if (j > i) Linhas.Move(j, i);
+            else Linhas.Insert(i, novas[i]);
+        }
+        while (Linhas.Count > novas.Count) Linhas.RemoveAt(Linhas.Count - 1);
+
+        MarcarLinha();
+    }
+
+    private static string IdDaBase(string b) => "base:" + b.Trim().TrimEnd('\\', '/');
+
+    private bool EstaRecolhido(string id) =>
+        (_workspace.Recolhidos ?? RecolhidosPadrao()).Contains(id, StringComparer.OrdinalIgnoreCase);
+
+    // como no cia: Recentes e as bases abrem recolhidos
+    private List<string> RecolhidosPadrao() =>
+        new[] { GrupoRecentes }.Concat(_workspace.Bases.Where(b => !string.IsNullOrWhiteSpace(b)).Select(IdDaBase)).ToList();
+
+    /// <summary>O clique no título do grupo: recolhe ou abre, e lembra.</summary>
+    public void AlternarGrupo(GrupoDaArvore g)
+    {
+        if (g.Id == GrupoResultados) return;
+
+        var lista = _workspace.Recolhidos ??= RecolhidosPadrao();
+        if (lista.RemoveAll(i => i.Equals(g.Id, StringComparison.OrdinalIgnoreCase)) == 0) lista.Add(g.Id);
+        Salvar();
+        Remontar();
+    }
+
+    /// <summary>
+    /// A linha do projeto à vista fica marcada na árvore: a primeira em que ele aparece. Em
+    /// grupo recolhido não há linha, e a árvore fica sem marca.
+    /// </summary>
+    private void MarcarLinha()
+    {
+        if (LinhaSelecionada is LinhaDoProjeto atual && atual.Projeto == Selecionado && Linhas.Contains(atual)) return;
+        LinhaSelecionada = Selecionado is null
+            ? null
+            : Linhas.OfType<LinhaDoProjeto>().FirstOrDefault(l => l.Projeto == Selecionado);
+    }
+
+    /// <summary>O Enter no filtro: vai para o primeiro projeto da lista.</summary>
+    public void EscolherPrimeiro()
+    {
+        if (Linhas.OfType<LinhaDoProjeto>().FirstOrDefault() is { } l) Selecionado = l.Projeto;
+    }
+
+    public void AlternarFavorito(ProjetoViewModel p)
+    {
+        var lista = _favoritos.ToList();
+        if (!lista.Remove(p)) lista.Add(p);
+        GravarFavoritos(lista);
+    }
+
+    /// <summary>Sobe ou desce o favorito uma posição: é a ordem do Ctrl+número e do dashboard do cia.</summary>
+    public void MoverFavorito(ProjetoViewModel p, int passo)
+    {
+        var lista = _favoritos.ToList();
+        var de = lista.IndexOf(p);
+        var para = de + passo;
+        if (de < 0 || para < 0 || para >= lista.Count) return;
+        (lista[de], lista[para]) = (lista[para], lista[de]);
+        GravarFavoritos(lista);
+    }
+
+    private void GravarFavoritos(List<ProjetoViewModel> lista)
+    {
+        // favorito que não é projeto daqui (base que esta máquina não tem) continua no arquivo
+        var soltos = _estado.Favoritos.Where(f => Achar(f) is null);
+        try
+        {
+            Cia.GravarFavoritos(_workspace.EstadoDoCia, lista.Select(p => p.Pasta).Concat(soltos));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            Aviso = "Não foi possível gravar os favoritos: " + ex.Message;
+            return;
+        }
+        CarregarEstado();
+        Remontar();
+    }
+
+    // ------------------------------------------------------------ vigias
+
+    private readonly DispatcherTimer _releitura;
+    private bool _relerProjetos;
+    private readonly List<FileSystemWatcher> _vigias = new();
+
+    /// <summary>
+    /// O cia grava os recentes ao abrir um projeto (aqui ou no Windows Terminal), e pasta
+    /// nova aparece na base: a árvore acompanha sem reabrir o app.
+    /// </summary>
+    private void Vigiar()
+    {
+        void Novo(string pasta, string filtro, NotifyFilters mudancas, bool projetos)
+        {
+            try
+            {
+                var vigia = new FileSystemWatcher(pasta, filtro) { NotifyFilter = mudancas };
+                vigia.Changed += (_, _) => _ui.Post(() => Agendar(projetos));
+                vigia.Created += (_, _) => _ui.Post(() => Agendar(projetos));
+                vigia.Deleted += (_, _) => _ui.Post(() => Agendar(projetos));
+                vigia.Renamed += (_, _) => _ui.Post(() => Agendar(projetos));
+                vigia.EnableRaisingEvents = true;
+                _vigias.Add(vigia);
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException)
+            {
+                // pasta que não existe nesta máquina: nada a vigiar
+            }
+        }
+
+        if (Path.GetDirectoryName(_workspace.EstadoDoCia) is { Length: > 0 } dir)
+            Novo(dir, Path.GetFileName(_workspace.EstadoDoCia),
+                NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size, projetos: false);
+        foreach (var b in _workspace.Bases.Where(b => !string.IsNullOrWhiteSpace(b)))
+            Novo(b.Trim(), "*", NotifyFilters.DirectoryName, projetos: true);
+    }
+
+    // o cia grava o arquivo em mais de um passo: espera o último antes de ler
+    private void Agendar(bool projetos)
+    {
+        _relerProjetos |= projetos;
+        _releitura.Stop();
+        _releitura.Start();
+    }
+
+    internal void Reler()
+    {
+        _releitura.Stop();
+        if (_relerProjetos) CarregarProjetos();
+        _relerProjetos = false;
+        CarregarEstado();
+        Remontar();
+        if (Projetos.Count == 0 || Selecionado is null) AtualizarAviso();
     }
 
     // ------------------------------------------------------------ atenção
@@ -294,63 +696,14 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Titulo));
     }
 
-    /// <summary>
-    /// Junta na sidebar os projetos da mesma conta do Claude, a padrão primeiro, e põe o
-    /// título no primeiro de cada grupo. Dentro do grupo vale a ordem em que foram criados.
-    /// Com todos na conta padrão não há o que separar, e a lista fica sem títulos.
-    /// </summary>
-    private void Agrupar()
+    /// <summary>A cor escolhida no menu da aba: vale na hora e fica gravada.</summary>
+    public void MudarCor(ProjetoViewModel p, string hex)
     {
-        var padrao = ClaudeHooks.PastaDaConta(null);
-        var ordenados = Projetos
-            .OrderBy(p => !MesmaConta(p.Conta, padrao))
-            .ThenBy(p => p.Conta, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(p => _workspace.Projetos.IndexOf(p.Projeto))
-            .ToList();
-
-        var selecionado = Selecionado;
-        for (var i = 0; i < ordenados.Count; i++)
-        {
-            var atual = Projetos.IndexOf(ordenados[i]);
-            if (atual != i) Projetos.Move(atual, i);
-        }
-        if (Selecionado != selecionado) Selecionado = selecionado; // a lista pode soltar a seleção ao mover
-
-        var comTitulos = ordenados.Any(p => !MesmaConta(p.Conta, padrao));
-        string? anterior = null;
-        foreach (var p in ordenados)
-        {
-            var primeiro = comTitulos && !MesmaConta(p.Conta, anterior);
-            var quem = primeiro ? Quem(p.Conta) : null;
-            p.Grupo = quem?.Rotulo(p.Conta);
-            p.Plano = quem?.Plano;
-            p.DicaDoGrupo = quem is null ? null : (quem.Email is null ? "" : quem.Email + "\n") + p.Conta;
-            p.Recolhido = comTitulos && _workspace.ContasRecolhidas.Any(c => MesmaConta(p.Conta, c));
-            p.CorDaConta = CorDa(p.Conta);
-            anterior = p.Conta;
-        }
-    }
-
-    // o .claude.json é grande e recolher um grupo refaz os títulos: lido uma vez por conta
-    private readonly Dictionary<string, Identidade> _identidades = new(StringComparer.OrdinalIgnoreCase);
-
-    private Identidade Quem(string conta)
-    {
-        if (!_identidades.TryGetValue(conta, out var quem))
-            _identidades[conta] = quem = ClaudeHooks.Identificar(conta);
-        return quem;
-    }
-
-    /// <summary>
-    /// A cor da conta. Quem ainda não tem ganha a primeira livre da paleta, na ordem em que
-    /// as contas aparecem (a padrão primeiro), e fica com ela.
-    /// </summary>
-    private string CorDa(string conta)
-    {
-        var chave = _workspace.CoresDasContas.Keys.FirstOrDefault(c => MesmaConta(conta, c));
-        if (chave is not null && GroupPalette.Normalizar(_workspace.CoresDasContas[chave]) is { } cor) return cor;
-
-        return _workspace.CoresDasContas[chave ?? conta] = GroupPalette.ProximaLivre(_workspace.CoresDasContas.Values);
+        if (GroupPalette.Normalizar(hex) is not { } cor) return;
+        p.CorHex = cor;
+        p.Projeto.Cor = cor;
+        Guardar(p);
+        Salvar();
     }
 
     /// <summary>
@@ -364,43 +717,36 @@ public sealed partial class MainViewModel : ObservableObject
         if (Atualizador.VersaoEmUso.Length == 0 || Environment.ProcessPath is not { Length: > 0 } exe)
             return Array.Empty<string>();
 
-        return ClaudeHooks.Corrigir(ClaudeHooks.Contas(_workspace.Projetos.Select(p => p.Conta)), exe);
+        return ClaudeHooks.Corrigir(ClaudeHooks.Contas(Array.Empty<string>()), exe);
     }
 
-    /// <summary>O clique no título do grupo: recolhe ou abre os projetos da conta, e lembra.</summary>
-    public void AlternarGrupo(ProjetoViewModel p)
-    {
-        if (_workspace.ContasRecolhidas.RemoveAll(c => MesmaConta(p.Conta, c)) == 0)
-            _workspace.ContasRecolhidas.Add(p.Conta);
-        Salvar();
-        Agrupar();
-    }
+    // ------------------------------------------------------------ terminais
 
-    private static bool MesmaConta(string a, string? b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Só o terminal e o painel do projeto selecionado ficam à vista.</summary>
+    /// <summary>Só o terminal e o painel do projeto selecionado ficam à vista, e a aba dele na frente.</summary>
     private void Mostrar()
     {
+        foreach (var p in Abertos) p.AVista = p == Selecionado;
         foreach (var s in Sessoes) s.Ativa = s == Selecionado?.Sessao;
         foreach (var s in Paineis) s.Ativa = s == Selecionado?.PainelSessao;
         foreach (var s in Auxiliares) s.Ativa = s == Selecionado?.AuxiliarSessao;
         OnPropertyChanged(nameof(PainelVisivel));
         OnPropertyChanged(nameof(AuxiliarVisivel));
         OnPropertyChanged(nameof(PodeAuxiliar));
+        OnPropertyChanged(nameof(AbaAtiva));
+        OnPropertyChanged(nameof(TemAbaAtiva));
     }
 
-    /// <summary>Abre o terminal do projeto se ainda não houver um.</summary>
-    /// <param name="comando">No lugar do comando de abertura do projeto, só nesta subida do shell.</param>
-    private void Abrir(ProjetoViewModel p, string? comando = null)
+    /// <summary>Abre o Claude no terminal do projeto se ainda não houver um.</summary>
+    /// <param name="modo">-Novo, -Limpo, -Pr ou o número do pedido; null retoma a última sessão.</param>
+    private void Abrir(ProjetoViewModel p, string? modo = null)
     {
         if (p.Sessao is null)
         {
-            // o shell que o usuário reabrir depois (Enter no terminal encerrado) volta ao
-            // comando normal do projeto: o modo pedido aqui vale uma vez
-            var daVez = comando;
+            // o Enter depois de sair do Claude retoma a sessão: o modo pedido aqui vale uma vez
+            var daVez = modo;
             var sessao = new TerminalSessao(() =>
             {
-                var arranque = Arranque.DoProjeto(p.Projeto, daVez);
+                var arranque = ArranqueDoClaude(p, daVez);
                 daVez = null;
                 return arranque;
             });
@@ -417,6 +763,7 @@ public sealed partial class MainViewModel : ObservableObject
 
             p.Sessao = sessao;
             Sessoes.Add(sessao);
+            Abertos.Add(p);
 
             // um terminal que não está à vista não se mede, e o shell dele espera a medida
             // para subir: pega a de quem já foi medido, e passa adiante a sua quando tiver
@@ -435,6 +782,36 @@ public sealed partial class MainViewModel : ObservableObject
 
     // colunas e linhas da área dos terminais dos projetos, da última vez que um foi medido
     private (int Colunas, int Linhas)? _medida;
+
+    /// <summary>
+    /// O Claude como o cia o abriria (<see cref="Cia.Decidir"/>), direto, sem shell, e o
+    /// recente gravado no estado do cia, como ele grava. Roda a cada subida: o Enter depois
+    /// de sair do Claude procura de novo a sessão a retomar.
+    /// </summary>
+    private Arranque ArranqueDoClaude(ProjetoViewModel p, string? modo)
+    {
+        var claude = _workspace.Claude is { Length: > 0 } proprio ? proprio
+            : Cia.Executavel() is { } exe ? "\"" + exe + "\""
+            : throw new FileNotFoundException(
+                @"Claude Code não encontrado: o claude.exe não está no PATH nem em %USERPROFILE%\.local\bin.");
+
+        var abertura = Cia.Decidir(modo, p.EhDaBmsoft,
+            () => Cia.UltimaSessao(p.Pasta, ClaudeHooks.PastaDaConta(p.Projeto.Conta)));
+
+        if (Directory.Exists(p.Pasta))
+        {
+            try
+            {
+                Cia.RegistrarRecente(_workspace.EstadoDoCia, p.Pasta, abertura.Pedido, abertura.Modo, DateTime.Now);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                // o recente é conveniência: o Claude abre do mesmo jeito
+            }
+        }
+
+        return Arranque.DoClaude(p.Projeto, claude, abertura.Argumentos);
+    }
 
     private void AbrirAuxiliar(ProjetoViewModel p)
     {
@@ -499,44 +876,29 @@ public sealed partial class MainViewModel : ObservableObject
         p.Sessao = null;
         sessao.Dispose();
         p.PedeAtencao = false;
+        p.AVista = false;
+        Abertos.Remove(p);
         OnPropertyChanged(nameof(Titulo));
+        OnPropertyChanged(nameof(MostrarParado));
     }
 
     private void AtualizarAviso() => Aviso =
-        Projetos.Count == 0 ? "Nenhum projeto ainda. Use “+” para escolher uma pasta."
-        : Selecionado is null ? "Selecione um projeto."
-        : Selecionado.Sessao is null ? "Terminal parado."
+        Projetos.Count == 0
+            ? (_workspace.Bases.Count == 0
+                ? "Nenhuma pasta de projetos configurada."
+                : "Nenhum projeto nas pastas do cia: " + string.Join(", ", _workspace.Bases) + ".")
+        : Selecionado is null ? "Escolha um projeto na árvore."
         : null;
 
     private void Salvar() => WorkspaceStore.Save(_workspace);
 
     [RelayCommand]
-    private async Task Adicionar()
-    {
-        var pasta = await _dialogos.PickFolderAsync("Pasta do projeto");
-        if (string.IsNullOrWhiteSpace(pasta)) return;
-
-        var nome = Path.GetFileName(pasta.TrimEnd('\\', '/'));
-        var projeto = new Projeto
-        {
-            Nome = nome.Length > 0 ? nome : pasta,
-            Pasta = pasta,
-        };
-
-        _workspace.Projetos.Add(projeto);
-        var vm = new ProjetoViewModel(projeto, this);
-        Projetos.Add(vm);
-        Agrupar();
-        Iniciar(vm); // já salva, com o projeto novo como último
-    }
-
-    [RelayCommand]
     private async Task AbrirPreferencias()
     {
-        var contas = ClaudeHooks.Contas(_workspace.Projetos.Select(p => p.Conta));
+        var contas = ClaudeHooks.Contas(Array.Empty<string>());
         var novas = await _dialogos.PreferenciasAsync(
             new Preferencias(_workspace.Fonte ?? "", _workspace.TamanhoDaFonte, _workspace.PainelComando ?? "",
-                contas.ToDictionary(c => c, CorDa, StringComparer.OrdinalIgnoreCase), _workspace.AvisarAtencao),
+                _workspace.AvisarAtencao),
             contas);
         if (novas is null) return;
 
@@ -544,17 +906,10 @@ public sealed partial class MainViewModel : ObservableObject
         _workspace.TamanhoDaFonte = Math.Clamp(novas.Tamanho, 8, 32);
         _workspace.PainelComando = novas.PainelComando.Trim();
         _workspace.AvisarAtencao = novas.Avisar;
-        foreach (var (conta, cor) in novas.Cores ?? new Dictionary<string, string>())
-        {
-            if (GroupPalette.Normalizar(cor) is not { } valida) continue;
-            var chave = _workspace.CoresDasContas.Keys.FirstOrDefault(c => MesmaConta(conta, c)) ?? conta;
-            _workspace.CoresDasContas[chave] = valida;
-        }
         Salvar();
         OnPropertyChanged(nameof(Fonte));
         OnPropertyChanged(nameof(TamanhoDaFonte));
         OnPropertyChanged(nameof(TemPainel));
-        Agrupar(); // repinta as linhas com a cor nova da conta
     }
 
     /// <summary>Abre ou fecha o painel lateral do projeto selecionado, e lembra a escolha.</summary>
@@ -564,6 +919,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (Selecionado is not { } p) return;
 
         p.Projeto.Painel = p.PainelSessao is null;
+        Guardar(p);
         Salvar();
         if (p.Projeto.Painel) AbrirPainel(p);
         else FecharPainel(p);
@@ -585,136 +941,82 @@ public sealed partial class MainViewModel : ObservableObject
             return;
 
         p.Projeto.Auxiliar = p.AuxiliarSessao is null;
+        Guardar(p);
         Salvar();
         if (p.Projeto.Auxiliar) AbrirAuxiliar(p);
         else FecharAuxiliar(p);
         Mostrar();
     }
 
-    /// <summary>O menu do título do grupo: sobe o terminal de todos os projetos da conta.</summary>
-    public void IniciarGrupo(ProjetoViewModel doGrupo)
-    {
-        var grupo = Projetos.Where(p => MesmaConta(p.Conta, doGrupo.Conta)).ToList();
-        foreach (var p in grupo) Abrir(p);
-
-        // sem nenhum à vista, mostra o primeiro: é a tela dele que dá a medida aos outros
-        if (Selecionado?.Sessao is null) Selecionado = grupo.FirstOrDefault(p => p.Sessao is not null) ?? Selecionado;
-        Mostrar();
-        AtualizarAviso();
-    }
-
-    public async Task EncerrarGrupoAsync(ProjetoViewModel doGrupo)
-    {
-        var abertos = Projetos.Where(p => MesmaConta(p.Conta, doGrupo.Conta) && p.Sessao is not null).ToList();
-        if (abertos.Count == 0) return;
-
-        if (abertos.Any(p => p.Vivo) && !await _dialogos.ConfirmAsync("Encerrar os terminais da conta",
-                $"Encerrar os {abertos.Count} terminais abertos desta conta ({string.Join(", ", abertos.Select(p => p.Nome))})? " +
-                "O que estiver rodando neles será interrompido."))
-            return;
-
-        foreach (var p in abertos) Fechar(p);
-        Mostrar();
-        AtualizarAviso();
-    }
-
-    /// <summary>Sobe ou desce o projeto uma posição dentro da conta dele, e grava a ordem.</summary>
-    public void Mover(ProjetoViewModel p, int passo)
-    {
-        var vizinho = Projetos.ElementAtOrDefault(Projetos.IndexOf(p) + passo);
-        if (vizinho is null || !MesmaConta(vizinho.Conta, p.Conta)) return;
-
-        // a ordem na tela vem da ordem no workspace: é lá que os dois trocam de lugar
-        var a = _workspace.Projetos.IndexOf(p.Projeto);
-        var b = _workspace.Projetos.IndexOf(vizinho.Projeto);
-        (_workspace.Projetos[a], _workspace.Projetos[b]) = (_workspace.Projetos[b], _workspace.Projetos[a]);
-        Salvar();
-        Agrupar();
-    }
-
-    /// <summary>Ctrl+1 a Ctrl+9: o projeto naquela posição da lista, contando só os que estão à vista.</summary>
+    /// <summary>Ctrl+1 a Ctrl+9: o favorito naquela posição, como o [n] do cia.</summary>
     public void SelecionarPorNumero(int numero)
     {
-        if (Projetos.Where(p => p.Visivel).ElementAtOrDefault(numero - 1) is { } p) Selecionado = p;
+        if (_favoritos.ElementAtOrDefault(numero - 1) is { } p) Selecionado = p;
     }
 
-    /// <summary>Ctrl+Shift+P: procura o projeto pelo nome e vai até ele.</summary>
-    public async Task BuscarAsync()
-    {
-        if (Projetos.Count == 0) return;
-        if (await _dialogos.BuscarProjetoAsync(Projetos.Select(p => p.Projeto).ToList()) is not { } achado) return;
-        if (Projetos.FirstOrDefault(p => p.Projeto == achado) is not { } vm) return;
-
-        if (!vm.Visivel) AlternarGrupo(vm); // está numa conta recolhida: abre o grupo para a linha aparecer
-        Selecionado = vm;
-    }
-
-    /// <summary>O botão no lugar do terminal parado: inicia o do projeto selecionado.</summary>
-    [RelayCommand]
-    private void AbrirSelecionado()
-    {
-        if (Selecionado is { } p) Iniciar(p);
-    }
-
-    /// <summary>O botão de iniciar da linha: sobe o terminal do projeto e o traz para a frente.</summary>
-    /// <param name="comando">No lugar do comando de abertura do projeto, só nesta subida do shell.</param>
-    public void Iniciar(ProjetoViewModel p, string? comando = null)
-    {
-        Selecionado = p;
-        Abrir(p, comando);
-        Mostrar();
-    }
-
-    /// <summary>Ctrl+Tab e Ctrl+Shift+Tab: dá a volta na lista.</summary>
+    /// <summary>Ctrl+Tab e Ctrl+Shift+Tab: dá a volta nas abas.</summary>
     public void SelecionarVizinho(int passo)
     {
-        var atual = Selecionado is null ? -1 : Projetos.IndexOf(Selecionado);
+        if (Abertos.Count == 0) return;
 
-        // pula os projetos de grupo recolhido: selecionar uma linha que não se vê confunde
-        for (var i = 1; i <= Projetos.Count; i++)
-        {
-            var p = Projetos[((atual + passo * i) % Projetos.Count + Projetos.Count) % Projetos.Count];
-            if (!p.Visivel) continue;
-            Selecionado = p;
-            return;
-        }
-    }
-
-    public async Task EditarAsync(ProjetoViewModel p)
-    {
-        if (await _dialogos.EditarProjetoAsync(p.Projeto) is not { } novo) return;
-
-        p.Projeto.Nome = novo.Nome;
-        p.Projeto.Pasta = novo.Pasta;
-        p.Projeto.Shell = novo.Shell;
-        p.Projeto.Comando = novo.Comando;
-        p.Projeto.Conta = novo.Conta;
-        Salvar();
-        p.Atualizar();
-        Agrupar(); // a conta pode ter mudado
-    }
-
-    public async Task ReiniciarAsync(ProjetoViewModel p)
-    {
-        if (p.Vivo && !await _dialogos.ConfirmAsync("Reiniciar terminal",
-                $"Reiniciar o terminal de “{p.Nome}”? O que estiver rodando nele será interrompido."))
-            return;
-
-        Reabrir(p, null);
+        var atual = Selecionado is null ? -1 : Abertos.IndexOf(Selecionado);
+        Selecionado = atual < 0
+            ? (passo > 0 ? Abertos[0] : Abertos[^1])
+            : Abertos[((atual + passo) % Abertos.Count + Abertos.Count) % Abertos.Count];
     }
 
     /// <summary>
-    /// Sobe o terminal de novo com o comando de abertura do projeto mais um parâmetro
-    /// (sessão nova, sem skill, PR, pedido). É outro Claude no lugar do que está aberto.
+    /// O ▶ da linha, o Enter e o duplo clique na árvore: abre o Claude num projeto sem
+    /// terminal; no que já tem, só o traz para a frente.
     /// </summary>
-    public async Task AbrirComAsync(ProjetoViewModel p, string parametro)
+    public Task IniciarAsync(ProjetoViewModel p)
+    {
+        if (p.Sessao is null) return AbrirAsync(p);
+        Selecionado = p;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Abre o Claude no projeto, direto no terminal, como o cia abriria. Com um Claude já
+    /// aberto ali, só depois de confirmar: ele é encerrado e outro sobe no lugar.
+    /// </summary>
+    /// <param name="modo">-Novo, -Limpo, -Pr ou o número do pedido; null retoma a última sessão.</param>
+    public async Task AbrirAsync(ProjetoViewModel p, string? modo = null)
     {
         if (p.Vivo && !await _dialogos.ConfirmAsync("Abrir o Claude de outro jeito",
-                $"O terminal de “{p.Nome}” será reiniciado com “{parametro}”. O que estiver rodando nele será interrompido."))
+                $"O Claude de “{p.Nome}” está aberto. Ele sai pelo /exit e é aberto de novo{Descrever(modo)}, " +
+                "e o que estiver rodando nele será interrompido."))
             return;
 
-        Reabrir(p, p.Projeto.Comando.Trim() + " " + parametro);
+        if (!await SairDoClaudeAsync(p)) return;
+        Fechar(p);
+        Iniciar(p, modo);
     }
+
+    /// <summary>O tempo que o Claude tem para sair pelo /exit antes de ser encerrado à força.</summary>
+    internal TimeSpan PrazoDaSaida { get; set; } = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// Antes de fechar o terminal, o Claude sai pelo /exit, como no terminal: termina a
+    /// sessão do jeito dele (os hooks de fim de sessão rodam). Não saindo no prazo, o
+    /// Fechar encerra o processo. Falso quando, enquanto ele saía, outro comando já cuidou
+    /// do terminal: aí não há mais o que fechar.
+    /// </summary>
+    private async Task<bool> SairDoClaudeAsync(ProjetoViewModel p)
+    {
+        if (p.Sessao is not { Encerrada: false } sessao) return true;
+        await sessao.SairAsync("/exit", PrazoDaSaida);
+        return p.Sessao == sessao;
+    }
+
+    private static string Descrever(string? modo) => modo switch
+    {
+        null => ", retomando a última sessão",
+        "-Novo" => " numa sessão nova",
+        "-Limpo" => " sem skill",
+        "-Pr" => " no pull request",
+        _ => " no pedido " + modo,
+    };
 
     public async Task AbrirPedidoAsync(ProjetoViewModel p)
     {
@@ -728,46 +1030,41 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        await AbrirComAsync(p, pedido);
+        await AbrirAsync(p, pedido);
     }
 
-    private void Reabrir(ProjetoViewModel p, string? comando)
+    private void Iniciar(ProjetoViewModel p, string? modo)
     {
-        Fechar(p);
-        Iniciar(p, comando);
+        Selecionado = p;
+        Abrir(p, modo);
+        Mostrar();
+        OnPropertyChanged(nameof(MostrarParado));
     }
 
     public async Task EncerrarAsync(ProjetoViewModel p)
     {
         if (p.Sessao is null) return;
-        if (p.Vivo && !await _dialogos.ConfirmAsync("Encerrar terminal",
-                $"Encerrar o terminal de “{p.Nome}”? O que estiver rodando nele será interrompido."))
+        if (p.Vivo && !await _dialogos.ConfirmAsync("Encerrar o Claude",
+                $"Encerrar o Claude de “{p.Nome}”? Ele sai pelo /exit, e o que estiver rodando nele será interrompido."))
             return;
 
+        if (!await SairDoClaudeAsync(p)) return;
         Fechar(p);
         Mostrar();
-        if (Selecionado == p) AtualizarAviso();
+        if (Selecionado == p)
+        {
+            AtualizarAviso();
+            _ = CarregarSessaoAsync(p);
+        }
     }
 
-    public async Task RemoverAsync(ProjetoViewModel p)
-    {
-        if (!await _dialogos.ConfirmAsync("Remover projeto",
-                $"Remover “{p.Nome}” da lista? O terminal dele será encerrado. A pasta não é apagada."))
-            return;
-
-        Fechar(p);
-        _workspace.Projetos.Remove(p.Projeto);
-        Projetos.Remove(p); // se era o selecionado, a lista zera a seleção e o aviso se ajusta
-        if (Selecionado == p) Selecionado = null;
-        Agrupar(); // o título do grupo pode ter saído junto
-        Salvar();
-        AtualizarAviso();
-    }
-
-    /// <summary>Ao fechar a janela: nenhum shell fica órfão.</summary>
+    /// <summary>Ao fechar a janela: nenhum shell fica órfão, e os vigias de pasta param.</summary>
     public void EncerrarTudo()
     {
-        foreach (var p in Projetos.ToList()) Fechar(p);
+        foreach (var p in Abertos.ToList()) Fechar(p);
+        foreach (var v in _vigias) v.Dispose();
+        _vigias.Clear();
+        _releitura.Stop();
     }
 
     // ------------------------------------------------------------ atualização
@@ -784,7 +1081,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool TemAtualizacao => AtualizacaoTag.Length > 0;
 
-    /// <summary>A linha do pé da sidebar: a versão, o convite para atualizar ou o andamento.</summary>
+    /// <summary>A linha do pé da árvore: a versão, o convite para atualizar ou o andamento.</summary>
     [ObservableProperty] private string _rodape;
 
     private static string RodapePadrao =>
@@ -833,7 +1130,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>O clique no pé da sidebar: atualiza se há versão nova, senão procura uma.</summary>
+    /// <summary>O clique no pé da árvore: atualiza se há versão nova, senão procura uma.</summary>
     [RelayCommand]
     private async Task Atualizacao()
     {
@@ -853,7 +1150,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Rodape = "Procurando atualização…";
             await VerificarAtualizacaoAsync(forcar: true);
-            // o rodapé tem a largura da sidebar: frase inteira ali sai cortada
+            // o rodapé tem a largura da árvore: frase inteira ali sai cortada
             if (!TemAtualizacao) Rodape = RodapePadrao + "  ✓";
         }
         catch (Exception e)

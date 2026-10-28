@@ -34,5 +34,9 @@ internal static class IsolamentoDoWorkspace
         var raiz = Path.Combine(Path.GetTempPath(), "gterm-testes-" + Guid.NewGuid().ToString("n")[..8]);
         Directory.CreateDirectory(raiz);
         WorkspaceStore.PastaPadraoDeTeste = raiz;
+
+        // o mesmo para o cia: sem isto, um workspace novo apontaria para as bases e para o
+        // estado.json reais, e favoritar num teste mexeria nos favoritos do usuário
+        Cia.PastaDeTeste = raiz;
     }
 }

@@ -50,7 +50,6 @@ public sealed class Atividade
 
     /// <summary>O shell já desenhou um prompt: está pronto para receber o comando de abertura.</summary>
     public bool ViuPrompt { get; private set; }
-
     public void Reiniciar()
     {
         Estado = EstadoDoTerminal.Ocioso;

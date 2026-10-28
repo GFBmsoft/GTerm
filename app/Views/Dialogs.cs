@@ -5,7 +5,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
-using GTerm.Models;
 using GTerm.Services;
 using GTerm.ViewModels;
 
@@ -119,128 +118,6 @@ public sealed class PromptWindow : DialogWindow
     }
 }
 
-// -------------------------------------------------------------------- projeto
-
-/// <summary>Dados do projeto. Devolve null quando o usuário cancela.</summary>
-public sealed class ProjetoWindow : DialogWindow
-{
-    public ProjetoWindow(Projeto projeto) : base("Editar projeto", 480)
-    {
-        var nomeBox = new TextBox { Text = projeto.Nome };
-        var pastaBox = new TextBox { Text = projeto.Pasta };
-        var comandoBox = new TextBox { Text = projeto.Comando, Watermark = "Ex.: cia Financeiro -SemMenu -SemPainel" };
-        var contaBox = new TextBox { Text = projeto.Conta, Watermark = @"Em branco = conta normal. Ex.: C:\Users\voce\.claude-bm" };
-        var shellBox = new ComboBox
-        {
-            ItemsSource = Shells.Todos,
-            SelectedItem = Shells.Achar(projeto.Shell),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
-
-        var cancelar = Btn("Cancelar");
-        var salvar = Btn("Salvar", true);
-        cancelar.Click += (_, _) => Close(null);
-        salvar.Click += (_, _) =>
-        {
-            if (string.IsNullOrWhiteSpace(nomeBox.Text) || string.IsNullOrWhiteSpace(pastaBox.Text)) return;
-            Close(new ProjetoEditado(nomeBox.Text!.Trim(), pastaBox.Text!.Trim().Trim('"'),
-                (shellBox.SelectedItem as Shell)?.Id ?? Shells.Padrao,
-                (comandoBox.Text ?? "").Trim(), (contaBox.Text ?? "").Trim().Trim('"')));
-        };
-
-        Compose("Editar projeto",
-            new Control[]
-            {
-                Field("Nome", nomeBox),
-                Field("Pasta", pastaBox),
-                Field("Shell", shellBox),
-                Field("Comando ao abrir", comandoBox),
-                Field("Outra conta do Claude (pasta de configuração)", contaBox),
-                Label("Só para projetos que usam uma conta diferente da sua conta normal. Para a conta normal, deixe em branco."),
-                Label("Pasta, shell, comando e conta passam a valer quando o terminal for reiniciado."),
-            },
-            new[] { cancelar, salvar });
-
-        Opened += (_, _) => nomeBox.Focus();
-    }
-}
-
-// ---------------------------------------------------------------------- busca
-
-/// <summary>
-/// Vai a um projeto pelo nome: digitar filtra, as setas andam na lista e o Enter escolhe.
-/// Devolve null quando o usuário desiste.
-/// </summary>
-public sealed class BuscaWindow : DialogWindow
-{
-    public BuscaWindow(IReadOnlyList<Projeto> projetos) : base("Ir para o projeto", 420)
-    {
-        var caixa = new TextBox { Watermark = "Nome ou pasta do projeto" };
-        var lista = new ListBox
-        {
-            MaxHeight = 300,
-            Margin = new Thickness(0, 8, 0, 0),
-            ItemsSource = projetos,
-            SelectedIndex = 0,
-            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<Projeto>((p, _) => new StackPanel
-            {
-                Margin = new Thickness(2, 3),
-                Children =
-                {
-                    new TextBlock { Text = p?.Nome },
-                    new TextBlock { Text = p?.Pasta, FontSize = 11, Classes = { "faint" }, TextTrimming = TextTrimming.CharacterEllipsis },
-                },
-            }),
-        };
-
-        caixa.TextChanged += (_, _) =>
-        {
-            var termo = (caixa.Text ?? "").Trim();
-            lista.ItemsSource = projetos
-                .Where(p => p.Nome.Contains(termo, StringComparison.CurrentCultureIgnoreCase) ||
-                            p.Pasta.Contains(termo, StringComparison.CurrentCultureIgnoreCase))
-                // o que começa pelo que foi digitado vem na frente
-                .OrderBy(p => !p.Nome.StartsWith(termo, StringComparison.CurrentCultureIgnoreCase))
-                .ToList();
-            lista.SelectedIndex = 0;
-        };
-
-        // o teclado fica na caixa: as setas e o Enter chegam aqui e mexem na lista
-        caixa.AddHandler(KeyDownEvent, (_, e) =>
-        {
-            switch (e.Key)
-            {
-                case Avalonia.Input.Key.Down:
-                    lista.SelectedIndex = Math.Min(lista.SelectedIndex + 1, lista.ItemCount - 1);
-                    break;
-                case Avalonia.Input.Key.Up:
-                    lista.SelectedIndex = Math.Max(lista.SelectedIndex - 1, 0);
-                    break;
-                case Avalonia.Input.Key.Enter:
-                    Close(lista.SelectedItem as Projeto);
-                    break;
-                case Avalonia.Input.Key.Escape:
-                    Close(null);
-                    break;
-                default:
-                    return;
-            }
-            e.Handled = true;
-        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-
-        lista.DoubleTapped += (_, _) =>
-        {
-            if (lista.SelectedItem is Projeto p) Close(p);
-        };
-
-        var cancelar = Btn("Cancelar");
-        cancelar.Click += (_, _) => Close(null);
-
-        Compose("Ir para o projeto", new Control[] { caixa, lista }, new[] { cancelar });
-        Opened += (_, _) => caixa.Focus();
-    }
-}
-
 // --------------------------------------------------------------- preferências
 
 /// <summary>Preferências do aplicativo. Devolve null quando o usuário cancela.</summary>
@@ -267,8 +144,6 @@ public sealed class PreferenciasWindow : DialogWindow
             Width = 130,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        var cores = new Dictionary<string, string>(
-            atuais.Cores ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
         var painelBox = new TextBox
         {
             Text = atuais.PainelComando,
@@ -291,7 +166,6 @@ public sealed class PreferenciasWindow : DialogWindow
             (fonteBox.Text ?? "").Trim(),
             (double)(tamanhoBox.Value ?? (decimal)atuais.Tamanho),
             (painelBox.Text ?? "").Trim(),
-            cores,
             avisarBox.IsChecked == true));
 
         var corpo = new List<Control>
@@ -303,74 +177,24 @@ public sealed class PreferenciasWindow : DialogWindow
             Field("Painel lateral (script de PowerShell)", painelBox),
             Label("Roda na pasta e na conta do projeto, sem carregar o perfil. Em branco, o botão do painel some."),
             avisarBox,
-            Label("O nome do projeto fica em destaque na barra lateral, o título da janela diz quantos esperam e, " +
+            Label("O nome do projeto fica em destaque na árvore, o título da janela diz quantos esperam e, " +
                   "com o GTerm atrás de outra janela, o botão dele pisca na barra de tarefas."),
             new Border { Height = 14 },
             new TextBlock { Text = "CONTAS DO CLAUDE CODE", Classes = { "sectionTitle" }, Margin = new Thickness(0, 0, 0, 6) },
-            Label("A cor ao lado de cada conta pinta o grupo dela na barra lateral e os projetos que a usam. " +
-                  "Clique nela para trocar."),
-            Label("Instala hooks no settings.json da conta para o ponto da sidebar mostrar o estado real " +
-                  "do Claude: rodando, esperando por você ou concluído. Vale para as sessões abertas depois. " +
+            Label("Instala hooks no settings.json da conta para o ponto das abas e da árvore mostrar o estado " +
+                  "real do Claude: rodando, esperando por você ou concluído. Vale para as sessões abertas depois. " +
                   "Uma cópia do arquivo original fica ao lado dele (settings.json.antes-do-gterm)."),
         };
-        corpo.AddRange(contas.Select(c => LinhaDaConta(c, cores)));
+        corpo.AddRange(contas.Select(LinhaDaConta));
 
         Compose("Preferências", corpo, new[] { notas, cancelar, salvar });
     }
 
     /// <summary>
-    /// Uma conta: a cor dela, onde fica, se os avisos estão instalados e o botão que troca
-    /// isso na hora. A cor só vale ao salvar as preferências.
+    /// Uma conta: onde fica, se os avisos estão instalados e o botão que troca isso na hora.
     /// </summary>
-    private static Control LinhaDaConta(string conta, Dictionary<string, string> cores)
+    private static Control LinhaDaConta(string conta)
     {
-        var cor = new Button
-        {
-            Width = 20,
-            Height = 20,
-            CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(0),
-            BorderThickness = new Thickness(0),
-            Margin = new Thickness(0, 0, 10, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        ToolTip.SetTip(cor, "Cor da conta na barra lateral");
-
-        var paleta = new WrapPanel { MaxWidth = 170 };
-        var flyout = new Flyout { Content = paleta };
-        cor.Flyout = flyout;
-
-        void Pintar()
-        {
-            var atual = GroupPalette.Normalizar(cores.GetValueOrDefault(conta)) ?? GroupPalette.Padrao;
-            cor.Background = new SolidColorBrush(Color.Parse(atual));
-            foreach (var b in paleta.Children.OfType<Button>())
-                b.BorderThickness = new Thickness(b.Tag as string == atual ? 3 : 0);
-        }
-
-        foreach (var c in GroupPalette.Cores)
-        {
-            var b = new Button
-            {
-                Width = 28,
-                Height = 28,
-                Margin = new Thickness(3),
-                CornerRadius = new CornerRadius(14),
-                Background = new SolidColorBrush(Color.Parse(c)),
-                BorderBrush = Brushes.White,
-                Padding = new Thickness(0),
-                Tag = c,
-            };
-            b.Click += (_, _) =>
-            {
-                cores[conta] = c;
-                Pintar();
-                flyout.Hide();
-            };
-            paleta.Children.Add(b);
-        }
-        Pintar();
-
         var situacao = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0) };
         var botao = new Button { MinWidth = 84 };
         var exe = Environment.ProcessPath ?? "GTerm.exe";
@@ -406,7 +230,7 @@ public sealed class PreferenciasWindow : DialogWindow
         var identificacao = string.Join("  ·  ",
             new[] { quem.Nome, quem.Email, quem.Plano }.Where(t => t is not null));
 
-        var linha = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), Margin = new Thickness(0, 0, 0, 8) };
+        var linha = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(0, 0, 0, 8) };
         var caminho = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 1 };
         if (identificacao.Length > 0)
             caminho.Children.Add(new TextBlock { Text = identificacao, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis });
@@ -417,10 +241,8 @@ public sealed class PreferenciasWindow : DialogWindow
             FontSize = 11,
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
-        Grid.SetColumn(caminho, 1);
-        Grid.SetColumn(situacao, 2);
-        Grid.SetColumn(botao, 3);
-        linha.Children.Add(cor);
+        Grid.SetColumn(situacao, 1);
+        Grid.SetColumn(botao, 2);
         linha.Children.Add(caminho);
         linha.Children.Add(situacao);
         linha.Children.Add(botao);

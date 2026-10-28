@@ -1,14 +1,20 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:term="using:AvaloniaTerminal"
+        xmlns:vm="using:GTerm.ViewModels"
         x:Class="GTerm.Views.MainWindow"
         Title="{Binding Titulo}" Width="1200" Height="720" MinWidth="640" MinHeight="360"
         Icon="/Assets/app.ico" Background="{DynamicResource BgPanel}"
         WindowStartupLocation="CenterScreen">
 
   <Window.Styles>
-    <!-- sidebar no padrão do GRepos: linha discreta de cantos suaves, que só ganha fundo
-         ao passar o mouse e quando é a selecionada. A linha da lista em si fica sem fundo -->
+    <!-- árvore no padrão do GTest: linha discreta de cantos suaves, que só ganha fundo ao
+         passar o mouse e quando é a selecionada. A linha da lista em si fica sem fundo -->
+    <Style Selector="ListBox#Lista ListBoxItem">
+      <!-- título de grupo não é escolhido nem recebe o foco: o clique abre e fecha, e as
+           setas do teclado passam direto -->
+      <Setter Property="Focusable" Value="{Binding Selecionavel}" />
+    </Style>
     <Style Selector="ListBox#Lista ListBoxItem:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="Transparent" />
     </Style>
@@ -27,10 +33,31 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="CornerRadius" Value="5" />
-      <Setter Property="Padding" Value="9,3,6,3" />
-      <Setter Property="Margin" Value="8,8,8,2" />
+      <Setter Property="Padding" Value="6,0,8,0" />
+      <Setter Property="Margin" Value="6,4,6,0" />
+      <Setter Property="Height" Value="26" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- abas dos abertos: a da frente ganha fundo e contorno na cor do projeto (no Border de
+         dentro); as outras ficam só com o ponto da cor e o nome apagado -->
+    <Style Selector="Button.aba">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Margin" Value="0,0,4,0" />
+    </Style>
+    <Style Selector="Button.aba:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource BgHover}" />
+    </Style>
+    <Style Selector="TextBlock.aba">
+      <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    </Style>
+    <Style Selector="TextBlock.aba.frente">
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
     <!-- terminou ou espera por você sem estar à vista: o nome se destaca até ser visto -->
@@ -41,7 +68,7 @@
 
     <Style Selector="Border.linha">
       <Setter Property="Height" Value="26" />
-      <Setter Property="Margin" Value="8,0" />
+      <Setter Property="Margin" Value="6,0" />
       <Setter Property="CornerRadius" Value="5" />
       <Setter Property="Background" Value="Transparent" />
     </Style>
@@ -51,141 +78,222 @@
     <Style Selector="ListBoxItem:selected Border.linha">
       <Setter Property="Background" Value="{DynamicResource BgActive}" />
     </Style>
+
+    <!-- o ▶ de cada projeto parado só aparece na linha do mouse e na escolhida: com dezenas
+         de projetos, um em cada linha vira ruído -->
+    <Style Selector="Button.iniciar">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover Button.iniciar">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ListBoxItem:selected Button.iniciar">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <Style Selector="TextBlock.glifo">
+      <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
+    </Style>
   </Window.Styles>
 
-  <Grid ColumnDefinitions="200,*">
+  <Grid ColumnDefinitions="240,*">
 
-    <!-- sidebar: um projeto por linha, sem botão de fechar. Encerrar e remover só pelo
-         menu de contexto, e sempre com confirmação -->
+    <!-- árvore dos projetos do cia, sem botão de fechar. Encerrar só pelo menu de contexto,
+         e sempre com confirmação -->
     <Border Grid.Column="0">
       <Grid RowDefinitions="Auto,*,Auto">
 
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="12,6,4,6">
-          <TextBlock Grid.Column="0" Text="PROJETOS" Classes="sectionTitle" />
-          <Button Grid.Column="1" Classes="tiny simbolo" Content="&#xE713;"
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="10,8,4,4">
+          <TextBox Grid.Column="0" x:Name="CaixaDoFiltro" Text="{Binding Filtro}" Watermark="Projetos"
+                   ToolTip.Tip="Filtra os projetos pelo nome (Ctrl+Shift+P). Enter vai ao primeiro, Esc limpa" />
+          <Button Grid.Column="1" Classes="tiny simbolo" Content="&#xE713;" Margin="4,0,0,0"
                   Command="{Binding AbrirPreferenciasCommand}"
-                  ToolTip.Tip="Preferências: fonte e tamanho do terminal" />
-          <Button Grid.Column="2" Classes="tiny simbolo" Content="&#xE710;"
-                  Command="{Binding AdicionarCommand}"
-                  ToolTip.Tip="Novo projeto: escolhe uma pasta e abre um terminal nela" />
+                  ToolTip.Tip="Preferências: fonte e tamanho do terminal, contas do Claude" />
         </Grid>
 
-        <ListBox Grid.Row="1" x:Name="Lista" ItemsSource="{Binding Projetos}"
-                 SelectedItem="{Binding Selecionado}">
-          <ListBox.ItemTemplate>
-            <DataTemplate>
-              <StackPanel>
-              <!-- título do grupo, no primeiro projeto de cada conta do Claude: quem está
-                   logado nela e o plano. O clique recolhe ou abre os projetos da conta -->
-              <Button Classes="grupo" Command="{Binding AlternarGrupoCommand}" IsVisible="{Binding TemGrupo}"
-                      ToolTip.Tip="{Binding DicaDoGrupo}">
-                <Button.ContextMenu>
-                  <ContextMenu>
-                    <MenuItem Header="Iniciar todos os projetos da conta" Command="{Binding IniciarGrupoCommand}" />
-                    <MenuItem Header="Encerrar todos os terminais da conta" Command="{Binding EncerrarGrupoCommand}" />
-                  </ContextMenu>
-                </Button.ContextMenu>
-                <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-                  <TextBlock Grid.Column="0" Text="{Binding Chevron}" FontSize="8" Classes="faint"
-                             FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets"
-                             VerticalAlignment="Center" Margin="0,1,6,0" />
-                  <!-- a cor da conta: ponto cheio e nome no título, anel em cada projeto dela -->
-                  <Ellipse Grid.Column="1" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
+        <ListBox Grid.Row="1" x:Name="Lista" ItemsSource="{Binding Linhas}"
+                 SelectedItem="{Binding LinhaSelecionada}">
+          <ListBox.DataTemplates>
+            <!-- grupo minimalista, como no GTest: seta, ponto cheio e o nome na cor dele -->
+            <DataTemplate DataType="vm:GrupoDaArvore">
+              <Button Classes="grupo" Command="{Binding AlternarCommand}">
+                <Grid ColumnDefinitions="12,Auto,*,Auto">
+                  <TextBlock Grid.Column="0" Text="{Binding Seta}" Classes="glifo faint" FontSize="8"
+                             VerticalAlignment="Center" />
+                  <Ellipse Grid.Column="1" Width="8" Height="8" Margin="2,0,0,0" VerticalAlignment="Center"
                            Fill="{Binding Cor}" />
-                  <TextBlock Grid.Column="2" Text="{Binding Grupo}" FontSize="11" FontWeight="SemiBold"
-                             Foreground="{Binding Cor}"
-                             TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <!-- o plano em evidência: a cor da conta, esmaecida no fundo -->
-                  <Panel Grid.Column="3" Height="15" Margin="6,0,0,0" VerticalAlignment="Center"
-                         IsVisible="{Binding TemPlano}">
-                    <Border CornerRadius="8" Background="{Binding Fundo}" />
-                    <Border Classes="chip" BorderBrush="{Binding Cor}">
-                      <TextBlock Text="{Binding Plano}" FontSize="9" FontWeight="SemiBold"
-                                 Foreground="{Binding Cor}" VerticalAlignment="Center" />
-                    </Border>
-                  </Panel>
+                  <TextBlock Grid.Column="2" Text="{Binding Titulo}" FontSize="12" FontWeight="SemiBold" Margin="8,0"
+                             Foreground="{Binding Cor}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="3" Text="{Binding Contagem}" FontSize="11" Classes="faint"
+                             VerticalAlignment="Center" />
                 </Grid>
               </Button>
-              <Border Classes="linha" ToolTip.Tip="{Binding Pasta}" IsVisible="{Binding Visivel}">
+            </DataTemplate>
+
+            <DataTemplate DataType="vm:LinhaDoProjeto">
+              <Border Classes="linha" ToolTip.Tip="{Binding Projeto.Pasta}">
                 <Border.ContextMenu>
                   <ContextMenu>
-                    <MenuItem Header="Editar…" Command="{Binding EditarCommand}" />
-                    <MenuItem Header="Mover para cima" Command="{Binding SubirCommand}" />
-                    <MenuItem Header="Mover para baixo" Command="{Binding DescerCommand}" />
-                    <MenuItem Header="Reiniciar terminal" Command="{Binding ReiniciarCommand}" />
-                    <MenuItem Header="Encerrar terminal" Command="{Binding EncerrarCommand}" />
-                    <!-- os modos do cia/cim: só fazem sentido se o comando de abertura for um deles -->
-                    <Separator IsVisible="{Binding TemClaude}" />
-                    <MenuItem Header="Claude: sessão nova" Command="{Binding SessaoNovaCommand}"
-                              IsVisible="{Binding TemClaude}" />
-                    <MenuItem Header="Claude: sem skill" Command="{Binding SemSkillCommand}"
-                              IsVisible="{Binding TemClaude}" />
-                    <MenuItem Header="Claude: pedido do Mantis…" Command="{Binding PedidoCommand}"
-                              IsVisible="{Binding EhCia}" />
-                    <MenuItem Header="Claude: pull request" Command="{Binding PullRequestCommand}"
-                              IsVisible="{Binding EhCia}" />
+                    <MenuItem Header="Abrir o Claude" Command="{Binding Projeto.AbrirClaudeCommand}" />
+                    <MenuItem Header="Sessão nova" Command="{Binding Projeto.SessaoNovaCommand}" />
+                    <MenuItem Header="Pedido do Mantis…" Command="{Binding Projeto.PedidoCommand}"
+                              IsVisible="{Binding Projeto.EhDaBmsoft}" />
+                    <MenuItem Header="Pull request" Command="{Binding Projeto.PullRequestCommand}"
+                              IsVisible="{Binding Projeto.EhDaBmsoft}" />
+                    <MenuItem Header="Sem skill" Command="{Binding Projeto.SemSkillCommand}" />
                     <Separator />
-                    <MenuItem Header="Remover projeto" Command="{Binding RemoverCommand}" />
+                    <MenuItem Header="{Binding Projeto.RotuloDoFavorito}" Command="{Binding Projeto.FavoritarCommand}" />
+                    <MenuItem Header="Mover para cima" Command="{Binding SubirCommand}" IsVisible="{Binding NosFavoritos}" />
+                    <MenuItem Header="Mover para baixo" Command="{Binding DescerCommand}" IsVisible="{Binding NosFavoritos}" />
+                    <Separator IsVisible="{Binding Projeto.TemTerminal}" />
+                    <MenuItem Header="Encerrar o Claude" Command="{Binding Projeto.EncerrarCommand}"
+                              IsVisible="{Binding Projeto.TemTerminal}" />
                   </ContextMenu>
                 </Border.ContextMenu>
 
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                  <!-- a cor da conta do projeto: a mesma da pílula com o nome dele acima do terminal -->
-                  <Ellipse Grid.Column="0" Width="8" Height="8" Margin="9,0,9,0" VerticalAlignment="Center"
-                           StrokeThickness="1.5" Stroke="{Binding Cor}" />
-                  <TextBlock Grid.Column="1" Text="{Binding Nome}" VerticalAlignment="Center" Margin="0,0,6,0"
-                             Classes.atencao="{Binding PedeAtencao}" TextTrimming="CharacterEllipsis" />
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="16,0,0,0">
+                  <!-- o tipo do projeto, como no cia: os glifos são da Nerd Font do terminal -->
+                  <TextBlock Grid.Column="0" Text="{Binding Projeto.Icone}" Foreground="{Binding Projeto.CorDoIcone}"
+                             FontFamily="CaskaydiaCove NFM,CaskaydiaMono Nerd Font,JetBrainsMono NFM,Symbols Nerd Font Mono"
+                             FontSize="13" Width="16" Margin="0,0,7,0" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding Projeto.Nome}" VerticalAlignment="Center" Margin="0,0,6,0"
+                             Classes.atencao="{Binding Projeto.PedeAtencao}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Text="{Binding Extra}" IsVisible="{Binding TemExtra}" Classes="faint"
+                             FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0" />
 
-                  <!-- some sem shell aberto; apagado no prompt; amarelo rodando (piscando se
-                       espera por você); verde ao terminar bem; vermelho ao terminar com erro -->
-                  <!-- terminal parado: nada roda no projeto até o clique aqui -->
-                  <Button Grid.Column="2" Classes="tiny simbolo" Content="&#xE768;" Margin="0,0,2,0"
-                          Command="{Binding IniciarCommand}" IsVisible="{Binding Parado}"
-                          ToolTip.Tip="Iniciar o terminal deste projeto" />
+                  <!-- sem terminal: nada roda no projeto até o clique aqui (ou Enter, ou duplo clique) -->
+                  <Button Grid.Column="3" Classes="tiny simbolo iniciar" Content="&#xE768;" Margin="0,0,2,0"
+                          Command="{Binding Projeto.IniciarCommand}" IsVisible="{Binding Projeto.Parado}"
+                          ToolTip.Tip="Abrir o Claude neste projeto" />
 
-                  <Ellipse Grid.Column="3" Classes="estado" IsVisible="{Binding Vivo}"
-                           Classes.rodando="{Binding Rodando}" Classes.aguardando="{Binding Aguardando}"
-                           Classes.concluido="{Binding Concluido}" Classes.erro="{Binding Erro}" />
+                  <!-- apagado no prompt; amarelo rodando (piscando se espera por você); verde
+                       ao terminar bem; vermelho ao terminar com erro -->
+                  <Ellipse Grid.Column="4" Classes="estado" IsVisible="{Binding Projeto.Vivo}"
+                           Classes.rodando="{Binding Projeto.Rodando}" Classes.aguardando="{Binding Projeto.Aguardando}"
+                           Classes.concluido="{Binding Projeto.Concluido}" Classes.erro="{Binding Projeto.Erro}" />
                 </Grid>
               </Border>
-              </StackPanel>
             </DataTemplate>
-          </ListBox.ItemTemplate>
+          </ListBox.DataTemplates>
         </ListBox>
 
         <!-- a versão em uso; vira o convite quando há uma mais nova. Clicar procura ou instala -->
         <Button Grid.Row="2" Classes="tiny rodape" Classes.destaque="{Binding TemAtualizacao}"
                 Content="{Binding Rodape}" Command="{Binding AtualizacaoCommand}"
-                HorizontalAlignment="Left" Margin="6,2,6,7" MaxWidth="188"
+                HorizontalAlignment="Left" Margin="6,2,6,7" MaxWidth="228"
                 ToolTip.Tip="Procurar atualização" />
       </Grid>
     </Border>
 
-    <Grid Grid.Column="1" RowDefinitions="Auto,*">
+    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
 
-      <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,7,10,6"
-            IsVisible="{Binding Selecionado, Converter={x:Static ObjectConverters.IsNotNull}}">
-        <!-- a cor da conta de novo: a pílula com o nome diz em qual terminal se está digitando -->
-        <Border Grid.Column="0" CornerRadius="11" Height="22" Padding="11,0" BorderThickness="1"
-                Background="{Binding Selecionado.Fundo}" BorderBrush="{Binding Selecionado.Cor}">
-          <TextBlock Text="{Binding Selecionado.Nome}" FontWeight="SemiBold" FontSize="12"
-                     VerticalAlignment="Center" />
-        </Border>
-        <TextBlock Grid.Column="1" Text="{Binding Selecionado.Pasta}" FontSize="11" Classes="faint"
-                   VerticalAlignment="Center" Margin="10,0,0,0" />
-        <TextBlock Grid.Column="2" Text="{Binding Selecionado.NomeDoShell}" FontSize="11" Classes="faint"
-                   VerticalAlignment="Center" Margin="0,0,6,0" />
-        <Button Grid.Column="3" Classes="tiny simbolo" Content="&#xE90C;"
+      <!-- uma aba por projeto com o Claude aberto, na ordem em que foram abertos (Ctrl+Tab
+           passa por elas). Sem botão de fechar: encerrar só pela barra embaixo, e com
+           confirmação -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,6,10,6" MinHeight="24">
+        <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+          <ItemsControl x:Name="Abas" ItemsSource="{Binding Abertos}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button Classes="aba" Command="{Binding MostrarCommand}" ToolTip.Tip="{Binding Pasta}">
+                  <Border CornerRadius="12" Height="24" Padding="10,0" BorderThickness="1"
+                          Background="{Binding FundoDaAba}" BorderBrush="{Binding BordaDaAba}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Nome}" FontSize="12" VerticalAlignment="Center" Classes="aba"
+                                 Classes.frente="{Binding AVista}" Classes.atencao="{Binding PedeAtencao}" />
+                      <!-- o estado do Claude, como na árvore -->
+                      <Ellipse Classes="estado" Margin="1,0,0,0" IsVisible="{Binding Vivo}"
+                               Classes.rodando="{Binding Rodando}" Classes.aguardando="{Binding Aguardando}"
+                               Classes.concluido="{Binding Concluido}" Classes.erro="{Binding Erro}" />
+                    </StackPanel>
+                  </Border>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+        <Button Grid.Column="1" Classes="tiny simbolo" Content="&#xE90C;"
                 Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
                 ToolTip.Tip="Abre ou fecha o painel lateral deste projeto" />
-        <Button Grid.Column="4" Classes="tiny simbolo" Content="&#xE756;"
+        <Button Grid.Column="2" Classes="tiny simbolo" Content="&#xE756;"
                 Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
                 ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude" />
       </Grid>
 
+      <!-- os botões da aba da frente, no tom dela: trocar de aba troca os botões. Quem
+           encerra o Claude manda o /exit antes, e tudo que o encerra confirma -->
+      <Border Grid.Row="1" x:Name="BarraDaAba" IsVisible="{Binding TemAbaAtiva}" Margin="0,0,8,6">
+        <Border DataContext="{Binding AbaAtiva}" CornerRadius="8" Padding="4,3" BorderThickness="1"
+                Background="{Binding FundoDaBarra}" BorderBrush="{Binding BordaDaBarra}">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <Button Classes="tiny" Content="Retomar" Command="{Binding AbrirClaudeCommand}"
+                      ToolTip.Tip="Abre de novo retomando a última sessão, com /compact se ela estiver grande, como o cia" />
+              <Button Classes="tiny" Content="Sessão nova" Command="{Binding SessaoNovaCommand}"
+                      ToolTip.Tip="Começa do zero, sem retomar a última sessão" />
+              <Button Classes="tiny" Content="Pedido…" Command="{Binding PedidoCommand}"
+                      IsVisible="{Binding EhDaBmsoft}" ToolTip.Tip="Sessão nova no /pedido com o número do Mantis" />
+              <Button Classes="tiny" Content="Pull request" Command="{Binding PullRequestCommand}"
+                      IsVisible="{Binding EhDaBmsoft}" ToolTip.Tip="Sessão nova na /delphi-pr" />
+              <Button Classes="tiny" Content="Sem skill" Command="{Binding SemSkillCommand}"
+                      ToolTip.Tip="O Claude limpo, sem skill nenhuma" />
+              <Rectangle Width="1" Height="12" Margin="4,0" Fill="{DynamicResource Border}" VerticalAlignment="Center" />
+
+              <!-- a paleta dos grupos do GRepos, a mesma do GTest -->
+              <Button Classes="tiny" x:Name="CorDaAba" ToolTip.Tip="A cor da aba deste projeto">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
+                  <TextBlock Text="Cor" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button.Flyout>
+                  <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                    <MenuItem Header="Azul" Command="{Binding EscolherCorCommand}" CommandParameter="#2F7BE8">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#2F7BE8" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Verde" Command="{Binding EscolherCorCommand}" CommandParameter="#1F9D55">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#1F9D55" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Laranja" Command="{Binding EscolherCorCommand}" CommandParameter="#E07B00">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#E07B00" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Vermelho" Command="{Binding EscolherCorCommand}" CommandParameter="#D93F3F">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#D93F3F" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Roxo" Command="{Binding EscolherCorCommand}" CommandParameter="#8B5CF6">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#8B5CF6" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Turquesa" Command="{Binding EscolherCorCommand}" CommandParameter="#0E9384">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#0E9384" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Mostarda" Command="{Binding EscolherCorCommand}" CommandParameter="#B08500">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#B08500" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Rosa" Command="{Binding EscolherCorCommand}" CommandParameter="#DB4C9B">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#DB4C9B" /></MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Cinza" Command="{Binding EscolherCorCommand}" CommandParameter="#6B7280">
+                      <MenuItem.Icon><Ellipse Width="10" Height="10" Fill="#6B7280" /></MenuItem.Icon>
+                    </MenuItem>
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+            </StackPanel>
+
+            <Button Grid.Column="1" Classes="tiny danger" Content="Encerrar o Claude" Command="{Binding EncerrarCommand}"
+                    ToolTip.Tip="Manda o /exit ao Claude e fecha a aba; o que estiver rodando é interrompido" />
+          </Grid>
+        </Border>
+      </Border>
+
       <!-- o terminal encaixado num cartão: a janela em volta é a moldura, no tom da
-           sidebar. O recorte arredonda também o conteúdo do terminal -->
-      <Border Grid.Row="1" Margin="0,0,8,8" CornerRadius="10" ClipToBounds="True"
+           árvore. O recorte arredonda também o conteúdo do terminal -->
+      <Border Grid.Row="2" Margin="0,0,8,8" CornerRadius="10" ClipToBounds="True"
               Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
       <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
 
@@ -251,13 +359,42 @@
           </ItemsControl>
         </Border>
 
+        <!-- sem terminal à vista: o aviso (nenhum projeto, nenhum escolhido, erro ao abrir)
+             e, no projeto parado, os jeitos de abrir o Claude pelo cia -->
         <StackPanel Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
-                    IsVisible="{Binding Aviso, Converter={x:Static ObjectConverters.IsNotNull}}">
-          <TextBlock Text="{Binding Aviso}" Classes="dim" TextWrapping="Wrap" MaxWidth="460"
-                     TextAlignment="Center" />
-          <Button Content="Iniciar terminal" HorizontalAlignment="Center"
-                  Command="{Binding AbrirSelecionadoCommand}"
-                  IsVisible="{Binding Selecionado, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    MaxWidth="520" Margin="16,0">
+          <TextBlock Text="{Binding Aviso}" Classes="dim" TextWrapping="Wrap" TextAlignment="Center"
+                     IsVisible="{Binding Aviso, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+          <StackPanel Spacing="10" IsVisible="{Binding MostrarParado}">
+            <!-- sem aba ainda: o nome e a pasta ficam aqui -->
+            <StackPanel Spacing="2" Margin="0,0,0,6">
+              <TextBlock Text="{Binding Selecionado.Nome}" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding Selecionado.Pasta}" Classes="faint" FontSize="11" HorizontalAlignment="Center"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Button Classes="primary" HorizontalAlignment="Center" Padding="16,6"
+                    Command="{Binding Selecionado.IniciarCommand}"
+                    ToolTip.Tip="Retoma a última sessão do projeto, com /compact se ela estiver grande, como o cia">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="glifo" Text="&#xE768;" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Selecionado.RotuloDeAbrir}" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <TextBlock Text="{Binding Selecionado.TextoDaSessao}" Classes="faint" FontSize="11.5"
+                       TextAlignment="Center" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+              <Button Classes="tiny" Content="Sessão nova" Command="{Binding Selecionado.SessaoNovaCommand}"
+                      ToolTip.Tip="Começa do zero, sem retomar a última sessão" />
+              <Button Classes="tiny" Content="Pedido…" Command="{Binding Selecionado.PedidoCommand}"
+                      IsVisible="{Binding Selecionado.EhDaBmsoft}"
+                      ToolTip.Tip="Sessão nova no /pedido com o número do Mantis" />
+              <Button Classes="tiny" Content="Pull request" Command="{Binding Selecionado.PullRequestCommand}"
+                      IsVisible="{Binding Selecionado.EhDaBmsoft}" ToolTip.Tip="Sessão nova na /delphi-pr" />
+              <Button Classes="tiny" Content="Sem skill" Command="{Binding Selecionado.SemSkillCommand}"
+                      ToolTip.Tip="O Claude limpo, sem skill nenhuma" />
+            </StackPanel>
+          </StackPanel>
         </StackPanel>
       </Grid>
       </Border>

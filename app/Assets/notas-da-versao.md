@@ -1,3 +1,13 @@
+## 1.0.0.8 — 28/10/2026
+- **O GTerm virou o cia com tela**: a barra lateral é a lista do dashboard do cia, com Favoritos, Recentes e uma pasta por base (DBISAM e Private). Os projetos são as pastas das bases, sem cadastro. Favoritar aqui aparece no cia e vice-versa, e o que o cia abre no Windows Terminal entra nos Recentes sem reabrir o GTerm.
+- O Claude abre direto no terminal do projeto, como o cia faria: retoma a última sessão com conversa (com /compact quando ela passa de 300 KB) ou, sem sessão, abre na /delphi-writer (DBISAM) ou no /retomar (Private). O projeto parado mostra o que vai acontecer, e os botões Sessão nova, Pedido…, Pull request e Sem skill.
+- Os projetos abertos viram **abas** em cima do terminal, cada uma na cor do projeto, a mesma do GTest. **Ctrl+Tab** passa por elas, e **Ctrl+1** a **Ctrl+9** vão aos favoritos, como os números do cia.
+- Embaixo das abas, uma barra com os botões do projeto da frente: Retomar, Sessão nova, Pedido…, Pull request, Sem skill, Cor e Encerrar o Claude. Trocar de aba troca os botões.
+- Encerrar o Claude, ou abrir de novo de outro jeito, manda o **/exit** antes, como você faria no terminal. Se ele não sair em alguns segundos, é encerrado à força. A confirmação continua.
+- Depois de sair do Claude, Enter no terminal abre de novo retomando a sessão.
+- O cursor é sempre a barra, também dentro do Claude, que antes desenhava um bloco.
+- Por enquanto todos os projetos abrem na conta padrão do Claude: os grupos e as cores por conta saíram, e o projeto da outra conta (cim) fica para uma próxima versão.
+
 ## 1.0.0.7 — 07/10/2026
 - **Aviso de atenção**: quando um projeto que não está à vista termina ou para para perguntar algo, o nome dele fica em destaque na barra lateral, o título da janela diz quem espera por você e, com o GTerm atrás de outra janela, o botão dele pisca na barra de tarefas. Dá para desligar em Preferências.
 - **Segundo terminal**: o botão novo no canto superior direito abre um shell simples embaixo do terminal do projeto, na mesma pasta, para rodar um build ou um git sem interromper o Claude. Ele é encerrado junto com o terminal do projeto.

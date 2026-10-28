@@ -4,20 +4,25 @@ using GTerm.Services;
 
 namespace GTerm.Models;
 
-/// <summary>Um terminal fixo: pasta, cor e shell. É o que substitui a aba.</summary>
+/// <summary>
+/// O que um projeto lembra entre uma abertura e outra, e de onde sai o arranque do shell
+/// dele. Os projetos em si vêm das pastas das bases do cia.
+/// </summary>
 public sealed class Projeto
 {
-    public string Id { get; set; } = Guid.NewGuid().ToString("n");
     public string Nome { get; set; } = "";
     public string Pasta { get; set; } = "";
 
-    /// <summary>Do tempo em que a cor era por projeto. Hoje a cor é a da conta; fica só para não se perder.</summary>
-    public string Cor { get; set; } = GroupPalette.Padrao;
+    /// <summary>A cor da aba, escolhida no menu dela; vazia, uma da paleta tirada do nome.</summary>
+    public string Cor { get; set; } = "";
 
     /// <summary>Um dos ids de <see cref="Shells.Todos"/>.</summary>
     public string Shell { get; set; } = Shells.Padrao;
 
-    /// <summary>Digitado no shell assim que ele abre (ex.: <c>cia Financeiro -SemMenu -SemPainel</c>).</summary>
+    /// <summary>
+    /// Digitado no shell assim que ele abre. Vazio nos projetos do cia: o terminal deles é o
+    /// Claude direto, e o segundo terminal é um shell limpo.
+    /// </summary>
     public string Comando { get; set; } = "";
 
     /// <summary>
@@ -35,10 +40,29 @@ public sealed class Projeto
 
 public sealed class Workspace
 {
+    /// <summary>Só os projetos que têm algo a lembrar (painel, segundo terminal).</summary>
     public List<Projeto> Projetos { get; set; } = new();
 
-    /// <summary>Projeto que estava aberto ao fechar; é o que volta selecionado.</summary>
-    public string? UltimoId { get; set; }
+    /// <summary>A pasta do projeto que estava à vista ao fechar: é o que volta selecionado.</summary>
+    public string? UltimaPasta { get; set; }
+
+    /// <summary>Pastas cujas subpastas são os projetos: as mesmas do cia ($global:CiaBases).</summary>
+    public List<string> Bases { get; set; } = Cia.BasesPadrao();
+
+    /// <summary>Favoritos e recentes. É o arquivo do dashboard do cia: os dois mostram o mesmo.</summary>
+    public string EstadoDoCia { get; set; } = Cia.EstadoPadrao();
+
+    /// <summary>
+    /// Como o Claude Code é chamado no terminal do projeto, sem shell. Vazio acha o
+    /// claude.exe sozinho; os testes põem um eco no lugar.
+    /// </summary>
+    public string Claude { get; set; } = "";
+
+    /// <summary>Um dos ids de <see cref="Shells.Todos"/>: o shell do segundo terminal.</summary>
+    public string Shell { get; set; } = Shells.Padrao;
+
+    /// <summary>Grupos da árvore recolhidos; null é o jeito do cia: Recentes e as bases fechados.</summary>
+    public List<string>? Recolhidos { get; set; }
 
     /// <summary>Fonte do terminal; vazia usa a lista padrão.</summary>
     public string Fonte { get; set; } = "";
@@ -49,12 +73,6 @@ public sealed class Workspace
     /// pasta e na conta do projeto; vazio, o painel não existe.
     /// </summary>
     public string PainelComando { get; set; } = "";
-
-    /// <summary>Contas do Claude (a pasta de cada uma) com o grupo recolhido na sidebar.</summary>
-    public List<string> ContasRecolhidas { get; set; } = new();
-
-    /// <summary>A cor de cada conta do Claude (pela pasta dela): pinta o grupo e os projetos dele.</summary>
-    public Dictionary<string, string> CoresDasContas { get; set; } = new();
 
     /// <summary>
     /// Piscar na barra de tarefas e contar no título quando um projeto que não está à vista

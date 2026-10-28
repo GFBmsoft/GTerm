@@ -5,11 +5,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaTerminal;
-using GTerm.Models;
 using GTerm.ViewModels;
 
 namespace GTerm.Views;
@@ -18,6 +16,9 @@ public partial class MainWindow : Window, IDialogService
 {
     private readonly MainViewModel _vm;
     private bool _fechamentoConfirmado;
+
+    // andando pela árvore com as setas: o teclado fica nela, não pula para o terminal
+    private bool _pelasSetas;
 
     public MainWindow()
     {
@@ -28,7 +29,7 @@ public partial class MainWindow : Window, IDialogService
         // trocar de projeto é para digitar: o teclado vai ao terminal que apareceu
         _vm.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(MainViewModel.Selecionado) or nameof(MainViewModel.Aviso))
+            if (e.PropertyName is nameof(MainViewModel.Selecionado) or nameof(MainViewModel.Aviso) && !_pelasSetas)
                 Dispatcher.UIThread.Post(Focar, DispatcherPriority.Background);
         };
         Opened += (_, _) =>
@@ -56,6 +57,46 @@ public partial class MainWindow : Window, IDialogService
 
         // em túnel: o terminal consome o teclado todo, então a janela olha antes dele
         AddHandler(KeyDownEvent, AoTeclar, RoutingStrategies.Tunnel);
+
+        var lista = this.FindControl<ListBox>("Lista")!;
+        lista.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            _pelasSetas = e.Key is Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown;
+            if (e.Key == Key.Enter && _vm.LinhaSelecionada is LinhaDoProjeto l)
+            {
+                l.Projeto.IniciarCommand.Execute(null);
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+        lista.AddHandler(KeyUpEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);
+        lista.AddHandler(PointerPressedEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);
+        lista.DoubleTapped += (_, e) =>
+        {
+            if ((e.Source as Control)?.DataContext is LinhaDoProjeto l) l.Projeto.IniciarCommand.Execute(null);
+        };
+
+        // o filtro em cima da árvore: Enter vai ao primeiro que bate, Esc limpa, seta para
+        // baixo desce para a árvore
+        var filtro = this.FindControl<TextBox>("CaixaDoFiltro")!;
+        filtro.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            switch (e.Key)
+            {
+                case Key.Enter:
+                    _vm.EscolherPrimeiro();
+                    lista.Focus();
+                    break;
+                case Key.Escape:
+                    _vm.Filtro = "";
+                    break;
+                case Key.Down:
+                    lista.Focus();
+                    break;
+                default:
+                    return;
+            }
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
@@ -75,7 +116,11 @@ public partial class MainWindow : Window, IDialogService
         else if (!shift && e.Key is >= Key.NumPad1 and <= Key.NumPad9)
             _vm.SelecionarPorNumero(e.Key - Key.NumPad1 + 1);
         else if (shift && e.Key == Key.P) // com Shift: Ctrl+P sozinho é do shell e do Claude
-            _ = _vm.BuscarAsync();
+        {
+            var filtro = this.FindControl<TextBox>("CaixaDoFiltro")!;
+            filtro.Focus();
+            filtro.SelectAll();
+        }
         else
             return;
 
@@ -104,25 +149,9 @@ public partial class MainWindow : Window, IDialogService
     public async Task<bool> ConfirmAsync(string title, string message) =>
         await new ConfirmWindow(title, message).ShowDialog<bool>(this);
 
-    public async Task<string?> PickFolderAsync(string title)
-    {
-        var pastas = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-        {
-            Title = title,
-            AllowMultiple = false,
-        });
-        return pastas.FirstOrDefault()?.TryGetLocalPath();
-    }
-
     public async Task<string?> PromptAsync(string title, string label) =>
         await new PromptWindow(title, label).ShowDialog<string?>(this);
 
     public async Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas) =>
         await new PreferenciasWindow(atuais, contas).ShowDialog<Preferencias?>(this);
-
-    public async Task<Projeto?> BuscarProjetoAsync(IReadOnlyList<Projeto> projetos) =>
-        await new BuscaWindow(projetos).ShowDialog<Projeto?>(this);
-
-    public async Task<ProjetoEditado?> EditarProjetoAsync(Projeto projeto) =>
-        await new ProjetoWindow(projeto).ShowDialog<ProjetoEditado?>(this);
 }

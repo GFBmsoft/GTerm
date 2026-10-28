@@ -1577,19 +1577,23 @@ public partial class TerminalControl : Grid
             }
 
             var caretBrush = owner.ResolveCaretBrush();
-            if (owner._hasFocus && owner.CaretStyle != TerminalCaretStyle.Block)
+            if (owner.CaretStyle != TerminalCaretStyle.Block)
             {
                 // GRepos: barra fina à esquerda da célula, ou sublinhado; apagada na fase
-                // "off" do piscar
-                if (!owner._caretBlinkOn)
+                // "off" do piscar. Sem o foco fica na mesma forma, parada e esmaecida: o
+                // contorno de bloco de antes parecia outro cursor
+                if (owner._hasFocus && !owner._caretBlinkOn)
                 {
                     return;
                 }
 
                 var thin = Math.Max(1.5, Math.Round(caretRect.Height / 9));
-                context.FillRectangle(caretBrush, owner.CaretStyle == TerminalCaretStyle.Bar
-                    ? new Rect(caretRect.X, caretRect.Y, thin, caretRect.Height)
-                    : new Rect(caretRect.X, caretRect.Bottom - thin, caretRect.Width, thin));
+                using (context.PushOpacity(owner._hasFocus ? 1 : 0.45))
+                {
+                    context.FillRectangle(caretBrush, owner.CaretStyle == TerminalCaretStyle.Bar
+                        ? new Rect(caretRect.X, caretRect.Y, thin, caretRect.Height)
+                        : new Rect(caretRect.X, caretRect.Bottom - thin, caretRect.Width, thin));
+                }
             }
             else if (owner._hasFocus)
             {
