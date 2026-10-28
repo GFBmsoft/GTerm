@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -27,6 +28,18 @@ public sealed record EstadoDoCia(IReadOnlyList<string> Favoritos, IReadOnlyList<
 
 /// <summary>A sessão do Claude que o cia retoma no projeto.</summary>
 public sealed record UltimaSessao(string Id, DateTime Quando, long KB, string Titulo);
+
+/// <summary>O git do projeto, como o quadro do dashboard do cia mostra (o Get-GitInfo dele).</summary>
+/// <param name="Repositorio">A pasta tem .git.</param>
+/// <param name="Erro">O git recusou a pasta: quase sempre o dubious ownership (safe.directory).</param>
+/// <param name="Alterados">Arquivos alterados ou novos, como no git status.</param>
+/// <param name="Commit">Quando foi o último commit; null num repositório sem commit.</param>
+public sealed record InfoDoGit(bool Repositorio, bool Erro, string Branch, int Alterados, int Ahead, int Behind,
+    DateTime? Commit, string Mensagem)
+{
+    public static readonly InfoDoGit SemGit = new(false, false, "", 0, 0, 0, null, "");
+    public static readonly InfoDoGit Recusado = SemGit with { Repositorio = true, Erro = true };
+}
 
 /// <summary>Como o Claude abre no projeto, decidido como o cia decidiria.</summary>
 /// <param name="Argumentos">Da linha de comando do claude: --resume, /compact, a skill.</param>
@@ -123,6 +136,18 @@ public static class Cia
         "python" => ("\uE73C", "#4B8BBE"),
         "pwsh" => (char.ConvertFromUtf32(0xF07B7), "#00BFFF"),
         _ => ("\uF413", "#6C7086"),
+    };
+
+    /// <summary>O nome do tipo, ao lado da pasta no quadro do projeto.</summary>
+    public static string NomeDoTipo(string tipo) => tipo switch
+    {
+        "delphi" => "Delphi",
+        "csharp" => "C# / .NET",
+        "go" => "Go",
+        "node" => "Node",
+        "python" => "Python",
+        "pwsh" => "PowerShell",
+        _ => "pasta",
     };
 
     /// <summary>
@@ -280,6 +305,82 @@ public static class Cia
                     (long)Math.Round(f.Length / 1024d), titulo);
         }
         return null;
+    }
+
+    /// <summary>
+    /// O branch, as alterações e o último commit do projeto, pelo git status e pelo git log,
+    /// como o dashboard do cia lê. Roda o git: chame fora da tela.
+    /// </summary>
+    public static InfoDoGit Git(string pasta)
+    {
+        if (!Directory.Exists(Path.Combine(pasta, ".git")) && !File.Exists(Path.Combine(pasta, ".git")))
+            return InfoDoGit.SemGit;
+
+        return RodarGit(pasta, "status", "--porcelain=v2", "--branch") is { } status
+            ? LerGit(status, RodarGit(pasta, "log", "-1", "--format=%ct%x09%s"))
+            : InfoDoGit.Recusado;
+    }
+
+    /// <summary>A saída do <c>git status --porcelain=v2 --branch</c> e do <c>git log -1</c> (data e assunto).</summary>
+    public static InfoDoGit LerGit(string status, string? log)
+    {
+        string branch = "";
+        int alterados = 0, ahead = 0, behind = 0;
+        foreach (var linha in status.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (linha.StartsWith("# branch.head ", StringComparison.Ordinal)) branch = linha[14..];
+            else if (Regex.Match(linha, @"^# branch\.ab \+(\d+) -(\d+)") is { Success: true } ab)
+            {
+                ahead = int.Parse(ab.Groups[1].Value, CultureInfo.InvariantCulture);
+                behind = int.Parse(ab.Groups[2].Value, CultureInfo.InvariantCulture);
+            }
+            else if (!linha.StartsWith('#')) alterados++;
+        }
+
+        DateTime? commit = null;
+        var mensagem = "";
+        if (log?.Trim().Split('\t', 2) is [var segundos, var assunto] &&
+            long.TryParse(segundos, NumberStyles.None, CultureInfo.InvariantCulture, out var s))
+        {
+            commit = DateTimeOffset.FromUnixTimeSeconds(s).LocalDateTime;
+            mensagem = assunto.Trim();
+        }
+        return new InfoDoGit(true, false, branch, alterados, ahead, behind, commit, mensagem);
+    }
+
+    // null quando o git recusa a pasta, não responde em 10 s ou não está instalado
+    private static string? RodarGit(string pasta, params string[] argumentos)
+    {
+        var info = new ProcessStartInfo("git")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+        };
+        info.ArgumentList.Add("-C");
+        info.ArgumentList.Add(pasta);
+        foreach (var a in argumentos) info.ArgumentList.Add(a);
+        // só olhar: o status não trava o índice de quem estiver usando o git nessa hora
+        info.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+
+        try
+        {
+            using var git = Process.Start(info)!;
+            var saida = git.StandardOutput.ReadToEndAsync();
+            _ = git.StandardError.ReadToEndAsync();
+            if (!git.WaitForExit(10_000))
+            {
+                git.Kill();
+                return null;
+            }
+            return git.ExitCode == 0 ? saida.Result : null;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>

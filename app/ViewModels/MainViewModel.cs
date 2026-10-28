@@ -171,23 +171,80 @@ public sealed partial class ProjetoViewModel : ObservableObject
 
     /// <summary>A sessão que o cia retoma; null sem sessão com conversa.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(RotuloDeAbrir), nameof(TextoDaSessao))]
+    [NotifyPropertyChangedFor(nameof(RotuloDeAbrir), nameof(TextoDaSessao), nameof(TemTextoDaSessao),
+        nameof(TemSessao), nameof(QuandoDaSessao), nameof(TamanhoDaSessao))]
     private UltimaSessao? _ultimaSessao;
 
     /// <summary>A sessão já foi procurada: até lá, o texto embaixo do botão fica vazio.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TextoDaSessao))]
+    [NotifyPropertyChangedFor(nameof(TextoDaSessao), nameof(TemTextoDaSessao))]
     private bool _sessaoLida;
 
     public string RotuloDeAbrir => UltimaSessao is null ? "Abrir o Claude" : "Retomar a sessão";
 
-    /// <summary>Embaixo do botão de abrir: o que o cia vai fazer.</summary>
+    /// <summary>
+    /// Embaixo do botão de abrir, o que o cia vai fazer de diferente: sem sessão, a skill;
+    /// com sessão grande, o /compact. A sessão em si está no quadro.
+    /// </summary>
     public string TextoDaSessao => !SessaoLida ? ""
         : UltimaSessao is { } s
-            ? $"“{s.Titulo}” · {Cia.Quando(s.Quando, DateTime.Now)} · {Cia.Tamanho(s.KB)}" +
-              (s.KB >= Cia.CompactarKB ? " · abre com /compact" : "")
+            ? (s.KB >= Cia.CompactarKB ? $"Abre com /compact: a sessão passou de {Cia.CompactarKB} KB" : "")
             : "Nenhuma sessão com conversa: abre " +
               (EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto");
+
+    public bool TemTextoDaSessao => TextoDaSessao.Length > 0;
+
+    // ------------------------------------------------------------ o quadro do projeto parado
+
+    // o quadro do dashboard do cia, ao lado da lista: o git, o CLAUDE.md, a sessão e a
+    // última abertura. Lido a cada vez que o projeto parado é escolhido
+
+    /// <summary>Delphi, C# / .NET, Go...: ao lado da pasta, na cor do ícone.</summary>
+    public string Tipo => Cia.NomeDoTipo(Info.Tipo);
+
+    /// <summary>Null até o git ser lido: o quadro mostra "carregando…".</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GitLido), nameof(SemGit), nameof(GitRecusou), nameof(ComGit), nameof(Limpo),
+        nameof(Alterado), nameof(TextoDasAlteracoes), nameof(AFrenteAtras), nameof(TemCommit), nameof(TextoDoCommit))]
+    private InfoDoGit? _git;
+
+    public bool GitLido => Git is not null;
+    public bool SemGit => Git is { Repositorio: false };
+    public bool GitRecusou => Git is { Erro: true };
+    public bool ComGit => Git is { Repositorio: true, Erro: false };
+    public bool Limpo => ComGit && Git!.Alterados == 0;
+    public bool Alterado => ComGit && Git!.Alterados > 0;
+
+    public string TextoDasAlteracoes => Git?.Alterados == 1 ? "1 arquivo alterado" : $"{Git?.Alterados} arquivos alterados";
+
+    /// <summary>Commits a mandar e a receber, "↑2  ↓1"; vazio quando está em dia.</summary>
+    public string AFrenteAtras => string.Join("  ", new[]
+    {
+        Git?.Ahead > 0 ? "↑" + Git.Ahead : "",
+        Git?.Behind > 0 ? "↓" + Git.Behind : "",
+    }.Where(t => t.Length > 0));
+
+    public bool TemCommit => ComGit && Git!.Commit is not null;
+    public string TextoDoCommit => Git?.Commit is { } c ? "último commit " + Cia.Quando(c, DateTime.Now) : "";
+
+    [ObservableProperty] private bool _temClaudeMd;
+
+    public bool TemSessao => UltimaSessao is not null;
+    public string QuandoDaSessao => UltimaSessao is { } s ? "sessão " + Cia.Quando(s.Quando, DateTime.Now) : "";
+    public string TamanhoDaSessao => UltimaSessao is { } s ? Cia.Tamanho(s.KB) : "";
+
+    /// <summary>A última vez que o cia (ou o GTerm) abriu o projeto: o recente dele.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TemAbertura), nameof(TextoDaAbertura), nameof(DetalheDaAbertura))]
+    private Recente? _ultimaAbertura;
+
+    public bool TemAbertura => UltimaAbertura is not null;
+
+    public string TextoDaAbertura => UltimaAbertura?.Quando is { } q ? "aberto " + Cia.Quando(q, DateTime.Now) : "aberto";
+
+    /// <summary>" · pedido 6529 (writer)": o pedido e o modo, como o cia mostra.</summary>
+    public string DetalheDaAbertura => UltimaAbertura is not { } r ? ""
+        : (r.Pedido.Length > 0 ? " · pedido " + r.Pedido : "") + (r.Modo.Length > 0 ? $" ({r.Modo})" : "");
 
     /// <summary>Null até o terminal do projeto ser iniciado, e depois de encerrado.</summary>
     [ObservableProperty]
@@ -360,7 +417,7 @@ public sealed partial class MainViewModel : ObservableObject
         Mostrar();
         Visto();
         OnPropertyChanged(nameof(MostrarParado));
-        if (value is { Sessao: null }) _ = CarregarSessaoAsync(value);
+        if (value is { Sessao: null }) _ = CarregarQuadroAsync(value);
     }
 
     partial void OnLinhaSelecionadaChanged(LinhaDaArvore? value)
@@ -372,14 +429,18 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnFiltroChanged(string value) => Remontar();
 
     /// <summary>
-    /// A sessão que o cia vai retomar, para o botão de abrir dizer o que acontece. Lida fora
-    /// da tela: os .jsonl das sessões passam de megabytes.
+    /// O quadro do projeto parado: a sessão que o cia vai retomar (o botão de abrir diz o que
+    /// acontece), o git e o CLAUDE.md. Lidos fora da tela: os .jsonl das sessões passam de
+    /// megabytes, e o git status demora em repositório grande.
     /// </summary>
-    internal async Task CarregarSessaoAsync(ProjetoViewModel p)
+    internal async Task CarregarQuadroAsync(ProjetoViewModel p)
     {
         var conta = ClaudeHooks.PastaDaConta(p.Projeto.Conta);
+        var git = Task.Run(() => Cia.Git(p.Pasta));
+        p.TemClaudeMd = File.Exists(Path.Combine(p.Pasta, "CLAUDE.md"));
         p.UltimaSessao = await Task.Run(() => Cia.UltimaSessao(p.Pasta, conta));
         p.SessaoLida = true;
+        p.Git = await git;
     }
 
     // ------------------------------------------------------------ projetos e árvore
@@ -429,7 +490,16 @@ public sealed partial class MainViewModel : ObservableObject
         if (Cia.LerEstado(_workspace.EstadoDoCia) is { } lido) _estado = lido;
 
         _favoritos = _estado.Favoritos.Select(Achar).OfType<ProjetoViewModel>().Distinct().ToList();
-        foreach (var p in Projetos) p.Favorito = _favoritos.Contains(p);
+        var aberturas = _estado.Recentes
+            .Select(r => (P: Achar(r.Referencia), R: r))
+            .Where(x => x.P is not null)
+            .DistinctBy(x => x.P)
+            .ToDictionary(x => x.P!, x => x.R);
+        foreach (var p in Projetos)
+        {
+            p.Favorito = _favoritos.Contains(p);
+            p.UltimaAbertura = aberturas.GetValueOrDefault(p);
+        }
     }
 
     /// <summary>Pelo caminho; no formato antigo do estado do cia, pelo nome (vale a primeira base).</summary>
@@ -574,6 +644,33 @@ public sealed partial class MainViewModel : ObservableObject
         if (de < 0 || para < 0 || para >= lista.Count) return;
         (lista[de], lista[para]) = (lista[para], lista[de]);
         GravarFavoritos(lista);
+    }
+
+    // um favorito está sendo arrastado e já mudou de lugar: a ordem nova falta gravar
+    private bool _arrastado;
+
+    /// <summary>
+    /// O favorito arrastado na árvore passou por cima de outro: toma o lugar dele, e a linha
+    /// acompanha o mouse. A ordem só vai para o estado do cia ao soltar.
+    /// </summary>
+    public void ArrastarFavorito(ProjetoViewModel p, ProjetoViewModel alvo)
+    {
+        var de = _favoritos.IndexOf(p);
+        var para = _favoritos.IndexOf(alvo);
+        if (de < 0 || para < 0 || de == para) return;
+
+        _favoritos.RemoveAt(de);
+        _favoritos.Insert(para, p);
+        _arrastado = true;
+        Remontar();
+    }
+
+    /// <summary>Soltou o favorito arrastado: a ordem nova vale para o Ctrl+número e para o cia.</summary>
+    public void SoltarFavorito()
+    {
+        if (!_arrastado) return;
+        _arrastado = false;
+        GravarFavoritos(_favoritos.ToList());
     }
 
     private void GravarFavoritos(List<ProjetoViewModel> lista)
@@ -1057,7 +1154,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (Selecionado == p)
         {
             AtualizarAviso();
-            _ = CarregarSessaoAsync(p);
+            _ = CarregarQuadroAsync(p);
         }
     }
 

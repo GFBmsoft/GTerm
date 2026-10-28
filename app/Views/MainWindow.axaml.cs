@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -67,7 +69,15 @@ public partial class MainWindow : Window, IDialogService
                 l.Projeto.IniciarCommand.Execute(null);
                 e.Handled = true;
             }
+            // Alt+setas sobe e desce o favorito, como o arrastar
+            else if (e.KeyModifiers == KeyModifiers.Alt && e.Key is Key.Up or Key.Down &&
+                     _vm.LinhaSelecionada is LinhaDoProjeto { NosFavoritos: true } favorito)
+            {
+                _vm.MoverFavorito(favorito.Projeto, e.Key == Key.Up ? -1 : 1);
+                e.Handled = true;
+            }
         }, RoutingStrategies.Tunnel);
+        ArrastarFavoritos(lista);
         lista.AddHandler(KeyUpEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);
         lista.AddHandler(PointerPressedEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);
         lista.DoubleTapped += (_, e) =>
@@ -100,6 +110,83 @@ public partial class MainWindow : Window, IDialogService
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    /// <summary>
+    /// Arrastar uma linha dos Favoritos muda a ordem deles (a do Ctrl+número e do [n] do
+    /// cia): a linha acompanha o mouse, e a ordem nova é gravada ao soltar. Começa só depois
+    /// de o mouse andar um pouco, para o clique continuar sendo clique; na estrela e no ▶
+    /// não começa.
+    /// </summary>
+    private void ArrastarFavoritos(ListBox lista)
+    {
+        LinhaDoProjeto? pega = null;
+        var inicio = default(Point);
+        var arrastando = false;
+
+        void Soltar()
+        {
+            if (arrastando)
+            {
+                arrastando = false;
+                lista.Cursor = null;
+                _vm.SoltarFavorito();
+            }
+            pega = null;
+        }
+
+        lista.AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            pega = null;
+            if (!e.GetCurrentPoint(lista).Properties.IsLeftButtonPressed) return;
+            if ((e.Source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is not null) return;
+            if ((e.Source as StyledElement)?.DataContext is not LinhaDoProjeto { NosFavoritos: true } linha) return;
+            pega = linha;
+            inicio = e.GetPosition(lista);
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        lista.AddHandler(PointerMovedEvent, (_, e) =>
+        {
+            if (pega is null) return;
+            var aqui = e.GetPosition(lista);
+            if (!arrastando)
+            {
+                if (Math.Abs(aqui.Y - inicio.Y) < 6) return;
+                arrastando = true;
+                e.Pointer.Capture(lista);
+                lista.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
+            }
+            if (FavoritoEm(lista, aqui.Y) is { } alvo) _vm.ArrastarFavorito(pega.Projeto, alvo);
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        lista.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (arrastando)
+            {
+                e.Pointer.Capture(null);
+                e.Handled = true;
+            }
+            Soltar();
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        lista.PointerCaptureLost += (_, _) => Soltar();
+    }
+
+    /// <summary>
+    /// O favorito na altura do mouse; acima do primeiro é o primeiro, abaixo do último é o
+    /// último, para dar para levar ao começo e ao fim sem mirar.
+    /// </summary>
+    private static ProjetoViewModel? FavoritoEm(ListBox lista, double y)
+    {
+        var linhas = lista.GetVisualDescendants().OfType<ListBoxItem>()
+            .Where(i => i.IsVisible && i.DataContext is LinhaDoProjeto { NosFavoritos: true })
+            .Select(i => (Projeto: ((LinhaDoProjeto)i.DataContext!).Projeto,
+                Fim: (i.TranslatePoint(default, lista)?.Y ?? 0) + i.Bounds.Height))
+            .OrderBy(x => x.Fim)
+            .ToList();
+        if (linhas.Count == 0) return null;
+        return linhas.FirstOrDefault(x => y < x.Fim).Projeto ?? linhas[^1].Projeto;
+    }
 
     private void Focar() =>
         this.GetVisualDescendants().OfType<TerminalControl>().FirstOrDefault(t => t.IsVisible)?.Focus();

@@ -1,3 +1,8 @@
+## 1.0.0.10 — 28/10/2026
+- A estrela dos favoritos fica sempre à vista na barra lateral, cheia e amarela, em qualquer grupo. Nos outros projetos, a estrela vazada continua aparecendo só com o mouse em cima.
+- **Mudar a ordem dos favoritos**: arraste o projeto para cima ou para baixo dentro de Favoritos. A ordem nova vale para o Ctrl+1 a Ctrl+9 e para os números do cia. Com o projeto escolhido na barra lateral, Alt+↑ e Alt+↓ fazem o mesmo.
+- **Quadro do projeto**: ao escolher um projeto ainda sem o Claude aberto, aparece o mesmo resumo do dashboard do cia: o branch, se há arquivos alterados ou commits a mandar e receber, o último commit, se tem CLAUDE.md, a sessão que vai ser retomada (quando, tamanho e assunto) e a última vez que o projeto foi aberto, com o pedido.
+
 ## 1.0.0.9 — 28/10/2026
 - **Favoritar pela barra lateral**: passe o mouse sobre um projeto e clique na estrela para pôr nos Favoritos ou tirar de lá, sem abrir o menu. A estrela fica cheia e amarela nos favoritos, em qualquer grupo onde o projeto aparecer.
 - O botão do segundo terminal, no canto superior direito, virou uma pílula "Terminal" no estilo das abas. Fica acesa enquanto o segundo terminal está aberto. O botão do painel lateral ficou igual.

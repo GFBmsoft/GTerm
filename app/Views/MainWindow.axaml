@@ -95,8 +95,10 @@
       <Setter Property="Width" Value="20" />
       <Setter Property="FontSize" Value="11" />
     </Style>
-    <!-- a cheia fica na cor do grupo Favoritos, também com o mouse em cima -->
+    <!-- a cheia fica sempre à vista, em qualquer grupo, e na cor do grupo Favoritos, também
+         com o mouse em cima. Vem depois do Button.acao para valer sobre ele -->
     <Style Selector="Button.estrela.favorito">
+      <Setter Property="Opacity" Value="1" />
       <Setter Property="Foreground" Value="{DynamicResource Yellow}" />
     </Style>
     <Style Selector="Button.estrela.favorito:pointerover /template/ ContentPresenter">
@@ -136,6 +138,30 @@
 
     <Style Selector="TextBlock.glifo">
       <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
+    </Style>
+
+    <!-- os glifos do cia: da Nerd Font do terminal -->
+    <Style Selector="TextBlock.nerd">
+      <Setter Property="FontFamily" Value="CaskaydiaCove NFM,CaskaydiaMono Nerd Font,JetBrainsMono NFM,Symbols Nerd Font Mono" />
+    </Style>
+
+    <!-- o quadro do projeto parado, com o que o dashboard do cia mostra ao lado da lista:
+         uma linha por item, o glifo na frente e, embaixo, o detalhe apagado -->
+    <Style Selector="Border.quadro">
+      <Setter Property="Background" Value="{DynamicResource BgRaised}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="14,10" />
+    </Style>
+    <Style Selector="Border.quadro TextBlock">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.quadro TextBlock.detalhe">
+      <Setter Property="Margin" Value="22,0,0,0" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource TextFaint}" />
     </Style>
   </Window.Styles>
 
@@ -186,8 +212,10 @@
                     <MenuItem Header="Sem skill" Command="{Binding Projeto.SemSkillCommand}" />
                     <Separator />
                     <MenuItem Header="{Binding Projeto.RotuloDoFavorito}" Command="{Binding Projeto.FavoritarCommand}" />
-                    <MenuItem Header="Mover para cima" Command="{Binding SubirCommand}" IsVisible="{Binding NosFavoritos}" />
-                    <MenuItem Header="Mover para baixo" Command="{Binding DescerCommand}" IsVisible="{Binding NosFavoritos}" />
+                    <MenuItem Header="Mover para cima" Command="{Binding SubirCommand}" IsVisible="{Binding NosFavoritos}"
+                              InputGesture="Alt+Up" />
+                    <MenuItem Header="Mover para baixo" Command="{Binding DescerCommand}" IsVisible="{Binding NosFavoritos}"
+                              InputGesture="Alt+Down" />
                     <Separator IsVisible="{Binding Projeto.TemTerminal}" />
                     <MenuItem Header="Encerrar o Claude" Command="{Binding Projeto.EncerrarCommand}"
                               IsVisible="{Binding Projeto.TemTerminal}" />
@@ -196,15 +224,15 @@
 
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="16,0,0,0">
                   <!-- o tipo do projeto, como no cia: os glifos são da Nerd Font do terminal -->
-                  <TextBlock Grid.Column="0" Text="{Binding Projeto.Icone}" Foreground="{Binding Projeto.CorDoIcone}"
-                             FontFamily="CaskaydiaCove NFM,CaskaydiaMono Nerd Font,JetBrainsMono NFM,Symbols Nerd Font Mono"
+                  <TextBlock Grid.Column="0" Classes="nerd" Text="{Binding Projeto.Icone}" Foreground="{Binding Projeto.CorDoIcone}"
                              FontSize="13" Width="16" Margin="0,0,7,0" VerticalAlignment="Center" />
                   <TextBlock Grid.Column="1" Text="{Binding Projeto.Nome}" VerticalAlignment="Center" Margin="0,0,6,0"
                              Classes.atencao="{Binding Projeto.PedeAtencao}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="2" Text="{Binding Extra}" IsVisible="{Binding TemExtra}" Classes="faint"
                              FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0" />
 
-                  <!-- favoritar sem abrir o menu: o projeto entra no fim dos favoritos, ou sai -->
+                  <!-- favoritar sem abrir o menu: o projeto entra no fim dos favoritos, ou sai.
+                       Lá, arrastar a linha muda a ordem -->
                   <Button Grid.Column="3" Classes="tiny simbolo acao estrela" Classes.favorito="{Binding Projeto.Favorito}"
                           Content="{Binding Projeto.GlifoDoFavorito}" Command="{Binding Projeto.FavoritarCommand}"
                           ToolTip.Tip="{Binding Projeto.RotuloDoFavorito}" />
@@ -425,12 +453,88 @@
                      IsVisible="{Binding Aviso, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
           <StackPanel Spacing="10" IsVisible="{Binding MostrarParado}">
-            <!-- sem aba ainda: o nome e a pasta ficam aqui -->
-            <StackPanel Spacing="2" Margin="0,0,0,6">
+            <!-- sem aba ainda: o nome, a pasta e o tipo ficam aqui -->
+            <StackPanel Spacing="2" Margin="0,0,0,4">
               <TextBlock Text="{Binding Selecionado.Nome}" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
-              <TextBlock Text="{Binding Selecionado.Pasta}" Classes="faint" FontSize="11" HorizontalAlignment="Center"
-                         TextTrimming="CharacterEllipsis" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
+                <TextBlock Text="{Binding Selecionado.Pasta}" Classes="faint" FontSize="11" TextTrimming="CharacterEllipsis" />
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <TextBlock Classes="nerd" Text="{Binding Selecionado.Icone}" Foreground="{Binding Selecionado.CorDoIcone}"
+                             FontSize="11" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Selecionado.Tipo}" Foreground="{Binding Selecionado.CorDoIcone}" FontSize="11" />
+                </StackPanel>
+              </StackPanel>
             </StackPanel>
+
+            <!-- o quadro do cia: o git, o CLAUDE.md, a sessão que o Enter retoma e a última
+                 vez que o projeto foi aberto -->
+            <Border Classes="quadro" MinWidth="360" MaxWidth="460" Margin="0,0,0,6">
+              <StackPanel Spacing="4">
+                <TextBlock Text="carregando…" Classes="faint" IsVisible="{Binding !Selecionado.GitLido}" />
+
+                <Grid ColumnDefinitions="22,*" IsVisible="{Binding Selecionado.SemGit}">
+                  <TextBlock Classes="nerd faint" Text="&#xE725;" />
+                  <TextBlock Grid.Column="1" Classes="faint" Text="sem git" />
+                </Grid>
+
+                <StackPanel Spacing="1" IsVisible="{Binding Selecionado.GitRecusou}">
+                  <Grid ColumnDefinitions="22,*">
+                    <TextBlock Text="!" FontWeight="Bold" Foreground="{DynamicResource Yellow}" />
+                    <TextBlock Grid.Column="1" Text="o git recusou o repositório" Foreground="{DynamicResource Yellow}" />
+                  </Grid>
+                  <TextBlock Classes="detalhe" Text="provável dubious ownership (safe.directory)" />
+                </StackPanel>
+
+                <StackPanel Spacing="4" IsVisible="{Binding Selecionado.ComGit}">
+                  <Grid ColumnDefinitions="22,Auto,*">
+                    <TextBlock Classes="nerd" Text="&#xE725;" Foreground="{DynamicResource Purple}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Selecionado.Git.Branch}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Selecionado.AFrenteAtras}" Margin="10,0,0,0"
+                               Foreground="{DynamicResource Accent}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="22,*" IsVisible="{Binding Selecionado.Limpo}">
+                    <TextBlock Classes="nerd" Text="&#xF00C;" Foreground="{DynamicResource Green}" />
+                    <TextBlock Grid.Column="1" Text="limpo" Foreground="{DynamicResource Green}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="22,*" IsVisible="{Binding Selecionado.Alterado}">
+                    <TextBlock Text="●" Foreground="{DynamicResource Yellow}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Selecionado.TextoDasAlteracoes}"
+                               Foreground="{DynamicResource Yellow}" />
+                  </Grid>
+                  <StackPanel Spacing="1" IsVisible="{Binding Selecionado.TemCommit}">
+                    <Grid ColumnDefinitions="22,*">
+                      <TextBlock Classes="nerd faint" Text="&#xE729;" />
+                      <TextBlock Grid.Column="1" Text="{Binding Selecionado.TextoDoCommit}" />
+                    </Grid>
+                    <TextBlock Classes="detalhe" Text="{Binding Selecionado.Git.Mensagem}" />
+                  </StackPanel>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="22,Auto,*">
+                  <TextBlock Classes="nerd faint" Text="&#xF15B;" />
+                  <TextBlock Grid.Column="1" Text="CLAUDE.md" Margin="0,0,6,0" />
+                  <TextBlock Grid.Column="2" Text="sim" Foreground="{DynamicResource Green}"
+                             IsVisible="{Binding Selecionado.TemClaudeMd}" />
+                  <TextBlock Grid.Column="2" Text="não" Classes="faint" IsVisible="{Binding !Selecionado.TemClaudeMd}" />
+                </Grid>
+
+                <StackPanel Spacing="1" IsVisible="{Binding Selecionado.TemSessao}">
+                  <Grid ColumnDefinitions="22,Auto,*">
+                    <TextBlock Classes="nerd" Text="&#xF120;" Foreground="{DynamicResource Accent}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Selecionado.QuandoDaSessao}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Selecionado.TamanhoDaSessao}" Classes="faint" Margin="10,0,0,0" />
+                  </Grid>
+                  <TextBlock Classes="detalhe" Text="{Binding Selecionado.UltimaSessao.Titulo}" />
+                </StackPanel>
+
+                <Grid ColumnDefinitions="22,Auto,*" IsVisible="{Binding Selecionado.TemAbertura}">
+                  <TextBlock Classes="nerd faint" Text="&#xF017;" />
+                  <TextBlock Grid.Column="1" Text="{Binding Selecionado.TextoDaAbertura}" />
+                  <TextBlock Grid.Column="2" Text="{Binding Selecionado.DetalheDaAbertura}" Classes="faint" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
             <Button Classes="primary" HorizontalAlignment="Center" Padding="16,6"
                     Command="{Binding Selecionado.IniciarCommand}"
                     ToolTip.Tip="Retoma a última sessão do projeto, com /compact se ela estiver grande, como o cia">
@@ -440,6 +544,7 @@
               </StackPanel>
             </Button>
             <TextBlock Text="{Binding Selecionado.TextoDaSessao}" Classes="faint" FontSize="11.5"
+                       IsVisible="{Binding Selecionado.TemTextoDaSessao}"
                        TextAlignment="Center" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
               <Button Classes="tiny" Content="Sessão nova" Command="{Binding Selecionado.SessaoNovaCommand}"

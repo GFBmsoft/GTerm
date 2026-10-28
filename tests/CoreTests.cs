@@ -5,8 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -309,7 +311,14 @@ public class CiaTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_raiz, true); } catch (IOException) { }
+        try
+        {
+            // os objetos do git são somente leitura
+            foreach (var f in Directory.EnumerateFiles(_raiz, "*", SearchOption.AllDirectories))
+                File.SetAttributes(f, FileAttributes.Normal);
+            Directory.Delete(_raiz, true);
+        }
+        catch (IOException) { }
     }
 
     [Fact]
@@ -511,6 +520,61 @@ public class CiaTests : IDisposable
         Assert.Equal("340 KB", Cia.Tamanho(340));
         Assert.Equal("1,3 MB", Cia.Tamanho(1300));
     }
+
+    /// <summary>
+    /// O quadro do projeto, como o Get-GitInfo do cia-dash lê: o branch, o que falta mandar
+    /// e receber, os arquivos alterados (novos contam) e o último commit.
+    /// </summary>
+    [Fact]
+    public void GitDoProjetoComoOCiaMostra()
+    {
+        var lido = Cia.LerGit("""
+            # branch.oid 0123456789abcdef
+            # branch.head develop
+            # branch.upstream origin/develop
+            # branch.ab +2 -1
+            1 .M N... 100644 100644 100644 aaa bbb Financeiro.pas
+            ? Novo.pas
+
+            """, "1761660000\tMerge pull request #1 from bmsoft\n");
+        Assert.Equal(new InfoDoGit(true, false, "develop", 2, 2, 1,
+            DateTimeOffset.FromUnixTimeSeconds(1761660000).LocalDateTime, "Merge pull request #1 from bmsoft"), lido);
+        Assert.Equal(new InfoDoGit(true, false, "(detached)", 0, 0, 0, null, ""),
+            Cia.LerGit("# branch.oid (initial)\n# branch.head (detached)\n", null));
+
+        // pasta sem .git nem chama o git
+        Assert.Same(InfoDoGit.SemGit, Cia.Git(_raiz));
+
+        // um repositório de verdade, com um commit e uma alteração
+        var repo = Directory.CreateDirectory(Path.Combine(_raiz, "repo")).FullName;
+        bool Git(params string[] argumentos)
+        {
+            var info = new ProcessStartInfo("git") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var a in new[] { "-C", repo, "-c", "user.name=Teste", "-c", "user.email=teste@gterm" }.Concat(argumentos))
+                info.ArgumentList.Add(a);
+            try
+            {
+                using var git = Process.Start(info)!;
+                git.WaitForExit();
+                return git.ExitCode == 0;
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return false;
+            }
+        }
+        if (!Git("init", "-b", "principal")) return; // sem o git instalado não há o que testar
+        File.WriteAllText(Path.Combine(repo, "a.txt"), "1");
+        Assert.True(Git("add", "."));
+        Assert.True(Git("commit", "-m", "Primeiro commit"));
+        File.WriteAllText(Path.Combine(repo, "a.txt"), "2");
+
+        var git = Cia.Git(repo);
+        Assert.Equal("principal", git.Branch);
+        Assert.Equal(1, git.Alterados);
+        Assert.Equal("Primeiro commit", git.Mensagem);
+        Assert.InRange(git.Commit!.Value, DateTime.Now.AddMinutes(-5), DateTime.Now.AddMinutes(1));
+    }
 }
 
 /// <summary>Tudo que grava o workspace fica nesta classe: dentro dela o xunit roda em série.</summary>
@@ -547,6 +611,7 @@ public class JanelaTests : IDisposable
         Projeto(Financeiro, "Financeiro.dpr");
         Projeto(Notas, "Notas.dproj");
         Projeto(PastaDoGTerm, "GTerm.sln");
+        File.WriteAllText(Path.Combine(Notas, "CLAUDE.md"), "");
 
         Directory.CreateDirectory(Path.GetDirectoryName(Estado)!);
         File.WriteAllText(Estado, $$"""
@@ -601,6 +666,11 @@ public class JanelaTests : IDisposable
         vm.Linhas.OfType<LinhaDoProjeto>().Where(l => l.Grupo == grupo).Select(l => l.Projeto.Nome).ToArray();
 
     private static ProjetoViewModel Projeto(MainViewModel vm, string nome) => vm.Projetos.Single(p => p.Nome == nome);
+
+    /// <summary>Os textos à vista no quadro do projeto parado.</summary>
+    private static List<string?> Quadro(Window janela) => janela.GetVisualDescendants().OfType<Border>()
+        .Single(b => b.Classes.Contains("quadro"))
+        .GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
 
     [Fact]
     public void WorkspaceVoltaComoFoiGravado()
@@ -659,6 +729,18 @@ public class JanelaTests : IDisposable
             Assert.True(await Esperar(() => financeiro.SessaoLida));
             Assert.Equal("Abrir o Claude", financeiro.RotuloDeAbrir);
             Assert.Contains("/delphi-writer", financeiro.TextoDaSessao);
+
+            // e o quadro do cia: sem git, sem CLAUDE.md, nunca aberto
+            Assert.True(await Esperar(() => financeiro.GitLido));
+            Assert.Equal("Delphi", financeiro.Tipo);
+            Dispatcher.UIThread.RunJobs();
+            var quadro = Quadro(janela);
+            Assert.Contains("sem git", quadro);
+            Assert.Contains("não", quadro);
+            Assert.DoesNotContain("carregando…", quadro);
+            Assert.DoesNotContain("limpo", quadro);
+            Assert.False(financeiro.TemSessao);
+            Assert.False(financeiro.TemAbertura);
             Foto(janela, "arvore.png");
 
             // o recente mostra quando e o pedido; a base aberta mostra os projetos dela
@@ -679,6 +761,10 @@ public class JanelaTests : IDisposable
             Assert.Contains("favorito", Estrela("base:" + Bmsoft, "Financeiro").Classes);
             var estrelaDasNotas = Estrela("base:" + Bmsoft, "Notas");
             Assert.DoesNotContain("favorito", estrelaDasNotas.Classes);
+
+            // a cheia fica à vista sem o mouse em cima; a vazada só na linha do mouse e na escolhida
+            Assert.Equal(1, Estrela("base:" + Bmsoft, "Financeiro").Opacity);
+            Assert.Equal(0, estrelaDasNotas.Opacity);
             estrelaDasNotas.Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, MainViewModel.GrupoFavoritos));
@@ -741,10 +827,98 @@ public class JanelaTests : IDisposable
             Assert.True(vm.Sessoes[0].Ativa);
             vm.SelecionarPorNumero(9);
             Assert.Same(financeiro, vm.Selecionado);
+
+            // o quadro do cia num projeto com CLAUDE.md, aberto pelo cia há pouco, num pedido.
+            // O git e a sessão vêm postos à mão: a sessão estaria na conta do Claude de verdade
+            var notas = Projeto(vm, "Notas");
+            vm.Selecionado = notas;
+            Assert.True(await Esperar(() => notas.GitLido && notas.SessaoLida));
+            Assert.True(notas.TemClaudeMd);
+            notas.Git = new InfoDoGit(true, false, "develop", 3, 1, 0, DateTime.Now.AddDays(-1), "Merge pull request #1 from bmsoft");
+            notas.UltimaSessao = new UltimaSessao("abc", DateTime.Now.AddDays(-1), 748, "Contagem de MensagemInicial.ini por grupo");
+            Dispatcher.UIThread.RunJobs();
+            quadro = Quadro(janela);
+            foreach (var texto in new[]
+                     {
+                         "develop", "↑1", "3 arquivos alterados", "último commit ontem", "Merge pull request #1 from bmsoft",
+                         "sim", "sessão ontem", "748 KB", "Contagem de MensagemInicial.ini por grupo",
+                         " · pedido 6529 (writer)",
+                     })
+                Assert.Contains(texto, quadro);
+            Assert.Contains(quadro, t => t?.StartsWith("aberto há 2") == true); // os 20 min do Montar, e o que o teste levou
+            Assert.DoesNotContain("limpo", quadro);
+            Assert.DoesNotContain("sem git", quadro);
+            Assert.Equal("Retomar a sessão", notas.RotuloDeAbrir);
+            Assert.Equal("Abre com /compact: a sessão passou de 300 KB", notas.TextoDaSessao);
+            Foto(janela, "quadro.png");
         }
         finally
         {
             vm.EncerrarTudo(); // sem terminal rodando a janela fecha sem perguntar
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// A ordem dos favoritos (a do Ctrl+número e do [n] do cia) muda arrastando a linha: ela
+    /// acompanha o mouse, e a ordem nova só é gravada ao soltar. Clique sem arrastar só
+    /// escolhe, e Alt+setas faz o mesmo que o arrastar pelo teclado.
+    /// </summary>
+    [AvaloniaFact]
+    public void FavoritosMudamDeOrdemArrastando()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Projeto(vm, "Notas").FavoritarCommand.Execute(null);
+            Projeto(vm, "GTerm").FavoritarCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { "Financeiro", "Notas", "GTerm" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+
+            // em cima do nome: a estrela e o ▶ ficam na ponta direita da linha
+            Point Linha(string nome)
+            {
+                var item = janela.GetVisualDescendants().OfType<ListBoxItem>().Single(i =>
+                    i.IsVisible && i.DataContext is LinhaDoProjeto { NosFavoritos: true } l && l.Projeto.Nome == nome);
+                return item.TranslatePoint(new Point(60, item.Bounds.Height / 2), janela)!.Value;
+            }
+
+            var gterm = Linha("GTerm");
+            janela.MouseDown(gterm, MouseButton.Left);
+            janela.MouseMove(new Point(gterm.X, gterm.Y - 8), RawInputModifiers.LeftMouseButton);
+            Assert.Equal(new[] { "Financeiro", "Notas", "GTerm" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+            janela.MouseMove(Linha("Financeiro"), RawInputModifiers.LeftMouseButton);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { "GTerm", "Financeiro", "Notas" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+            Assert.Equal(new[] { Financeiro, Notas, PastaDoGTerm }, Cia.LerEstado(Estado)!.Favoritos); // ainda não soltou
+
+            janela.MouseUp(Linha("GTerm"), MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { PastaDoGTerm, Financeiro, Notas }, Cia.LerEstado(Estado)!.Favoritos);
+            Assert.Equal(new[] { "1", "2", "3" },
+                vm.Linhas.OfType<LinhaDoProjeto>().Where(l => l.NosFavoritos).Select(l => l.Extra));
+            vm.SelecionarPorNumero(1);
+            Assert.Equal("GTerm", vm.Selecionado?.Nome);
+
+            var notas = Linha("Notas");
+            janela.MouseDown(notas, MouseButton.Left);
+            janela.MouseUp(notas, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+            Assert.Equal(new[] { PastaDoGTerm, Financeiro, Notas }, Cia.LerEstado(Estado)!.Favoritos);
+
+            janela.FindControl<ListBox>("Lista")!.Focus();
+            janela.KeyPress(Key.Up, RawInputModifiers.Alt, PhysicalKey.ArrowUp, null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { PastaDoGTerm, Notas, Financeiro }, Cia.LerEstado(Estado)!.Favoritos);
+            Assert.Equal("Notas", vm.Selecionado?.Nome);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
             janela.Close();
         }
     }

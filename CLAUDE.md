@@ -84,8 +84,14 @@ e por isso confirma antes.
   `LinhaDoProjeto` (o mesmo projeto aparece em mais de um grupo; as linhas ficam num cache
   por grupo e pasta para a lista não perder a seleção). A estrela e o ▶ da linha só
   aparecem com o mouse em cima e na escolhida (escondidos, guardam o lugar): a estrela
-  favorita ou tira, cheia nos favoritos. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
-  Ctrl+1..9 são os favoritos (o `[n]` do cia). Os abertos não entram na árvore.
+  favorita ou tira. Cheia, nos favoritos, fica sempre à vista. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
+  Ctrl+1..9 são os favoritos (o `[n]` do cia). A ordem deles muda arrastando a linha nos
+  Favoritos (`MainWindow.ArrastarFavoritos`: a linha acompanha o mouse e a ordem só é
+  gravada ao soltar), com Alt+↑/↓ ou pelo menu. Os abertos não entram na árvore.
+- **Projeto parado** — no lugar do terminal, o nome, a pasta e o tipo, o quadro do
+  dashboard do cia (git, CLAUDE.md, a sessão que o Enter retoma e a última abertura, lidos
+  em `MainViewModel.CarregarQuadroAsync` a cada escolha; o git por `Cia.Git`, sem travar o
+  índice) e os botões de abrir o Claude.
 - **Abas** — `MainViewModel.Abertos`, na ordem em que foram abertos (Ctrl+Tab passa por
   elas). A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;
   as outras ficam com o ponto da cor, o nome apagado e o ponto de estado. A aba não tem
