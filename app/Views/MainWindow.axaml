@@ -79,16 +79,59 @@
       <Setter Property="Background" Value="{DynamicResource BgActive}" />
     </Style>
 
-    <!-- o ▶ de cada projeto parado só aparece na linha do mouse e na escolhida: com dezenas
-         de projetos, um em cada linha vira ruído -->
-    <Style Selector="Button.iniciar">
+    <!-- a estrela e o ▶ de cada projeto só aparecem na linha do mouse e na escolhida: com
+         dezenas de projetos, um em cada linha vira ruído. Escondidos, guardam o lugar, e o
+         nome não pula ao passar o mouse -->
+    <Style Selector="Button.acao">
       <Setter Property="Opacity" Value="0" />
     </Style>
-    <Style Selector="ListBoxItem:pointerover Button.iniciar">
+    <Style Selector="ListBoxItem:pointerover Button.acao">
       <Setter Property="Opacity" Value="1" />
     </Style>
-    <Style Selector="ListBoxItem:selected Button.iniciar">
+    <Style Selector="ListBoxItem:selected Button.acao">
       <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.estrela">
+      <Setter Property="Width" Value="20" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <!-- a cheia fica na cor do grupo Favoritos, também com o mouse em cima -->
+    <Style Selector="Button.estrela.favorito">
+      <Setter Property="Foreground" Value="{DynamicResource Yellow}" />
+    </Style>
+    <Style Selector="Button.estrela.favorito:pointerover /template/ ContentPresenter">
+      <Setter Property="TextBlock.Foreground" Value="{DynamicResource Yellow}" />
+    </Style>
+
+    <!-- os botões do canto, em pílula como as abas: aceso enquanto o que ele abre está
+         aberto. O TextBlock tem cor própria no tema, por isso a cor vai nele -->
+    <Style Selector="Button.pilula">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="10,0,11,0" />
+      <Setter Property="Margin" Value="6,0,0,0" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.pilula TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.pilula:pointerover TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
+    </Style>
+    <Style Selector="Button.pilula.ligado">
+      <Setter Property="Background" Value="{DynamicResource BgActive}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource TextFaint}" />
+    </Style>
+    <Style Selector="Button.pilula.ligado:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource BgActive}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource TextDim}" />
+    </Style>
+    <Style Selector="Button.pilula.ligado TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
     </Style>
 
     <Style Selector="TextBlock.glifo">
@@ -151,7 +194,7 @@
                   </ContextMenu>
                 </Border.ContextMenu>
 
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="16,0,0,0">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="16,0,0,0">
                   <!-- o tipo do projeto, como no cia: os glifos são da Nerd Font do terminal -->
                   <TextBlock Grid.Column="0" Text="{Binding Projeto.Icone}" Foreground="{Binding Projeto.CorDoIcone}"
                              FontFamily="CaskaydiaCove NFM,CaskaydiaMono Nerd Font,JetBrainsMono NFM,Symbols Nerd Font Mono"
@@ -161,14 +204,19 @@
                   <TextBlock Grid.Column="2" Text="{Binding Extra}" IsVisible="{Binding TemExtra}" Classes="faint"
                              FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0" />
 
+                  <!-- favoritar sem abrir o menu: o projeto entra no fim dos favoritos, ou sai -->
+                  <Button Grid.Column="3" Classes="tiny simbolo acao estrela" Classes.favorito="{Binding Projeto.Favorito}"
+                          Content="{Binding Projeto.GlifoDoFavorito}" Command="{Binding Projeto.FavoritarCommand}"
+                          ToolTip.Tip="{Binding Projeto.RotuloDoFavorito}" />
+
                   <!-- sem terminal: nada roda no projeto até o clique aqui (ou Enter, ou duplo clique) -->
-                  <Button Grid.Column="3" Classes="tiny simbolo iniciar" Content="&#xE768;" Margin="0,0,2,0"
+                  <Button Grid.Column="4" Classes="tiny simbolo acao" Content="&#xE768;" Margin="0,0,2,0"
                           Command="{Binding Projeto.IniciarCommand}" IsVisible="{Binding Projeto.Parado}"
                           ToolTip.Tip="Abrir o Claude neste projeto" />
 
                   <!-- apagado no prompt; amarelo rodando (piscando se espera por você); verde
                        ao terminar bem; vermelho ao terminar com erro -->
-                  <Ellipse Grid.Column="4" Classes="estado" IsVisible="{Binding Projeto.Vivo}"
+                  <Ellipse Grid.Column="5" Classes="estado" IsVisible="{Binding Projeto.Vivo}"
                            Classes.rodando="{Binding Projeto.Rodando}" Classes.aguardando="{Binding Projeto.Aguardando}"
                            Classes.concluido="{Binding Projeto.Concluido}" Classes.erro="{Binding Projeto.Erro}" />
                 </Grid>
@@ -218,12 +266,22 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
-        <Button Grid.Column="1" Classes="tiny simbolo" Content="&#xE90C;"
+        <Button Grid.Column="1" Classes="pilula" Classes.ligado="{Binding PainelVisivel}"
                 Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
-                ToolTip.Tip="Abre ou fecha o painel lateral deste projeto" />
-        <Button Grid.Column="2" Classes="tiny simbolo" Content="&#xE756;"
+                ToolTip.Tip="Abre ou fecha o painel lateral deste projeto">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="glifo" Text="&#xE90C;" FontSize="12" />
+            <TextBlock Text="Painel" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="2" Classes="pilula" Classes.ligado="{Binding AuxiliarVisivel}"
                 Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
-                ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude" />
+                ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="glifo" Text="&#xE756;" FontSize="12" />
+            <TextBlock Text="Terminal" />
+          </StackPanel>
+        </Button>
       </Grid>
 
       <!-- os botões da aba da frente, no tom dela: trocar de aba troca os botões. Quem

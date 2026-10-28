@@ -135,10 +135,13 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public bool EhDaBmsoft { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(RotuloDoFavorito))]
+    [NotifyPropertyChangedFor(nameof(RotuloDoFavorito), nameof(GlifoDoFavorito))]
     private bool _favorito;
 
     public string RotuloDoFavorito => Favorito ? "Tirar dos favoritos" : "Favoritar";
+
+    /// <summary>A estrela da linha na árvore, do Segoe Fluent: cheia nos favoritos, vazada nos outros.</summary>
+    public string GlifoDoFavorito => Favorito ? "" : "";
 
     /// <summary>
     /// A cor do projeto, a da aba dele. Sem escolha, uma da paleta tirada do nome, pela

@@ -671,6 +671,24 @@ public class JanelaTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             Foto(janela, "arvore-aberta.png");
 
+            // a estrela da linha favorita, ou tira dos favoritos, sem abrir o menu: cheia nos
+            // favoritos, em qualquer grupo em que o projeto apareça
+            Button Estrela(string grupo, string nome) => janela.GetVisualDescendants().OfType<Button>().Single(b =>
+                b.Classes.Contains("estrela") && b.DataContext is LinhaDoProjeto l && l.Grupo == grupo && l.Projeto.Nome == nome);
+            Assert.Contains("favorito", Estrela(MainViewModel.GrupoFavoritos, "Financeiro").Classes);
+            Assert.Contains("favorito", Estrela("base:" + Bmsoft, "Financeiro").Classes);
+            var estrelaDasNotas = Estrela("base:" + Bmsoft, "Notas");
+            Assert.DoesNotContain("favorito", estrelaDasNotas.Classes);
+            estrelaDasNotas.Command!.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+            Assert.Contains("favorito", Estrela("base:" + Bmsoft, "Notas").Classes);
+            Assert.Equal("Tirar dos favoritos", ToolTip.GetTip(Estrela(MainViewModel.GrupoFavoritos, "Notas")));
+            Estrela(MainViewModel.GrupoFavoritos, "Notas").Command!.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { "Financeiro" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+            Assert.Equal(new[] { Financeiro }, Cia.LerEstado(Estado)!.Favoritos);
+
             await financeiro.IniciarCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();
             Assert.False(financeiro.Parado);
@@ -1097,6 +1115,8 @@ public class JanelaTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             Assert.True(vm.AuxiliarVisivel);
             Assert.True(Assert.Single(WorkspaceStore.Load().Projetos).Auxiliar);
+            var pilula = janela.GetVisualDescendants().OfType<Button>().Single(b => b.Command == vm.AlternarAuxiliarCommand);
+            Assert.Contains("ligado", pilula.Classes); // a pílula do canto fica acesa
             var auxiliar = financeiro.AuxiliarSessao!;
             Assert.True(await Esperar(() => Tela(auxiliar).Contains(Path.GetFileName(Financeiro) + ">")), "o segundo terminal não subiu");
             Foto(janela, "auxiliar.png");
@@ -1113,6 +1133,7 @@ public class JanelaTests : IDisposable
             Assert.False(notas.PedeAtencao);
             Assert.Equal("GTerm", vm.Titulo);
             Assert.False(vm.AuxiliarVisivel);
+            Assert.DoesNotContain("ligado", pilula.Classes);
 
             // a barra troca com a aba; a cor sai da paleta do botão dela
             Assert.Same(notas.EncerrarCommand, Botao("Encerrar o Claude").Command);

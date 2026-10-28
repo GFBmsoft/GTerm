@@ -1,3 +1,7 @@
+## 1.0.0.9 — 28/10/2026
+- **Favoritar pela barra lateral**: passe o mouse sobre um projeto e clique na estrela para pôr nos Favoritos ou tirar de lá, sem abrir o menu. A estrela fica cheia e amarela nos favoritos, em qualquer grupo onde o projeto aparecer.
+- O botão do segundo terminal, no canto superior direito, virou uma pílula "Terminal" no estilo das abas. Fica acesa enquanto o segundo terminal está aberto. O botão do painel lateral ficou igual.
+
 ## 1.0.0.8 — 28/10/2026
 - **O GTerm virou o cia com tela**: a barra lateral é a lista do dashboard do cia, com Favoritos, Recentes e uma pasta por base (DBISAM e Private). Os projetos são as pastas das bases, sem cadastro. Favoritar aqui aparece no cia e vice-versa, e o que o cia abre no Windows Terminal entra nos Recentes sem reabrir o GTerm.
 - O Claude abre direto no terminal do projeto, como o cia faria: retoma a última sessão com conversa (com /compact quando ela passa de 300 KB) ou, sem sessão, abre na /delphi-writer (DBISAM) ou no /retomar (Private). O projeto parado mostra o que vai acontecer, e os botões Sessão nova, Pedido…, Pull request e Sem skill.

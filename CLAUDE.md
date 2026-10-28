@@ -82,8 +82,9 @@ e por isso confirma antes.
   GTest: `GrupoDaArvore` (seta, ponto e nome na cor, contagem; o clique recolhe, e
   `Workspace.Recolhidos` lembra; null = como no cia, Recentes e as bases fechados) e
   `LinhaDoProjeto` (o mesmo projeto aparece em mais de um grupo; as linhas ficam num cache
-  por grupo e pasta para a lista não perder a seleção). O filtro em cima vira o grupo
-  Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
+  por grupo e pasta para a lista não perder a seleção). A estrela e o ▶ da linha só
+  aparecem com o mouse em cima e na escolhida (escondidos, guardam o lugar): a estrela
+  favorita ou tira, cheia nos favoritos. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
   Ctrl+1..9 são os favoritos (o `[n]` do cia). Os abertos não entram na árvore.
 - **Abas** — `MainViewModel.Abertos`, na ordem em que foram abertos (Ctrl+Tab passa por
   elas). A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;
@@ -111,7 +112,8 @@ e por isso confirma antes.
   `BarraDeTarefas`). O "aguardando" por silêncio não conta: é palpite.
 - **Segundo terminal** — cada projeto pode ter um shell simples embaixo do principal
   (`AuxiliarSessao`), sem o comando de abertura; só existe com o terminal do projeto
-  iniciado e é encerrado junto com ele.
+  iniciado e é encerrado junto com ele. Abre e fecha na pílula "Terminal" do canto (acesa
+  enquanto aberto); a do painel lateral, "Painel", é igual.
 - **ViewModels** — CommunityToolkit.Mvvm. `MainViewModel` tem os projetos, a árvore, a
   seleção e as sessões abertas; `TerminalSessao` é o shell de um projeto, criado quando o
   usuário manda abrir (o ▶ da linha, Enter ou duplo clique na árvore, o botão do projeto
