@@ -100,6 +100,9 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
     /// <summary>O estado atual é dos que pedem aviso: terminou ou está perguntando algo.</summary>
     public bool ChamaAtencao => !Encerrada && _atividade.ChamaAtencao;
 
+    /// <summary>O processo vivo no terminal; é por ele que se sabe qual conversa do Claude a aba tem.</summary>
+    public int? Pid => _pty is { } pty && !Encerrada ? pty.Pid : null;
+
 
     /// <summary>O terminal foi medido na tela, com estas colunas e linhas.</summary>
     public event Action<int, int>? Mediu;

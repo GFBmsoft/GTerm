@@ -577,6 +577,149 @@ public class CiaTests : IDisposable
     }
 }
 
+/// <summary>Conversas do Claude numa conta de teste, gravadas como o Claude grava.</summary>
+internal static class ContaDeTeste
+{
+    private static string Json(string texto) => System.Text.Json.JsonSerializer.Serialize(texto);
+
+    /// <summary>O cwd e o branch no começo, o título no fim. Devolve o id.</summary>
+    /// <param name="linhas">No lugar do título: as linhas depois da primeira.</param>
+    public static string Conversa(string conta, string pasta, string? titulo, DateTime quando, string? id = null,
+        params string[] linhas)
+    {
+        id ??= Guid.NewGuid().ToString();
+        var dir = Path.Combine(conta, "projects", SessoesDoClaude.Chave(pasta));
+        Directory.CreateDirectory(dir);
+        var arquivo = Path.Combine(dir, id + ".jsonl");
+        File.WriteAllLines(arquivo, new[]
+        {
+            """{"type":"user","cwd":""" + Json(pasta) + ""","gitBranch":"develop","message":"oi"}""",
+        }.Concat(titulo is null ? linhas : new[] { """{"type":"ai-title","aiTitle":""" + Json(titulo) + "}" }));
+        File.SetLastWriteTime(arquivo, quando);
+        return id;
+    }
+}
+
+/// <summary>
+/// As conversas do Claude como o cl (Modules\claude-sessoes.ps1) lê: título e branch pelo fim
+/// do arquivo, a pasta de origem pelo começo, as favoritas no estado-cl.json dele.
+/// </summary>
+public class SessoesTests : IDisposable
+{
+    private readonly string _raiz = Directory.CreateTempSubdirectory("gterm-cl-").FullName;
+    private string Conta => Path.Combine(_raiz, ".claude");
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_raiz, true); } catch (IOException) { }
+    }
+
+    [Fact]
+    public void ConversasComoOClLe()
+    {
+        var notas = @"D:\Projetos\DBISAM\Notas";
+        var agora = DateTime.Now;
+        string Conversa(string id, int minutos, params string[] linhas) =>
+            ContaDeTeste.Conversa(Conta, notas, null, agora.AddMinutes(-minutos), id, linhas);
+
+        // o título do usuário vence o gerado, e o último gerado vence o primeiro; o branch é o
+        // último, e HEAD (sem branch) não conta
+        Conversa("personalizada", 10,
+            """{"type":"ai-title","aiTitle":"Gerado"}""",
+            """{"type":"custom-title","customTitle":"Do usuário"}""",
+            """{"type":"ai-title","aiTitle":"Gerado depois"}""",
+            """{"type":"user","gitBranch":"HEAD"}""");
+        // aspas e acentos escapados, e quebra de linha vira espaço
+        Conversa("escapada", 20, """{"type":"ai-title","aiTitle":"Ajuste \"r\u00e1pido\"\nno boleto"}""");
+        // aberta e fechada sem conversa: o /resume esconde
+        Conversa("sem-conversa", 5);
+        // o título longe do fim: não está nos últimos 256 KB, está nos 4 MB
+        Conversa("grande", 30, """{"type":"ai-title","aiTitle":"Achada nos 4 MB"}""",
+            "{\"type\":\"assistant\",\"texto\":\"" + new string('x', 300 * 1024) + "\"}");
+        // a linha final pela metade (o Claude gravando): vale a anterior completa
+        Conversa("cortada", 40, """{"type":"last-prompt","lastPrompt":"antes"}""",
+            """{"type":"last-prompt","lastPrompt":"pela met""");
+
+        // aberta numa pasta e depois um cd: a origem é a que gera a chave da pasta
+        var outra = ContaDeTeste.Conversa(Conta, notas, null, agora.AddMinutes(-50), "outra-pasta",
+            """{"type":"user","cwd":"D:\\Projetos\\Outra"}""", """{"type":"last-prompt","lastPrompt":"continua"}""");
+        var arquivo = Path.Combine(Conta, "projects", SessoesDoClaude.Chave(notas), outra + ".jsonl");
+        File.WriteAllLines(arquivo, new[] { """{"type":"user","cwd":"D:\\Projetos\\Outra"}""" }.Concat(File.ReadAllLines(arquivo)));
+        File.SetLastWriteTime(arquivo, agora.AddMinutes(-50));
+
+        // um job em segundo plano: a pasta tem os 8 primeiros caracteres do id
+        Directory.CreateDirectory(Path.Combine(Conta, "jobs", "escapada"));
+        File.WriteAllText(Path.Combine(Conta, "jobs", "escapada", "state.json"), "{}");
+
+        var leitor = new SessoesDoClaude();
+        var lista = leitor.Listar(Conta);
+        Assert.Equal(new[] { "personalizada", "escapada", "grande", "cortada", "outra-pasta" }, lista.Select(s => s.Id));
+        Assert.Equal(new[] { "Do usuário", "Ajuste \"rápido\" no boleto", "Achada nos 4 MB", "antes", "continua" },
+            lista.Select(s => s.Titulo));
+        Assert.Equal("", lista[0].Branch);
+        Assert.Equal("develop", lista[1].Branch);
+        Assert.All(lista, s => Assert.Equal(notas, s.Pasta));
+        Assert.All(lista, s => Assert.Equal("D--Projetos-DBISAM-Notas", s.Chave));
+        Assert.True(lista[1].Bg);
+        Assert.False(lista[0].Bg);
+        Assert.All(lista, s => Assert.False(s.Aberta)); // nenhum claude.exe com elas
+
+        // só o arquivo que mudou é lido de novo
+        File.AppendAllLines(Path.Combine(Conta, "projects", "D--Projetos-DBISAM-Notas", "personalizada.jsonl"),
+            new[] { """{"type":"custom-title","customTitle":"Renomeada"}""" });
+        Assert.Equal("Renomeada", leitor.Listar(Conta).Single(s => s.Id == "personalizada").Titulo);
+
+        // aberta: o sessions\<pid>.json do Claude, com o processo vivo
+        Directory.CreateDirectory(Path.Combine(Conta, "sessions"));
+        File.WriteAllText(Path.Combine(Conta, "sessions", "4242.json"), """{"pid":4242,"sessionId":"escapada"}""");
+        File.WriteAllText(Path.Combine(Conta, "sessions", "4343.json"), """{"pid":4343,"sessionId":"grande"}""");
+        Assert.Equal(new Dictionary<string, int> { ["escapada"] = 4242 }, SessoesDoClaude.Abertas(Conta, pid => pid == 4242));
+
+        // a sessão que o cia retoma usa a mesma leitura: a mais nova com conversa
+        Assert.Equal("personalizada", Cia.UltimaSessao(notas, Conta)!.Id);
+        Assert.Equal("Renomeada", Cia.UltimaSessao(notas, Conta)!.Titulo);
+    }
+
+    /// <summary>Como o cl -f: a nova favorita entra na frente, e o resto do arquivo fica.</summary>
+    [Fact]
+    public void FavoritasSaoAsDoCl()
+    {
+        var arquivo = Path.Combine(_raiz, "estado-cl.json");
+        Assert.Empty(SessoesDoClaude.LerFavoritas(arquivo)!);
+
+        File.WriteAllText(arquivo, """{ "favoritas": "antiga", "outra": 1 }""");
+        Assert.True(SessoesDoClaude.TrocarFavorita(arquivo, "nova"));
+        Assert.Equal(new[] { "nova", "antiga" }, SessoesDoClaude.LerFavoritas(arquivo));
+        Assert.Contains("\"outra\": 1", File.ReadAllText(arquivo));
+
+        Assert.False(SessoesDoClaude.TrocarFavorita(arquivo, "antiga"));
+        Assert.Equal(new[] { "nova" }, SessoesDoClaude.LerFavoritas(arquivo));
+
+        // o cl gravando no mesmo instante: quem lê fica com o que já tinha
+        File.WriteAllText(arquivo, """{ "favoritas": [ "no""");
+        Assert.Null(SessoesDoClaude.LerFavoritas(arquivo));
+    }
+
+    [Fact]
+    public void QuandoTamanhoEDiaComoNoCl()
+    {
+        var agora = new DateTime(2026, 10, 28, 15, 0, 0);
+        Assert.Equal("há 40 min", SessoesDoClaude.Quando(agora.AddMinutes(-40), agora));
+        Assert.Equal("há 6 h", SessoesDoClaude.Quando(new DateTime(2026, 10, 28, 9, 0, 0), agora));
+        Assert.Equal("ontem 14:32", SessoesDoClaude.Quando(new DateTime(2026, 10, 27, 14, 32, 0), agora));
+        Assert.Equal("25/10 09:15", SessoesDoClaude.Quando(new DateTime(2026, 10, 25, 9, 15, 0), agora));
+        Assert.Equal("340 KB", SessoesDoClaude.Tamanho(340 * 1024));
+        Assert.Equal("23,4 MB", SessoesDoClaude.Tamanho((long)(23.4 * 1024 * 1024)));
+        Assert.Equal("1,8 GB", SessoesDoClaude.Tamanho((long)(1.8 * 1024 * 1024 * 1024)));
+        Assert.Equal("Hoje", SessoesDoClaude.Dia(agora.AddHours(-3), agora));
+        Assert.Equal("Ontem", SessoesDoClaude.Dia(new DateTime(2026, 10, 27, 23, 0, 0), agora));
+        Assert.Equal("Esta semana", SessoesDoClaude.Dia(new DateTime(2026, 10, 22, 8, 0, 0), agora));
+        Assert.Equal("Mais antigas", SessoesDoClaude.Dia(new DateTime(2026, 10, 21, 8, 0, 0), agora));
+        Assert.Equal(new Abertura("--resume 8a73b8c7-ba5f", "retomada", ""),
+            Cia.Decidir(Cia.ModoConversa + "8a73b8c7-ba5f", true, () => throw new InvalidOperationException()));
+    }
+}
+
 /// <summary>Tudo que grava o workspace fica nesta classe: dentro dela o xunit roda em série.</summary>
 public class JanelaTests : IDisposable
 {
@@ -588,6 +731,9 @@ public class JanelaTests : IDisposable
     private string Financeiro => Path.Combine(Bmsoft, "Financeiro");
     private string Notas => Path.Combine(Bmsoft, "Notas");
     private string PastaDoGTerm => Path.Combine(Particular, "GTerm");
+    private string ContaDoClaude => Path.Combine(_raiz, ".claude");
+    private string EstadoDoCl => Path.Combine(_raiz, "cia", "estado-cl.json");
+    private string Solto => Path.Combine(_raiz, "Solto");
 
     public JanelaTests() => File.Delete(WorkspaceStore.FilePath);
 
@@ -628,6 +774,8 @@ public class JanelaTests : IDisposable
         {
             Bases = new() { Bmsoft, Particular },
             EstadoDoCia = Estado,
+            EstadoDoCl = EstadoDoCl,
+            ContaDasSessoes = ContaDoClaude,
             Shell = "cmd",
             Claude = "cmd.exe /k echo",
             UltimaPasta = Financeiro,
@@ -667,9 +815,9 @@ public class JanelaTests : IDisposable
 
     private static ProjetoViewModel Projeto(MainViewModel vm, string nome) => vm.Projetos.Single(p => p.Nome == nome);
 
-    /// <summary>Os textos à vista no quadro do projeto parado.</summary>
+    /// <summary>Os textos à vista no quadro do projeto parado, ou no da conversa escolhida.</summary>
     private static List<string?> Quadro(Window janela) => janela.GetVisualDescendants().OfType<Border>()
-        .Single(b => b.Classes.Contains("quadro"))
+        .Single(b => b.Classes.Contains("quadro") && b.IsEffectivelyVisible)
         .GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
 
     [Fact]
@@ -865,6 +1013,108 @@ public class JanelaTests : IDisposable
         finally
         {
             vm.EncerrarTudo(); // sem terminal rodando a janela fecha sem perguntar
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// O modo Sessões é o cl com tela: as conversas de todas as pastas, as favoritas em cima e
+    /// as outras por dia. A pesquisa filtra pelo título e pelo projeto; escolher mostra o
+    /// quadro da conversa no lugar do terminal; retomar abre a aba do projeto com o --resume
+    /// dela, também de pasta fora das bases; e há o Claude sem conversa nenhuma.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task SessoesSaoOClComTela()
+    {
+        Montar();
+        Directory.CreateDirectory(Solto);
+        var boleto = ContaDeTeste.Conversa(ContaDoClaude, Notas, "Boleto do Sicoob", DateTime.Now.AddMinutes(-30));
+        var quadro = ContaDeTeste.Conversa(ContaDoClaude, PastaDoGTerm, "Quadro do cia", DateTime.Now.AddDays(-1));
+        var script = ContaDeTeste.Conversa(ContaDoClaude, Solto, "Script solto", DateTime.Now.AddDays(-3));
+        File.WriteAllText(EstadoDoCl, $$"""{ "favoritas": [ "{{quadro}}" ] }""");
+
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            vm.VerSessoesCommand.Execute(null);
+            Assert.True(await Esperar(() => vm.SessoesLidas));
+            Dispatcher.UIThread.RunJobs();
+
+            LinhaDaSessao Linha(string id) => vm.Linhas.OfType<LinhaDaSessao>().Single(l => l.Sessao.Id == id);
+            Assert.Equal(new[] { "Favoritas", "Hoje", "Esta semana" }, Titulos(vm));
+            Assert.Equal(new[] { quadro, boleto, script }, vm.Linhas.OfType<LinhaDaSessao>().Select(l => l.Sessao.Id));
+            Assert.StartsWith("Notas · há 3", Linha(boleto).Detalhe);
+            Assert.Equal("GTerm", Linha(quadro).Projeto);
+            Assert.Equal("Solto", Linha(script).Projeto);
+            Assert.Equal("Sessões", vm.MarcaDoFiltro);
+            Assert.Equal(3, janela.GetVisualDescendants().OfType<Border>().Count(b => b.Classes.Contains("sessao")));
+
+            // a estrela cheia fica à vista na favorita
+            var estrela = janela.GetVisualDescendants().OfType<Button>()
+                .Single(b => b.Classes.Contains("estrela") && b.DataContext is LinhaDaSessao l && l.Sessao.Id == quadro);
+            Assert.Contains("favorito", estrela.Classes);
+            Assert.Equal(1, estrela.Opacity);
+
+            // a pesquisa olha o título e o projeto
+            vm.Filtro = "solto";
+            Assert.Equal(new[] { script }, vm.Linhas.OfType<LinhaDaSessao>().Select(l => l.Sessao.Id));
+            vm.Filtro = "gterm";
+            Assert.Equal(new[] { quadro }, vm.Linhas.OfType<LinhaDaSessao>().Select(l => l.Sessao.Id));
+            vm.Filtro = "";
+
+            // escolher a conversa mostra o quadro dela no lugar do projeto parado
+            vm.LinhaSelecionada = Linha(boleto);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(Linha(boleto), vm.SessaoAVista);
+            Assert.True(vm.MostrarSessao);
+            Assert.False(vm.MostrarParado);
+            Assert.Null(vm.Aviso);
+            var textos = Quadro(janela);
+            Assert.Contains("develop", textos);
+            Assert.Contains(textos, t => t?.StartsWith("há 3") == true);
+            Assert.Contains(boleto, textos);
+            Foto(janela, "sessoes.png");
+
+            // favoritar entra na frente das favoritas do cl, e o Hoje fica vazio
+            Linha(boleto).FavoritarCommand.Execute(null);
+            Assert.Equal(new[] { boleto, quadro }, SessoesDoClaude.LerFavoritas(EstadoDoCl));
+            Assert.Equal(new[] { "Favoritas", "Esta semana" }, Titulos(vm));
+            Assert.Same(Linha(boleto), vm.LinhaSelecionada);
+
+            // retomar abre a aba do projeto com o --resume da conversa, e o terminal aparece
+            await Linha(boleto).RetomarCommand.ExecuteAsync(null);
+            Dispatcher.UIThread.RunJobs();
+            var notas = Projeto(vm, "Notas");
+            Assert.Same(notas, vm.Selecionado);
+            Assert.False(vm.MostrarSessao);
+            Assert.True(notas.AVista);
+            Assert.True(await Esperar(() => Tela(notas.Sessao!).Contains("--resume " + boleto)), Tela(notas.Sessao!));
+            Assert.Equal("retomada", Cia.LerEstado(Estado)!.Recentes[0].Modo);
+
+            // fora das bases a pasta vira um projeto avulso, com aba e sem linha na árvore
+            await Linha(script).RetomarCommand.ExecuteAsync(null);
+            var solto = vm.Abertos.Last();
+            Assert.Equal("Solto", solto.Nome);
+            Assert.True(await Esperar(() => Tela(solto.Sessao!).Contains("--resume " + script)), Tela(solto.Sessao!));
+
+            // o Claude sem conversa: limpo, na pasta pessoal, numa aba Claude
+            await vm.NovaConversaCommand.ExecuteAsync(null);
+            var claude = vm.Abertos.Last();
+            Assert.Equal("Claude", claude.Nome);
+            Assert.Equal(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), claude.Pasta);
+            Assert.Same(claude, vm.Selecionado);
+            Assert.Equal(new[] { "Notas", "Solto", "Claude" }, vm.Abertos.Select(p => p.Nome));
+
+            // de volta aos projetos, a árvore do cia
+            vm.VerProjetosCommand.Execute(null);
+            Assert.Equal(new[] { "Favoritos", "Recentes", "DBISAM", "Private" }, Titulos(vm));
+            Assert.Equal("Projetos", vm.MarcaDoFiltro);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
             janela.Close();
         }
     }

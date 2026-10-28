@@ -31,7 +31,8 @@ public partial class MainWindow : Window, IDialogService
         // trocar de projeto é para digitar: o teclado vai ao terminal que apareceu
         _vm.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(MainViewModel.Selecionado) or nameof(MainViewModel.Aviso) && !_pelasSetas)
+            if (e.PropertyName is nameof(MainViewModel.Selecionado) or nameof(MainViewModel.Aviso)
+                    or nameof(MainViewModel.SessaoAVista) && !_pelasSetas)
                 Dispatcher.UIThread.Post(Focar, DispatcherPriority.Background);
         };
         Opened += (_, _) =>
@@ -69,6 +70,11 @@ public partial class MainWindow : Window, IDialogService
                 l.Projeto.IniciarCommand.Execute(null);
                 e.Handled = true;
             }
+            else if (e.Key == Key.Enter && _vm.LinhaSelecionada is LinhaDaSessao s)
+            {
+                s.RetomarCommand.Execute(null);
+                e.Handled = true;
+            }
             // Alt+setas sobe e desce o favorito, como o arrastar
             else if (e.KeyModifiers == KeyModifiers.Alt && e.Key is Key.Up or Key.Down &&
                      _vm.LinhaSelecionada is LinhaDoProjeto { NosFavoritos: true } favorito)
@@ -83,6 +89,7 @@ public partial class MainWindow : Window, IDialogService
         lista.DoubleTapped += (_, e) =>
         {
             if ((e.Source as Control)?.DataContext is LinhaDoProjeto l) l.Projeto.IniciarCommand.Execute(null);
+            else if ((e.Source as Control)?.DataContext is LinhaDaSessao s) s.RetomarCommand.Execute(null);
         };
 
         // o filtro em cima da árvore: Enter vai ao primeiro que bate, Esc limpa, seta para

@@ -307,7 +307,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
 
     /// <summary>O clique na aba: traz o projeto para a frente.</summary>
-    [RelayCommand] private void Mostrar() => _main.Selecionado = this;
+    [RelayCommand] private void Mostrar() => _main.Ver(this);
 
     /// <summary>A cor da aba, escolhida no menu dela.</summary>
     [RelayCommand] private void EscolherCor(string hex) => _main.MudarCor(this, hex);
@@ -349,7 +349,13 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string? _aviso;
 
     /// <summary>O projeto à vista não tem terminal: no lugar dele, os jeitos de abrir o Claude.</summary>
-    public bool MostrarParado => Selecionado is { Sessao: null };
+    public bool MostrarParado => ProjetoAVista is { Sessao: null };
+
+    /// <summary>
+    /// O projeto cujo terminal (ou quadro) aparece: o selecionado, a não ser que uma conversa
+    /// do modo Sessões esteja à vista no lugar dele.
+    /// </summary>
+    private ProjetoViewModel? ProjetoAVista => SessaoAVista is null ? Selecionado : null;
 
     /// <summary>A escolhida na frente e, atrás, a lista padrão: é o que cobre fonte desinstalada.</summary>
     public string Fonte => _workspace.Fonte is { Length: > 0 } f ? f + "," + FontePadrao : FontePadrao;
@@ -364,21 +370,21 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool HaTerminalRodando => Projetos.Any(p => p.Vivo || p.AuxiliarSessao is { Encerrada: false });
 
-    public bool AuxiliarVisivel => Selecionado?.AuxiliarSessao is not null;
+    public bool AuxiliarVisivel => ProjetoAVista?.AuxiliarSessao is not null;
 
     /// <summary>O segundo terminal acompanha o do projeto: só existe com ele iniciado.</summary>
-    public bool PodeAuxiliar => Selecionado?.Sessao is not null;
+    public bool PodeAuxiliar => ProjetoAVista?.Sessao is not null;
 
     /// <summary>Há um script de painel nas preferências: o botão do painel aparece.</summary>
     public bool TemPainel => !string.IsNullOrWhiteSpace(_workspace.PainelComando);
 
-    public bool PainelVisivel => Selecionado?.PainelSessao is not null;
+    public bool PainelVisivel => ProjetoAVista?.PainelSessao is not null;
 
     /// <summary>Os projetos com o Claude aberto, na ordem em que foram abertos: as abas e o Ctrl+Tab.</summary>
     public ObservableCollection<ProjetoViewModel> Abertos { get; } = new();
 
     /// <summary>O projeto da aba da frente: a barra embaixo das abas tem os botões dele.</summary>
-    public ProjetoViewModel? AbaAtiva => Selecionado is { Sessao: not null } p ? p : null;
+    public ProjetoViewModel? AbaAtiva => ProjetoAVista is { Sessao: not null } p ? p : null;
 
     public bool TemAbaAtiva => AbaAtiva is not null;
 
@@ -393,9 +399,12 @@ public sealed partial class MainViewModel : ObservableObject
         _rodape = RodapePadrao;
         _releitura = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _releitura.Tick += (_, _) => Reler();
+        _releituraDasSessoes = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _releituraDasSessoes.Tick += (_, _) => _ = CarregarSessoesAsync();
 
         CarregarProjetos();
         CarregarEstado();
+        CarregarFavoritas();
         Remontar();
         Vigiar();
 
@@ -424,6 +433,17 @@ public sealed partial class MainViewModel : ObservableObject
     {
         // a lista solta a seleção quando a linha some (grupo recolhido): o projeto continua à vista
         if (value is LinhaDoProjeto l && l.Projeto != Selecionado) Selecionado = l.Projeto;
+        else if (value is LinhaDaSessao s) SessaoAVista = s;
+    }
+
+    /// <summary>
+    /// Traz o projeto para a frente: o terminal dele, ou o quadro, no lugar da conversa que
+    /// estivesse à vista. É o clique na aba, o Ctrl+Tab e o Ctrl+número.
+    /// </summary>
+    public void Ver(ProjetoViewModel p)
+    {
+        SessaoAVista = null;
+        Selecionado = p;
     }
 
     partial void OnFiltroChanged(string value) => Remontar();
@@ -513,10 +533,41 @@ public sealed partial class MainViewModel : ObservableObject
     private static readonly string[] CoresDasBases = { "#2F7BE8", "#8B5CF6", "#E07B00" };
 
     /// <summary>
-    /// Monta a árvore como o dashboard do cia: Favoritos, Recentes e uma pasta por base. Os
-    /// abertos não entram: o lugar deles são as abas. Com filtro, só os que batem.
+    /// Monta a árvore do modo à vista: a dos projetos ou a das conversas. Troca só o que
+    /// mudou: a lista mantém a rolagem e a linha escolhida.
     /// </summary>
     private void Remontar()
+    {
+        var novas = ModoSessoes ? LinhasDasSessoes() : LinhasDosProjetos();
+
+        for (var i = 0; i < novas.Count; i++)
+        {
+            if (i < Linhas.Count && ReferenceEquals(Linhas[i], novas[i])) continue;
+            var j = Linhas.IndexOf(novas[i]);
+            if (j > i) Linhas.Move(j, i);
+            else Linhas.Insert(i, novas[i]);
+        }
+        while (Linhas.Count > novas.Count) Linhas.RemoveAt(Linhas.Count - 1);
+
+        MarcarLinha();
+    }
+
+    /// <summary>O título do grupo, o mesmo a cada montagem, com a contagem e se está recolhido.</summary>
+    private GrupoDaArvore TituloDoGrupo(string id, string titulo, string cor, int contagem, bool sempreAberto = false)
+    {
+        var g = (GrupoDaArvore)(_cache.TryGetValue("g|" + id, out var achado)
+            ? achado
+            : _cache["g|" + id] = new GrupoDaArvore(this, id, titulo, cor));
+        g.Contagem = contagem;
+        g.Recolhido = !sempreAberto && EstaRecolhido(id);
+        return g;
+    }
+
+    /// <summary>
+    /// A árvore do dashboard do cia: Favoritos, Recentes e uma pasta por base. Os abertos não
+    /// entram: o lugar deles são as abas. Com filtro, só os que batem.
+    /// </summary>
+    private List<LinhaDaArvore> LinhasDosProjetos()
     {
         var novas = new List<LinhaDaArvore>();
         var agora = DateTime.Now;
@@ -525,11 +576,7 @@ public sealed partial class MainViewModel : ObservableObject
             bool sempreAberto = false)
         {
             var lista = itens.ToList();
-            var g = (GrupoDaArvore)(_cache.TryGetValue("g|" + id, out var achado)
-                ? achado
-                : _cache["g|" + id] = new GrupoDaArvore(this, id, titulo, cor));
-            g.Contagem = lista.Count;
-            g.Recolhido = !sempreAberto && EstaRecolhido(id);
+            var g = TituloDoGrupo(id, titulo, cor, lista.Count, sempreAberto);
             novas.Add(g);
             if (g.Recolhido) return;
 
@@ -576,18 +623,7 @@ public sealed partial class MainViewModel : ObservableObject
                     Projetos.Where(p => Mesma(p.Info.Base, b)).Select(p => (p, "")));
             }
         }
-
-        // troca só o que mudou: a lista mantém a rolagem e a linha escolhida
-        for (var i = 0; i < novas.Count; i++)
-        {
-            if (i < Linhas.Count && ReferenceEquals(Linhas[i], novas[i])) continue;
-            var j = Linhas.IndexOf(novas[i]);
-            if (j > i) Linhas.Move(j, i);
-            else Linhas.Insert(i, novas[i]);
-        }
-        while (Linhas.Count > novas.Count) Linhas.RemoveAt(Linhas.Count - 1);
-
-        MarcarLinha();
+        return novas;
     }
 
     private static string IdDaBase(string b) => "base:" + b.Trim().TrimEnd('\\', '/');
@@ -616,16 +652,27 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     private void MarcarLinha()
     {
+        // no modo Sessões a marca é da conversa à vista
+        if (ModoSessoes)
+        {
+            LinhaSelecionada = SessaoAVista is { } s && Linhas.Contains(s) ? s : null;
+            return;
+        }
+
         if (LinhaSelecionada is LinhaDoProjeto atual && atual.Projeto == Selecionado && Linhas.Contains(atual)) return;
         LinhaSelecionada = Selecionado is null
             ? null
             : Linhas.OfType<LinhaDoProjeto>().FirstOrDefault(l => l.Projeto == Selecionado);
     }
 
-    /// <summary>O Enter no filtro: vai para o primeiro projeto da lista.</summary>
+    /// <summary>O Enter no filtro: vai para o primeiro projeto (ou a primeira conversa) da lista.</summary>
     public void EscolherPrimeiro()
     {
-        if (Linhas.OfType<LinhaDoProjeto>().FirstOrDefault() is { } l) Selecionado = l.Projeto;
+        if (ModoSessoes)
+        {
+            if (Linhas.OfType<LinhaDaSessao>().FirstOrDefault() is { } s) SessaoAVista = s;
+        }
+        else if (Linhas.OfType<LinhaDoProjeto>().FirstOrDefault() is { } l) Selecionado = l.Projeto;
     }
 
     public void AlternarFavorito(ProjetoViewModel p)
@@ -720,9 +767,11 @@ public sealed partial class MainViewModel : ObservableObject
             }
         }
 
-        if (Path.GetDirectoryName(_workspace.EstadoDoCia) is { Length: > 0 } dir)
-            Novo(dir, Path.GetFileName(_workspace.EstadoDoCia),
-                NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size, projetos: false);
+        // o estado do cia e o do cl (as conversas favoritas): cada um grava o seu
+        foreach (var estado in new[] { _workspace.EstadoDoCia, _workspace.EstadoDoCl })
+            if (Path.GetDirectoryName(estado) is { Length: > 0 } dir)
+                Novo(dir, Path.GetFileName(estado),
+                    NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size, projetos: false);
         foreach (var b in _workspace.Bases.Where(b => !string.IsNullOrWhiteSpace(b)))
             Novo(b.Trim(), "*", NotifyFilters.DirectoryName, projetos: true);
     }
@@ -741,6 +790,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (_relerProjetos) CarregarProjetos();
         _relerProjetos = false;
         CarregarEstado();
+        CarregarFavoritas();
         Remontar();
         if (Projetos.Count == 0 || Selecionado is null) AtualizarAviso();
     }
@@ -779,7 +829,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (p.Sessao?.ChamaAtencao != true)
             p.PedeAtencao = false;
-        else if (_workspace.AvisarAtencao && !p.PedeAtencao && !(JanelaAtiva && Selecionado == p))
+        else if (_workspace.AvisarAtencao && !p.PedeAtencao && !(JanelaAtiva && ProjetoAVista == p))
         {
             p.PedeAtencao = true;
             PedirAtencao?.Invoke();
@@ -788,10 +838,10 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Titulo));
     }
 
-    // o projeto selecionado, com a janela na frente, está sendo visto
+    // o projeto à vista, com a janela na frente, está sendo visto
     private void Visto()
     {
-        if (!JanelaAtiva || Selecionado is not { PedeAtencao: true } p) return;
+        if (!JanelaAtiva || ProjetoAVista is not { PedeAtencao: true } p) return;
         p.PedeAtencao = false;
         OnPropertyChanged(nameof(Titulo));
     }
@@ -822,13 +872,17 @@ public sealed partial class MainViewModel : ObservableObject
 
     // ------------------------------------------------------------ terminais
 
-    /// <summary>Só o terminal e o painel do projeto selecionado ficam à vista, e a aba dele na frente.</summary>
+    /// <summary>
+    /// Só o terminal e o painel do projeto selecionado ficam à vista, e a aba dele na frente.
+    /// Com uma conversa do modo Sessões à vista, nenhum.
+    /// </summary>
     private void Mostrar()
     {
-        foreach (var p in Abertos) p.AVista = p == Selecionado;
-        foreach (var s in Sessoes) s.Ativa = s == Selecionado?.Sessao;
-        foreach (var s in Paineis) s.Ativa = s == Selecionado?.PainelSessao;
-        foreach (var s in Auxiliares) s.Ativa = s == Selecionado?.AuxiliarSessao;
+        var p = ProjetoAVista;
+        foreach (var aberto in Abertos) aberto.AVista = aberto == p;
+        foreach (var s in Sessoes) s.Ativa = s == p?.Sessao;
+        foreach (var s in Paineis) s.Ativa = s == p?.PainelSessao;
+        foreach (var s in Auxiliares) s.Ativa = s == p?.AuxiliarSessao;
         OnPropertyChanged(nameof(PainelVisivel));
         OnPropertyChanged(nameof(AuxiliarVisivel));
         OnPropertyChanged(nameof(PodeAuxiliar));
@@ -980,10 +1034,12 @@ public sealed partial class MainViewModel : ObservableObject
         Abertos.Remove(p);
         OnPropertyChanged(nameof(Titulo));
         OnPropertyChanged(nameof(MostrarParado));
+        if (ModoSessoes) _ = CarregarSessoesAsync(); // a conversa dele deixou de estar aberta
     }
 
     private void AtualizarAviso() => Aviso =
-        Projetos.Count == 0
+        SessaoAVista is not null ? null
+        : Projetos.Count == 0
             ? (_workspace.Bases.Count == 0
                 ? "Nenhuma pasta de projetos configurada."
                 : "Nenhum projeto nas pastas do cia: " + string.Join(", ", _workspace.Bases) + ".")
@@ -1051,7 +1107,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Ctrl+1 a Ctrl+9: o favorito naquela posição, como o [n] do cia.</summary>
     public void SelecionarPorNumero(int numero)
     {
-        if (_favoritos.ElementAtOrDefault(numero - 1) is { } p) Selecionado = p;
+        if (_favoritos.ElementAtOrDefault(numero - 1) is { } p) Ver(p);
     }
 
     /// <summary>Ctrl+Tab e Ctrl+Shift+Tab: dá a volta nas abas.</summary>
@@ -1059,10 +1115,10 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (Abertos.Count == 0) return;
 
-        var atual = Selecionado is null ? -1 : Abertos.IndexOf(Selecionado);
-        Selecionado = atual < 0
+        var atual = ProjetoAVista is null ? -1 : Abertos.IndexOf(ProjetoAVista);
+        Ver(atual < 0
             ? (passo > 0 ? Abertos[0] : Abertos[^1])
-            : Abertos[((atual + passo) % Abertos.Count + Abertos.Count) % Abertos.Count];
+            : Abertos[((atual + passo) % Abertos.Count + Abertos.Count) % Abertos.Count]);
     }
 
     /// <summary>
@@ -1080,17 +1136,22 @@ public sealed partial class MainViewModel : ObservableObject
     /// Abre o Claude no projeto, direto no terminal, como o cia abriria. Com um Claude já
     /// aberto ali, só depois de confirmar: ele é encerrado e outro sobe no lugar.
     /// </summary>
-    /// <param name="modo">-Novo, -Limpo, -Pr ou o número do pedido; null retoma a última sessão.</param>
-    public async Task AbrirAsync(ProjetoViewModel p, string? modo = null)
+    /// <param name="modo">
+    /// -Novo, -Limpo, -Pr, o número do pedido ou uma conversa (<see cref="Cia.ModoConversa"/>);
+    /// null retoma a última sessão.
+    /// </param>
+    /// <returns>Falso quando o usuário desistiu, ou outro comando já cuidou do terminal.</returns>
+    public async Task<bool> AbrirAsync(ProjetoViewModel p, string? modo = null)
     {
         if (p.Vivo && !await _dialogos.ConfirmAsync("Abrir o Claude de outro jeito",
                 $"O Claude de “{p.Nome}” está aberto. Ele sai pelo /exit e é aberto de novo{Descrever(modo)}, " +
                 "e o que estiver rodando nele será interrompido."))
-            return;
+            return false;
 
-        if (!await SairDoClaudeAsync(p)) return;
+        if (!await SairDoClaudeAsync(p)) return false;
         Fechar(p);
         Iniciar(p, modo);
+        return true;
     }
 
     /// <summary>O tempo que o Claude tem para sair pelo /exit antes de ser encerrado à força.</summary>
@@ -1115,6 +1176,7 @@ public sealed partial class MainViewModel : ObservableObject
         "-Novo" => " numa sessão nova",
         "-Limpo" => " sem skill",
         "-Pr" => " no pull request",
+        _ when modo.StartsWith(Cia.ModoConversa, StringComparison.Ordinal) => " na conversa escolhida",
         _ => " no pedido " + modo,
     };
 
@@ -1135,7 +1197,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void Iniciar(ProjetoViewModel p, string? modo)
     {
-        Selecionado = p;
+        Ver(p);
         Abrir(p, modo);
         Mostrar();
         OnPropertyChanged(nameof(MostrarParado));
@@ -1165,6 +1227,7 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var v in _vigias) v.Dispose();
         _vigias.Clear();
         _releitura.Stop();
+        _releituraDasSessoes.Stop();
     }
 
     // ------------------------------------------------------------ atualização

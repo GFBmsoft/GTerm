@@ -32,8 +32,9 @@ dotnet publish app -c Release -r win-x64 --self-contained false -o dist   # gera
 `GTERM_HOME` aponta o workspace para outra pasta — use ao rodar o app em teste, para não
 escrever no `%APPDATA%\GTerm\workspace.json` real. Nos testes quem trava isso é
 `tests/IsolamentoDoWorkspace.cs` (um `ModuleInitializer`); não remova. Ele também trava o
-`Cia.PastaDeTeste`: sem isso um `Workspace` novo apontaria para as bases e o `estado.json`
-reais, e favoritar num teste mexeria nos favoritos do usuário.
+`Cia.PastaDeTeste`: sem isso um `Workspace` novo apontaria para as bases, o `estado.json`,
+o `estado-cl.json` e as conversas do `~\.claude` reais, e favoritar num teste mexeria nos
+favoritos do usuário.
 
 `GTERM_SHOTS=<pasta>` faz o teste da janela gravar `janela.png`, para conferir o visual.
 
@@ -88,6 +89,18 @@ e por isso confirma antes.
   Ctrl+1..9 são os favoritos (o `[n]` do cia). A ordem deles muda arrastando a linha nos
   Favoritos (`MainWindow.ArrastarFavoritos`: a linha acompanha o mouse e a ordem só é
   gravada ao soltar), com Alt+↑/↓ ou pelo menu. Os abertos não entram na árvore.
+- **Sessões** — o `cl` do perfil (`Modules\claude-sessoes.ps1`, as conversas do `/resume`)
+  com tela: as pílulas Projetos/Sessões em cima da árvore trocam o que ela mostra
+  (`MainViewModel.ModoSessoes`, em `ViewModels/Sessoes.cs`). As conversas de todas as
+  pastas, as favoritas em cima (o `estado-cl.json` do cl, `Workspace.EstadoDoCl`) e as
+  outras por dia, 30 sem pesquisa (o `-Max` do cl); a pesquisa filtra pelo título e pelo
+  projeto. `SessoesDoClaude` lê como o cl: o título e o branch só pelo fim do .jsonl (há
+  transcript de GB), a pasta de origem pelo começo, aberta pelo `sessions\<pid>.json` e
+  `bg` pelo `jobs\`. Escolher mostra o quadro da conversa no lugar do terminal
+  (`SessaoAVista`); retomar abre a aba do projeto com `--resume <id>`
+  (`Cia.ModoConversa`), e pasta fora das bases vira projeto avulso, com aba e sem linha na
+  árvore. O + é o Claude sem conversa nenhuma, na pasta pessoal (aba "Claude"). **Mudou
+  lá, muda aqui.**
 - **Projeto parado** — no lugar do terminal, o nome, a pasta e o tipo, o quadro do
   dashboard do cia (git, CLAUDE.md, a sessão que o Enter retoma e a última abertura, lidos
   em `MainViewModel.CarregarQuadroAsync` a cada escolha; o git por `Cia.Git`, sem travar o

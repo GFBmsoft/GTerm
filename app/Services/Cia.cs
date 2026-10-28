@@ -69,6 +69,12 @@ public static class Cia
         ? Path.Combine(teste, "estado.json")
         : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Scripts", "cia", "estado.json");
 
+    /// <summary>As favoritas do cl ($global:ClFavArq), ao lado do estado do cia.</summary>
+    public static string EstadoDoClPadrao() => Path.Combine(Path.GetDirectoryName(EstadoPadrao())!, "estado-cl.json");
+
+    /// <summary>Vazia é a conta padrão; nos testes, uma pasta sem conversa nenhuma.</summary>
+    public static string ContaDasSessoesPadrao() => PastaDeTeste is { } teste ? Path.Combine(teste, ".claude") : "";
+
     /// <summary>
     /// As subpastas de cada base, na ordem das bases e por nome dentro de cada uma, como no
     /// dashboard do cia. Pasta oculta (.git, .vs) não é projeto; base que não existe nesta
@@ -218,12 +224,12 @@ public static class Cia
     }
 
     // arquivo que não se lê não é sobrescrito: a exceção sobe e o resto do estado fica
-    private static JsonObject Abrir(string arquivo) => File.Exists(arquivo)
+    internal static JsonObject Abrir(string arquivo) => File.Exists(arquivo)
         ? JsonNode.Parse(File.ReadAllText(arquivo)) as JsonObject ?? new JsonObject()
         : new JsonObject();
 
     // em .tmp e renomeia, como o workspace: o cia nunca lê um arquivo pela metade
-    private static void Gravar(string arquivo, JsonObject raiz)
+    internal static void Gravar(string arquivo, JsonObject raiz)
     {
         if (Path.GetDirectoryName(arquivo) is { Length: > 0 } pasta) Directory.CreateDirectory(pasta);
         var tmp = arquivo + ".tmp";
@@ -237,20 +243,21 @@ public static class Cia
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    private static IEnumerable<JsonNode?> Itens(JsonNode? n) => n switch
+    internal static IEnumerable<JsonNode?> Itens(JsonNode? n) => n switch
     {
         JsonArray lista => lista,
         null => Array.Empty<JsonNode?>(),
         _ => new[] { n }, // o ConvertTo-Json do PowerShell grava lista de um item só como o item
     };
 
-    private static string Texto(JsonNode? n) => n is JsonValue v
+    internal static string Texto(JsonNode? n) => n is JsonValue v
         ? (v.TryGetValue<string>(out var s) ? s : v.ToJsonString()).Trim()
         : "";
 
     /// <summary>
     /// A sessão que o cia retoma (Get-UltimaSessao do cia-dash): das dez mais recentes, a
     /// primeira que teve conversa. Aberta e fechada sem nada (sem título nem prompt) não conta.
+    /// O título vem do fim do arquivo, como o cl lê, e só sem ele ali o arquivo é lido inteiro.
     /// </summary>
     /// <param name="pastaDaConta">A pasta de configuração do Claude (~\.claude).</param>
     public static UltimaSessao? UltimaSessao(string pasta, string pastaDaConta)
@@ -272,35 +279,17 @@ public static class Cia
 
         foreach (var f in arquivos)
         {
-            string? personalizado = null, gerado = null, pedido = null;
+            string? titulo;
             try
             {
-                // a sessão em uso está sendo escrita pelo Claude neste momento
-                using var fluxo = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using var leitor = new StreamReader(fluxo);
-                while (leitor.ReadLine() is { } linha)
-                {
-                    if (!linha.Contains("\"type\":\"custom-title\"") && !linha.Contains("\"type\":\"ai-title\"") &&
-                        !linha.Contains("\"type\":\"last-prompt\"")) continue;
-                    try
-                    {
-                        var n = JsonNode.Parse(linha);
-                        if (Texto(n?["customTitle"]) is { Length: > 0 } c) personalizado = c;
-                        if (Texto(n?["aiTitle"]) is { Length: > 0 } a) gerado = a;
-                        if (Texto(n?["lastPrompt"]) is { Length: > 0 } p) pedido = p;
-                    }
-                    catch (JsonException)
-                    {
-                        // linha cortada no fim do arquivo: o Claude ainda está escrevendo
-                    }
-                }
+                titulo = SessoesDoClaude.Titulo(f.FullName, f.Length, completo: true).Titulo;
             }
             catch (IOException)
             {
                 continue;
             }
 
-            if ((personalizado ?? gerado ?? pedido) is { } titulo)
+            if (titulo is { Length: > 0 })
                 return new UltimaSessao(Path.GetFileNameWithoutExtension(f.Name), f.LastWriteTime,
                     (long)Math.Round(f.Length / 1024d), titulo);
         }
@@ -390,10 +379,18 @@ public static class Cia
     /// na skill: /delphi-writer na base da BMSoft, /retomar nas outras, /pedido, /delphi-pr,
     /// ou nenhuma. Mudou lá, muda aqui.
     /// </summary>
-    /// <param name="modo">-Novo, -Limpo, -Pr, o número de um pedido, ou null.</param>
+    /// <param name="modo">
+    /// -Novo, -Limpo, -Pr, o número de um pedido, <see cref="ModoConversa"/> com o id de uma
+    /// conversa, ou null.
+    /// </param>
     /// <param name="ultimaSessao">Só é chamada quando o modo retoma: os .jsonl são grandes.</param>
     public static Abertura Decidir(string? modo, bool daBmsoft, Func<UltimaSessao?> ultimaSessao)
     {
+        // a conversa escolhida no modo Sessões, como o cl <n>: o --resume dela, sem /compact
+        if (modo is not null && modo.StartsWith(ModoConversa, StringComparison.Ordinal) &&
+            modo[ModoConversa.Length..] is { Length: > 0 } id && id.All(c => char.IsAsciiHexDigit(c) || c == '-'))
+            return new Abertura("--resume " + id, "retomada", "");
+
         var limpo = modo == "-Limpo";
         var pr = modo == "-Pr";
         var pedido = modo is { Length: > 0 } m && m.All(char.IsAsciiDigit) ? m : "";
@@ -412,6 +409,9 @@ public static class Cia
         var gravado = limpo ? "limpo" : pr ? "pr" : sessao is not null ? "retomada" : daBmsoft ? "writer" : "memória";
         return new Abertura(argumentos, gravado, pedido);
     }
+
+    /// <summary>O começo do modo que abre uma conversa escolhida; o resto é o id dela.</summary>
+    public const string ModoConversa = "conversa:";
 
     /// <summary>
     /// O claude.exe: o do PATH, senão o do instalador nativo (%USERPROFILE%\.local\bin).

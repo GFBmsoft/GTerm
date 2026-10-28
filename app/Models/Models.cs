@@ -52,6 +52,15 @@ public sealed class Workspace
     /// <summary>Favoritos e recentes. É o arquivo do dashboard do cia: os dois mostram o mesmo.</summary>
     public string EstadoDoCia { get; set; } = Cia.EstadoPadrao();
 
+    /// <summary>As conversas favoritas. É o arquivo do cl (Modules\claude-sessoes.ps1): os dois mostram as mesmas.</summary>
+    public string EstadoDoCl { get; set; } = Cia.EstadoDoClPadrao();
+
+    /// <summary>
+    /// A conta do Claude de onde vêm as conversas do modo Sessões (projects, sessions, jobs);
+    /// vazia é a padrão, ~\.claude.
+    /// </summary>
+    public string ContaDasSessoes { get; set; } = Cia.ContaDasSessoesPadrao();
+
     /// <summary>
     /// Como o Claude Code é chamado no terminal do projeto, sem shell. Vazio acha o
     /// claude.exe sozinho; os testes põem um eco no lugar.

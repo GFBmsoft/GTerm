@@ -75,6 +75,13 @@
       <Setter Property="CornerRadius" Value="5" />
       <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!-- a conversa tem duas linhas: o título e, embaixo, de onde e quando -->
+    <Style Selector="Border.linha.sessao">
+      <Setter Property="Height" Value="38" />
+    </Style>
+    <Style Selector="Ellipse.estado.aberta">
+      <Setter Property="Fill" Value="{DynamicResource Accent}" />
+    </Style>
     <Style Selector="ListBoxItem:pointerover Border.linha">
       <Setter Property="Background" Value="{DynamicResource BgHover}" />
     </Style>
@@ -203,13 +210,36 @@
        pesquisa fica na mesma altura do cartão do terminal -->
   <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,*">
 
+    <!-- na faixa das abas, em cima da árvore: os projetos do cia ou as conversas do Claude
+         (o cl), e no modo das conversas o Claude sem nenhuma delas -->
+    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="4,6,8,6">
+      <Button Classes="pilula" Classes.ligado="{Binding !ModoSessoes}" Command="{Binding VerProjetosCommand}"
+              ToolTip.Tip="Os projetos das pastas do cia, como no dashboard dele">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Classes="glifo" Text="&#xE8B7;" FontSize="12" />
+          <TextBlock Text="Projetos" />
+        </StackPanel>
+      </Button>
+      <Button Classes="pilula" Classes.ligado="{Binding ModoSessoes}" Command="{Binding VerSessoesCommand}"
+              ToolTip.Tip="As conversas do Claude de todas as pastas, como o cl: retomar, favoritar e procurar pelo título">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Classes="glifo" Text="&#xE8BD;" FontSize="12" />
+          <TextBlock Text="Sessões" />
+        </StackPanel>
+      </Button>
+      <Button Classes="pilula" Command="{Binding NovaConversaCommand}" IsVisible="{Binding ModoSessoes}" Padding="7,0"
+              ToolTip.Tip="Claude sem nenhuma das conversas: limpo, sem skill, na sua pasta pessoal, numa aba Claude">
+        <TextBlock Classes="glifo" Text="&#xE710;" FontSize="12" />
+      </Button>
+    </StackPanel>
+
     <!-- árvore dos projetos do cia, sem botão de fechar. Encerrar só pelo menu de contexto,
          e sempre com confirmação -->
     <Border Grid.Row="1" Grid.Column="0">
       <Grid RowDefinitions="Auto,*,Auto">
 
-        <TextBox Grid.Row="0" x:Name="CaixaDoFiltro" Text="{Binding Filtro}" Watermark="Projetos" Margin="10,0,8,4"
-                 ToolTip.Tip="Filtra os projetos pelo nome (Ctrl+Shift+P). Enter vai ao primeiro, Esc limpa" />
+        <TextBox Grid.Row="0" x:Name="CaixaDoFiltro" Text="{Binding Filtro}" Watermark="{Binding MarcaDoFiltro}" Margin="10,0,8,4"
+                 ToolTip.Tip="Filtra a lista (Ctrl+Shift+P): os projetos pelo nome, as conversas pelo título ou pelo projeto. Enter vai ao primeiro, Esc limpa" />
 
         <ListBox Grid.Row="1" x:Name="Lista" ItemsSource="{Binding Linhas}"
                  SelectedItem="{Binding LinhaSelecionada}">
@@ -278,6 +308,28 @@
                   <Ellipse Grid.Column="5" Classes="estado" IsVisible="{Binding Projeto.Vivo}"
                            Classes.rodando="{Binding Projeto.Rodando}" Classes.aguardando="{Binding Projeto.Aguardando}"
                            Classes.concluido="{Binding Projeto.Concluido}" Classes.erro="{Binding Projeto.Erro}" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+
+            <!-- uma conversa do Claude, como uma linha do cl: o título, e embaixo o projeto e
+                 quando. A estrela e o ▶ como nos projetos; o ponto azul é a conversa aberta -->
+            <DataTemplate DataType="vm:LinhaDaSessao">
+              <Border Classes="linha sessao" ToolTip.Tip="{Binding Dica}">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="16,0,0,0">
+                  <TextBlock Grid.Column="0" Classes="nerd" Text="{Binding Icone}" Foreground="{Binding CorDoIcone}"
+                             FontSize="13" Width="16" Margin="0,0,7,0" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1" Margin="0,0,6,0">
+                    <TextBlock Text="{Binding Titulo}" FontSize="12" />
+                    <TextBlock Text="{Binding Detalhe}" Classes="faint" FontSize="10.5" />
+                  </StackPanel>
+                  <Button Grid.Column="2" Classes="tiny simbolo acao estrela" Classes.favorito="{Binding Favorita}"
+                          Content="{Binding GlifoDaEstrela}" Command="{Binding FavoritarCommand}"
+                          ToolTip.Tip="{Binding RotuloDaEstrela}" />
+                  <Button Grid.Column="3" Classes="tiny simbolo acao" Content="&#xE768;" Margin="0,0,2,0"
+                          Command="{Binding RetomarCommand}" ToolTip.Tip="{Binding RotuloDeRetomar}" />
+                  <Ellipse Grid.Column="4" Classes="estado aberta" IsVisible="{Binding Aberta}"
+                           ToolTip.Tip="{Binding TextoDaAbertura}" />
                 </Grid>
               </Border>
             </DataTemplate>
@@ -616,6 +668,77 @@
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="glifo" Text="&#xE894;" />
                   <TextBlock Text="Sem skill" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </StackPanel>
+
+          <!-- a conversa escolhida no modo Sessões, no mesmo quadro do projeto parado: o que o
+               cl mostra numa linha, e retomar ou favoritar -->
+          <StackPanel Spacing="10" IsVisible="{Binding MostrarSessao}">
+            <StackPanel Spacing="3" Margin="0,0,0,4">
+              <TextBlock Text="{Binding SessaoAVista.Titulo}" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center"
+                         TextAlignment="Center" TextWrapping="Wrap" MaxLines="2" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                  <TextBlock Classes="nerd" Text="{Binding SessaoAVista.Icone}" Foreground="{Binding SessaoAVista.CorDoIcone}"
+                             FontSize="11" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding SessaoAVista.Projeto}" Foreground="{Binding SessaoAVista.CorDoIcone}" FontSize="11" />
+                </StackPanel>
+                <TextBlock Text="{Binding SessaoAVista.Sessao.Pasta}" Classes="faint" FontSize="11" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </StackPanel>
+
+            <Border Classes="quadro" MinWidth="360" MaxWidth="460" Margin="0,0,0,6">
+              <StackPanel Spacing="4">
+                <Grid ColumnDefinitions="22,*" IsVisible="{Binding SessaoAVista.TemBranch}">
+                  <TextBlock Classes="nerd" Text="&#xE725;" Foreground="{DynamicResource Purple}" />
+                  <TextBlock Grid.Column="1" Text="{Binding SessaoAVista.Sessao.Branch}" />
+                </Grid>
+                <Grid ColumnDefinitions="22,Auto,*">
+                  <TextBlock Classes="nerd" Text="&#xF120;" Foreground="{DynamicResource Accent}" />
+                  <TextBlock Grid.Column="1" Text="{Binding SessaoAVista.Quando}" />
+                  <TextBlock Grid.Column="2" Text="{Binding SessaoAVista.Tamanho}" Classes="faint" Margin="10,0,0,0" />
+                </Grid>
+                <Grid ColumnDefinitions="22,*" IsVisible="{Binding SessaoAVista.Aberta}">
+                  <TextBlock Text="●" Foreground="{DynamicResource Accent}" />
+                  <TextBlock Grid.Column="1" Text="{Binding SessaoAVista.TextoDaAbertura}" Foreground="{DynamicResource Accent}" />
+                </Grid>
+                <Grid ColumnDefinitions="22,*" IsVisible="{Binding SessaoAVista.Sessao.Bg}">
+                  <TextBlock Classes="glifo" Text="&#xE823;" FontSize="11" Foreground="{DynamicResource Purple}" />
+                  <TextBlock Grid.Column="1" Text="com um job em segundo plano" Foreground="{DynamicResource Purple}" />
+                </Grid>
+                <Grid ColumnDefinitions="22,*">
+                  <TextBlock Classes="nerd faint" Text="&#xF292;" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding SessaoAVista.Sessao.Id}" Classes="faint" FontSize="11.5"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextFaint}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Button Classes="primary" HorizontalAlignment="Center" Padding="16,6"
+                    Command="{Binding SessaoAVista.RetomarCommand}"
+                    ToolTip.Tip="Abre o Claude na pasta da conversa, na aba do projeto, com o --resume dela, como o cl">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="glifo" Text="&#xE768;" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding SessaoAVista.RotuloDeRetomar}" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+              <Button Classes="colorida" Command="{Binding SessaoAVista.FavoritarCommand}"
+                      Foreground="{DynamicResource Yellow}" Background="#24B08500" BorderBrush="#66B08500"
+                      ToolTip.Tip="As favoritas ficam em cima, em qualquer pasta, e são as mesmas do cl">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="{Binding SessaoAVista.GlifoDaEstrela}" />
+                  <TextBlock Text="{Binding SessaoAVista.RotuloDaEstrela}" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding NovaConversaCommand}"
+                      Foreground="{DynamicResource Accent}" Background="#242F7BE8" BorderBrush="#662F7BE8"
+                      ToolTip.Tip="Claude sem nenhuma das conversas: limpo, sem skill, na sua pasta pessoal, numa aba Claude">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE710;" />
+                  <TextBlock Text="Claude sem conversa" />
                 </StackPanel>
               </Button>
             </StackPanel>

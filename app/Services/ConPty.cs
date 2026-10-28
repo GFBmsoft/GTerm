@@ -27,10 +27,14 @@ public sealed class ConPty : IDisposable
     /// <summary>Disparado (fora da thread de UI) quando o processo termina.</summary>
     public event Action? Encerrou;
 
-    private ConPty(IntPtr hpc, IntPtr processo, FileStream entrada, FileStream saida)
+    /// <summary>O processo que roda no pseudoconsole (o claude.exe, nos terminais dos projetos).</summary>
+    public int Pid { get; }
+
+    private ConPty(IntPtr hpc, IntPtr processo, int pid, FileStream entrada, FileStream saida)
     {
         _hpc = hpc;
         _processo = processo;
+        Pid = pid;
         _entrada = entrada;
         Saida = saida;
 
@@ -84,7 +88,7 @@ public sealed class ConPty : IDisposable
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Não foi possível iniciar " + linhaDeComando);
 
             CloseHandle(pi.hThread);
-            return new ConPty(hpc, pi.hProcess,
+            return new ConPty(hpc, pi.hProcess, pi.dwProcessId,
                               new FileStream(entradaEscrita, FileAccess.Write, 1),
                               new FileStream(saidaLeitura, FileAccess.Read, 1));
         }

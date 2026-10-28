@@ -1,3 +1,10 @@
+## 1.0.0.12 — 28/10/2026
+- **Sessões**: o cl agora está no GTerm. Na pílula Sessões, em cima da barra lateral, aparecem as conversas do Claude de todas as pastas: as favoritas em cima e as outras por dia (Hoje, Ontem, Esta semana, Mais antigas). A pesquisa procura pelo título ou pelo projeto.
+- Clique numa conversa para ver o branch, quando foi, o tamanho e se está aberta. Retomar (▶, Enter ou duplo clique) abre a conversa na aba do projeto dela, como o cl com o número. Se ela já está numa aba, o GTerm só vai para a aba. Se está aberta em outro terminal, ele pergunta antes.
+- A estrela favorita a conversa. As favoritas são as mesmas do cl: favoritar num lado aparece no outro.
+- O + ao lado das pílulas abre o Claude sem nenhuma conversa, na sua pasta pessoal, numa aba Claude.
+- Escolher um projeto com uma sessão muito grande ficou bem mais rápido: o GTerm lê só o fim do arquivo para saber o que vai retomar.
+
 ## 1.0.0.11 — 28/10/2026
 - A pesquisa de projetos começa na mesma altura do quadro do terminal, e a barra lateral e o terminal não descem mais quando a primeira aba abre.
 - A engrenagem das Preferências foi para o rodapé da barra lateral, ao lado da versão, no azul do ícone do GTerm. A pesquisa ficou com a largura toda.
