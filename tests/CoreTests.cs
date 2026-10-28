@@ -741,6 +741,12 @@ public class JanelaTests : IDisposable
             Assert.DoesNotContain("limpo", quadro);
             Assert.False(financeiro.TemSessao);
             Assert.False(financeiro.TemAbertura);
+
+            // a pesquisa começa na altura do cartão do terminal; os outros jeitos de abrir são pílulas
+            double Topo(Visual v) => v.TranslatePoint(default, janela)!.Value.Y;
+            Assert.Equal(Topo(janela.FindControl<Border>("Cartao")!), Topo(janela.FindControl<TextBox>("CaixaDoFiltro")!));
+            Assert.Equal(4, janela.GetVisualDescendants().OfType<Button>()
+                .Count(b => b.Classes.Contains("colorida") && b.IsEffectivelyVisible));
             Foto(janela, "arvore.png");
 
             // o recente mostra quando e o pedido; a base aberta mostra os projetos dela
@@ -788,6 +794,10 @@ public class JanelaTests : IDisposable
             Assert.Equal(new[] { "Favoritos", "Recentes", "DBISAM", "Private" }, Titulos(vm));
             Assert.Single(janela.GetVisualDescendants().OfType<Button>(), b => b.Classes.Contains("aba"));
             Assert.Single(janela.GetVisualDescendants().OfType<TerminalControl>());
+
+            // a primeira aba não muda a altura da faixa: a pesquisa fica onde estava
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Topo(janela.FindControl<Border>("BarraDaAba")!), Topo(janela.FindControl<TextBox>("CaixaDoFiltro")!));
 
             // o Claude sobe direto, sem shell, com o que o cia escolheria (sem sessão: a skill),
             // e o projeto vai para a frente dos recentes do cia

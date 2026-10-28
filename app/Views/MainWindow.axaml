@@ -43,6 +43,9 @@
     <!-- abas dos abertos: a da frente ganha fundo e contorno na cor do projeto (no Border de
          dentro); as outras ficam só com o ponto da cor e o nome apagado -->
     <Style Selector="Button.aba">
+      <!-- a altura da pílula: com os 28 do botão comum, a faixa das abas crescia ao abrir a
+           primeira, e a árvore e o terminal desciam junto -->
+      <Setter Property="Height" Value="24" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
@@ -136,6 +139,37 @@
       <Setter Property="Foreground" Value="{DynamicResource Text}" />
     </Style>
 
+    <!-- pílula colorida, como as do GTest (Abrir registro, Evidências): a cor do texto, o
+         fundo diluído e o contorno vêm no próprio botão; com o mouse em cima o fundo pega o
+         tom do contorno, e o texto continua na cor -->
+    <Style Selector="Button.colorida">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="10,0,11,0" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.colorida:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].BorderBrush}" />
+      <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+    </Style>
+    <Style Selector="Button.colorida TextBlock">
+      <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.colorida TextBlock.glifo">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <!-- a engrenagem das preferências, no rodapé: no azul do ícone, também com o mouse em cima -->
+    <Style Selector="Button.config">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+      <Setter Property="Margin" Value="2,0,0,0" />
+    </Style>
+    <Style Selector="Button.config:pointerover /template/ ContentPresenter">
+      <Setter Property="TextBlock.Foreground" Value="{DynamicResource Accent}" />
+    </Style>
+
     <Style Selector="TextBlock.glifo">
       <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
     </Style>
@@ -165,20 +199,17 @@
     </Style>
   </Window.Styles>
 
-  <Grid ColumnDefinitions="240,*">
+  <!-- a faixa de cima é a das abas; embaixo dela começam a árvore e o terminal, e a
+       pesquisa fica na mesma altura do cartão do terminal -->
+  <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,*">
 
     <!-- árvore dos projetos do cia, sem botão de fechar. Encerrar só pelo menu de contexto,
          e sempre com confirmação -->
-    <Border Grid.Column="0">
+    <Border Grid.Row="1" Grid.Column="0">
       <Grid RowDefinitions="Auto,*,Auto">
 
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="10,8,4,4">
-          <TextBox Grid.Column="0" x:Name="CaixaDoFiltro" Text="{Binding Filtro}" Watermark="Projetos"
-                   ToolTip.Tip="Filtra os projetos pelo nome (Ctrl+Shift+P). Enter vai ao primeiro, Esc limpa" />
-          <Button Grid.Column="1" Classes="tiny simbolo" Content="&#xE713;" Margin="4,0,0,0"
-                  Command="{Binding AbrirPreferenciasCommand}"
-                  ToolTip.Tip="Preferências: fonte e tamanho do terminal, contas do Claude" />
-        </Grid>
+        <TextBox Grid.Row="0" x:Name="CaixaDoFiltro" Text="{Binding Filtro}" Watermark="Projetos" Margin="10,0,8,4"
+                 ToolTip.Tip="Filtra os projetos pelo nome (Ctrl+Shift+P). Enter vai ao primeiro, Esc limpa" />
 
         <ListBox Grid.Row="1" x:Name="Lista" ItemsSource="{Binding Linhas}"
                  SelectedItem="{Binding LinhaSelecionada}">
@@ -253,68 +284,72 @@
           </ListBox.DataTemplates>
         </ListBox>
 
-        <!-- a versão em uso; vira o convite quando há uma mais nova. Clicar procura ou instala -->
-        <Button Grid.Row="2" Classes="tiny rodape" Classes.destaque="{Binding TemAtualizacao}"
-                Content="{Binding Rodape}" Command="{Binding AtualizacaoCommand}"
-                HorizontalAlignment="Left" Margin="6,2,6,7" MaxWidth="228"
-                ToolTip.Tip="Procurar atualização" />
+        <!-- a versão em uso, que vira o convite quando há uma mais nova (clicar procura ou
+             instala), e ao lado dela as preferências, no azul do ícone do app -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="6,2,6,7">
+          <Button Classes="tiny rodape" Classes.destaque="{Binding TemAtualizacao}"
+                  Content="{Binding Rodape}" Command="{Binding AtualizacaoCommand}" MaxWidth="200"
+                  ToolTip.Tip="Procurar atualização" />
+          <Button Classes="tiny simbolo config" Content="&#xE713;" Command="{Binding AbrirPreferenciasCommand}"
+                  ToolTip.Tip="Preferências: fonte e tamanho do terminal, contas do Claude" />
+        </StackPanel>
       </Grid>
     </Border>
 
-    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+    <!-- uma aba por projeto com o Claude aberto, na ordem em que foram abertos (Ctrl+Tab
+         passa por elas). Sem botão de fechar: encerrar só pela barra embaixo, e com
+         confirmação -->
+    <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" Margin="0,6,10,6" MinHeight="24">
+      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <ItemsControl x:Name="Abas" ItemsSource="{Binding Abertos}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Button Classes="aba" Command="{Binding MostrarCommand}" ToolTip.Tip="{Binding Pasta}">
+                <Border CornerRadius="12" Height="24" Padding="10,0" BorderThickness="1"
+                        Background="{Binding FundoDaAba}" BorderBrush="{Binding BordaDaAba}">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Nome}" FontSize="12" VerticalAlignment="Center" Classes="aba"
+                               Classes.frente="{Binding AVista}" Classes.atencao="{Binding PedeAtencao}" />
+                    <!-- o estado do Claude, como na árvore -->
+                    <Ellipse Classes="estado" Margin="1,0,0,0" IsVisible="{Binding Vivo}"
+                             Classes.rodando="{Binding Rodando}" Classes.aguardando="{Binding Aguardando}"
+                             Classes.concluido="{Binding Concluido}" Classes.erro="{Binding Erro}" />
+                  </StackPanel>
+                </Border>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <Button Grid.Column="1" Classes="pilula" Classes.ligado="{Binding PainelVisivel}"
+              Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
+              ToolTip.Tip="Abre ou fecha o painel lateral deste projeto">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Classes="glifo" Text="&#xE90C;" FontSize="12" />
+          <TextBlock Text="Painel" />
+        </StackPanel>
+      </Button>
+      <Button Grid.Column="2" Classes="pilula" Classes.ligado="{Binding AuxiliarVisivel}"
+              Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
+              ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Classes="glifo" Text="&#xE756;" FontSize="12" />
+          <TextBlock Text="Terminal" />
+        </StackPanel>
+      </Button>
+    </Grid>
 
-      <!-- uma aba por projeto com o Claude aberto, na ordem em que foram abertos (Ctrl+Tab
-           passa por elas). Sem botão de fechar: encerrar só pela barra embaixo, e com
-           confirmação -->
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,6,10,6" MinHeight="24">
-        <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-          <ItemsControl x:Name="Abas" ItemsSource="{Binding Abertos}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <StackPanel Orientation="Horizontal" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <Button Classes="aba" Command="{Binding MostrarCommand}" ToolTip.Tip="{Binding Pasta}">
-                  <Border CornerRadius="12" Height="24" Padding="10,0" BorderThickness="1"
-                          Background="{Binding FundoDaAba}" BorderBrush="{Binding BordaDaAba}">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                      <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
-                      <TextBlock Text="{Binding Nome}" FontSize="12" VerticalAlignment="Center" Classes="aba"
-                                 Classes.frente="{Binding AVista}" Classes.atencao="{Binding PedeAtencao}" />
-                      <!-- o estado do Claude, como na árvore -->
-                      <Ellipse Classes="estado" Margin="1,0,0,0" IsVisible="{Binding Vivo}"
-                               Classes.rodando="{Binding Rodando}" Classes.aguardando="{Binding Aguardando}"
-                               Classes.concluido="{Binding Concluido}" Classes.erro="{Binding Erro}" />
-                    </StackPanel>
-                  </Border>
-                </Button>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
-        <Button Grid.Column="1" Classes="pilula" Classes.ligado="{Binding PainelVisivel}"
-                Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
-                ToolTip.Tip="Abre ou fecha o painel lateral deste projeto">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="glifo" Text="&#xE90C;" FontSize="12" />
-            <TextBlock Text="Painel" />
-          </StackPanel>
-        </Button>
-        <Button Grid.Column="2" Classes="pilula" Classes.ligado="{Binding AuxiliarVisivel}"
-                Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
-                ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="glifo" Text="&#xE756;" FontSize="12" />
-            <TextBlock Text="Terminal" />
-          </StackPanel>
-        </Button>
-      </Grid>
+    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
 
       <!-- os botões da aba da frente, no tom dela: trocar de aba troca os botões. Quem
            encerra o Claude manda o /exit antes, e tudo que o encerra confirma -->
-      <Border Grid.Row="1" x:Name="BarraDaAba" IsVisible="{Binding TemAbaAtiva}" Margin="0,0,8,6">
+      <Border Grid.Row="0" x:Name="BarraDaAba" IsVisible="{Binding TemAbaAtiva}" Margin="0,0,8,6">
         <Border DataContext="{Binding AbaAtiva}" CornerRadius="8" Padding="4,3" BorderThickness="1"
                 Background="{Binding FundoDaBarra}" BorderBrush="{Binding BordaDaBarra}">
           <Grid ColumnDefinitions="*,Auto">
@@ -379,7 +414,7 @@
 
       <!-- o terminal encaixado num cartão: a janela em volta é a moldura, no tom da
            árvore. O recorte arredonda também o conteúdo do terminal -->
-      <Border Grid.Row="2" Margin="0,0,8,8" CornerRadius="10" ClipToBounds="True"
+      <Border Grid.Row="1" x:Name="Cartao" Margin="0,0,8,8" CornerRadius="10" ClipToBounds="True"
               Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
       <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
 
@@ -546,16 +581,43 @@
             <TextBlock Text="{Binding Selecionado.TextoDaSessao}" Classes="faint" FontSize="11.5"
                        IsVisible="{Binding Selecionado.TemTextoDaSessao}"
                        TextAlignment="Center" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
-              <Button Classes="tiny" Content="Sessão nova" Command="{Binding Selecionado.SessaoNovaCommand}"
-                      ToolTip.Tip="Começa do zero, sem retomar a última sessão" />
-              <Button Classes="tiny" Content="Pedido…" Command="{Binding Selecionado.PedidoCommand}"
+            <!-- os outros jeitos de abrir, em pílula colorida como as do GTest: fundo diluído
+                 e contorno na cor de cada um -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+              <Button Classes="colorida" Command="{Binding Selecionado.SessaoNovaCommand}"
+                      Foreground="{DynamicResource Accent}" Background="#242F7BE8" BorderBrush="#662F7BE8"
+                      ToolTip.Tip="Começa do zero, sem retomar a última sessão">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE710;" />
+                  <TextBlock Text="Sessão nova" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding Selecionado.PedidoCommand}"
                       IsVisible="{Binding Selecionado.EhDaBmsoft}"
-                      ToolTip.Tip="Sessão nova no /pedido com o número do Mantis" />
-              <Button Classes="tiny" Content="Pull request" Command="{Binding Selecionado.PullRequestCommand}"
-                      IsVisible="{Binding Selecionado.EhDaBmsoft}" ToolTip.Tip="Sessão nova na /delphi-pr" />
-              <Button Classes="tiny" Content="Sem skill" Command="{Binding Selecionado.SemSkillCommand}"
-                      ToolTip.Tip="O Claude limpo, sem skill nenhuma" />
+                      Foreground="{DynamicResource Yellow}" Background="#24B08500" BorderBrush="#66B08500"
+                      ToolTip.Tip="Sessão nova no /pedido com o número do Mantis">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE8A5;" />
+                  <TextBlock Text="Pedido…" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding Selecionado.PullRequestCommand}"
+                      IsVisible="{Binding Selecionado.EhDaBmsoft}"
+                      Foreground="{DynamicResource Purple}" Background="#248B5CF6" BorderBrush="#668B5CF6"
+                      ToolTip.Tip="Sessão nova na /delphi-pr">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE8AB;" />
+                  <TextBlock Text="Pull request" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding Selecionado.SemSkillCommand}"
+                      Foreground="{DynamicResource TextDim}" Background="#246B7280" BorderBrush="#666B7280"
+                      ToolTip.Tip="O Claude limpo, sem skill nenhuma">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE894;" />
+                  <TextBlock Text="Sem skill" />
+                </StackPanel>
+              </Button>
             </StackPanel>
           </StackPanel>
         </StackPanel>

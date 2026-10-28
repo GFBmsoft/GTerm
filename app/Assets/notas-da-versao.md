@@ -1,3 +1,8 @@
+## 1.0.0.11 — 28/10/2026
+- A pesquisa de projetos começa na mesma altura do quadro do terminal, e a barra lateral e o terminal não descem mais quando a primeira aba abre.
+- A engrenagem das Preferências foi para o rodapé da barra lateral, ao lado da versão, no azul do ícone do GTerm. A pesquisa ficou com a largura toda.
+- Na tela de abrir o Claude, Sessão nova, Pedido…, Pull request e Sem skill viraram pílulas coloridas, cada uma com ícone e cor própria, como no GTest.
+
 ## 1.0.0.10 — 28/10/2026
 - A estrela dos favoritos fica sempre à vista na barra lateral, cheia e amarela, em qualquer grupo. Nos outros projetos, a estrela vazada continua aparecendo só com o mouse em cima.
 - **Mudar a ordem dos favoritos**: arraste o projeto para cima ou para baixo dentro de Favoritos. A ordem nova vale para o Ctrl+1 a Ctrl+9 e para os números do cia. Com o projeto escolhido na barra lateral, Alt+↑ e Alt+↓ fazem o mesmo.
