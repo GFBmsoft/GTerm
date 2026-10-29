@@ -601,8 +601,9 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else
         {
+            // todos numerados, como o [n] do cia; o Ctrl+número alcança só os nove primeiros
             Grupo(GrupoFavoritos, "Favoritos", "#B08500",
-                _favoritos.Select((p, i) => (p, i < 9 ? (i + 1).ToString() : "")));
+                _favoritos.Select((p, i) => (p, (i + 1).ToString())));
 
             Grupo(GrupoRecentes, "Recentes", "#0E9384", _estado.Recentes
                 .Select(r => (P: Achar(r.Referencia), R: r))

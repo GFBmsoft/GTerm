@@ -1064,6 +1064,11 @@ public class JanelaTests : IDisposable
             Assert.Equal("Sessões", vm.MarcaDoFiltro);
             Assert.Equal(3, janela.GetVisualDescendants().OfType<Border>().Count(b => b.Classes.Contains("sessao")));
 
+            // entrar nas Sessões mostra a primeira favorita, marcada na árvore
+            Assert.Same(Linha(quadro), vm.SessaoAVista);
+            Assert.Same(Linha(quadro), vm.LinhaSelecionada);
+            Assert.True(vm.MostrarSessao);
+
             // a estrela cheia fica à vista na favorita
             var estrela = janela.GetVisualDescendants().OfType<Button>()
                 .Single(b => b.Classes.Contains("estrela") && b.DataContext is LinhaDaSessao l && l.Sessao.Id == quadro);
@@ -1124,6 +1129,41 @@ public class JanelaTests : IDisposable
             vm.VerProjetosCommand.Execute(null);
             Assert.Equal(new[] { "Favoritos", "Recentes", "DBISAM", "Private" }, Titulos(vm));
             Assert.Equal("Projetos", vm.MarcaDoFiltro);
+            Assert.Same(claude, vm.Selecionado);
+            Assert.False(vm.MostrarSessao);
+
+            // e nas Sessões de novo, sem esperar a leitura: a primeira favorita, a mais nova
+            // delas, e não a última conversa escolhida
+            vm.VerSessoesCommand.Execute(null);
+            Assert.Same(Linha(boleto), vm.SessaoAVista);
+            Assert.Same(Linha(boleto), vm.LinhaSelecionada);
+            vm.LinhaSelecionada = Linha(script);
+            vm.VerProjetosCommand.Execute(null);
+            vm.VerSessoesCommand.Execute(null);
+            Assert.Same(Linha(boleto), vm.SessaoAVista);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>Os favoritos são todos numerados, como o [n] do cia, também depois do nono.</summary>
+    [AvaloniaFact]
+    public void FavoritosNumeradosDepoisDoNono()
+    {
+        Montar();
+        for (var i = 1; i <= 10; i++) Directory.CreateDirectory(Path.Combine(Particular, "Extra" + i));
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            foreach (var p in vm.Projetos.Where(p => p.Nome.StartsWith("Extra")).ToList()) p.FavoritarCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Enumerable.Range(1, 11).Select(n => n.ToString()),
+                vm.Linhas.OfType<LinhaDoProjeto>().Where(l => l.NosFavoritos).Select(l => l.Extra));
         }
         finally
         {

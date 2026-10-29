@@ -86,7 +86,7 @@ e por isso confirma antes.
   por grupo e pasta para a lista não perder a seleção). A estrela e o ▶ da linha só
   aparecem com o mouse em cima e na escolhida (escondidos, guardam o lugar): a estrela
   favorita ou tira. Cheia, nos favoritos, fica sempre à vista. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
-  Ctrl+1..9 são os favoritos (o `[n]` do cia). A ordem deles muda arrastando a linha nos
+  Os favoritos são todos numerados, como o `[n]` do cia; Ctrl+1..9 vão aos nove primeiros. A ordem deles muda arrastando a linha nos
   Favoritos (`MainWindow.ArrastarFavoritos`: a linha acompanha o mouse e a ordem só é
   gravada ao soltar), com Alt+↑/↓ ou pelo menu. Os abertos não entram na árvore.
 - **Sessões** — o `cl` do perfil (`Modules\claude-sessoes.ps1`, as conversas do `/resume`)
@@ -97,7 +97,8 @@ e por isso confirma antes.
   projeto. `SessoesDoClaude` lê como o cl: o título e o branch só pelo fim do .jsonl (há
   transcript de GB), a pasta de origem pelo começo, aberta pelo `sessions\<pid>.json` e
   `bg` pelo `jobs\`. Escolher mostra o quadro da conversa no lugar do terminal
-  (`SessaoAVista`); retomar abre a aba do projeto com `--resume <id>`
+  (`SessaoAVista`), e entrar nas Sessões já mostra a primeira favorita (sem favorita, a
+  primeira conversa); voltar aos Projetos traz o projeto que estava à vista. Retomar abre a aba do projeto com `--resume <id>`
   (`Cia.ModoConversa`), e pasta fora das bases vira projeto avulso, com aba e sem linha na
   árvore. O + é o Claude sem conversa nenhuma, na pasta pessoal (aba "Claude"). **Mudou
   lá, muda aqui.**

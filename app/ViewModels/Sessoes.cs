@@ -91,6 +91,7 @@ public sealed partial class MainViewModel
     private List<string> _favoritas = new();
     private readonly DispatcherTimer _releituraDasSessoes;
     private bool _lendoSessoes;
+    private bool _primeiraAoLer;
     private readonly Dictionary<string, (string Glifo, IBrush Cor)> _iconesDasPastas = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>A árvore mostra as conversas do Claude no lugar dos projetos.</summary>
@@ -120,6 +121,9 @@ public sealed partial class MainViewModel
         Remontar();
         if (value)
         {
+            // entrar nas Sessões mostra a primeira favorita; na primeira vez, quando a leitura terminar
+            _primeiraAoLer = !SessoesLidas;
+            if (SessoesLidas) VerPrimeiraSessao();
             _ = CarregarSessoesAsync();
             _releituraDasSessoes.Start();
         }
@@ -158,7 +162,24 @@ public sealed partial class MainViewModel
 
         SessoesLidas = true;
         if (ModoSessoes) Remontar();
+
+        // escolher uma conversa enquanto a leitura não terminava vale mais que a favorita
+        if (_primeiraAoLer && ModoSessoes && SessaoAVista is null) VerPrimeiraSessao();
+        _primeiraAoLer = false;
     }
+
+    /// <summary>
+    /// A primeira das favoritas, como aparece no topo da árvore; sem favorita, a primeira
+    /// conversa. Vale também com o grupo recolhido: o quadro aparece, só a linha não.
+    /// </summary>
+    private void VerPrimeiraSessao()
+    {
+        var s = _sessoes.FirstOrDefault(x => _favoritas.Contains(x.Id, StringComparer.OrdinalIgnoreCase))
+                ?? _sessoes.FirstOrDefault();
+        if (s is not null) SessaoAVista = LinhaDe(s, PidsDasAbas());
+    }
+
+    private HashSet<int> PidsDasAbas() => Abertos.Select(p => p.Sessao?.Pid).OfType<int>().ToHashSet();
 
     /// <summary>As favoritas do cl. Arquivo ilegível no momento: fica o que já havia.</summary>
     private void CarregarFavoritas()
@@ -180,7 +201,7 @@ public sealed partial class MainViewModel
         var novas = new List<LinhaDaArvore>();
         var agora = DateTime.Now;
         var termo = Filtro.Trim();
-        var pidsDasAbas = Abertos.Select(p => p.Sessao?.Pid).OfType<int>().ToHashSet();
+        var pidsDasAbas = PidsDasAbas();
 
         var linhas = _sessoes.Select(s => LinhaDe(s, pidsDasAbas))
             .Where(l => termo.Length == 0 ||

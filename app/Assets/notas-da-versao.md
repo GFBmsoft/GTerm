@@ -1,3 +1,7 @@
+## 1.0.0.14 — 29/10/2026
+- Ao passar de Projetos para Sessões, a primeira favorita já aparece escolhida, com o quadro dela. Sem favoritas, aparece a primeira conversa da lista. Voltar para Projetos traz o projeto que estava à vista.
+- Todos os favoritos são numerados, como no cia: a numeração não para mais no 9. O Ctrl+1 a Ctrl+9 continua levando aos nove primeiros.
+
 ## 1.0.0.13 — 29/10/2026
 - Projetos, Sessões e o + ganharam cor: laranja, roxo e azul. A pílula do modo em uso fica inteira na cor; a outra fica só com o ícone colorido e acende com o mouse em cima.
 - Os botões ficaram todos do mesmo tamanho. A barra embaixo das abas agora tem as mesmas pílulas da tela de abrir o Claude, com as mesmas cores e ícones: Retomar em verde e Encerrar o Claude em vermelho. Ela tem a altura da pesquisa ao lado.
