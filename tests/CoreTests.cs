@@ -890,11 +890,17 @@ public class JanelaTests : IDisposable
             Assert.False(financeiro.TemSessao);
             Assert.False(financeiro.TemAbertura);
 
-            // a pesquisa começa na altura do cartão do terminal; os outros jeitos de abrir são pílulas
+            // a pesquisa começa na altura do cartão do terminal; os outros jeitos de abrir são
+            // pílulas, como Projetos e Sessões em cima, e a escolhida é a acesa. Todas da mesma altura
             double Topo(Visual v) => v.TranslatePoint(default, janela)!.Value.Y;
             Assert.Equal(Topo(janela.FindControl<Border>("Cartao")!), Topo(janela.FindControl<TextBox>("CaixaDoFiltro")!));
-            Assert.Equal(4, janela.GetVisualDescendants().OfType<Button>()
-                .Count(b => b.Classes.Contains("colorida") && b.IsEffectivelyVisible));
+            List<Button> Pilulas() => janela.GetVisualDescendants().OfType<Button>()
+                .Where(b => b.IsEffectivelyVisible && (b.Classes.Contains("colorida") || b.Classes.Contains("pilula") || b.Classes.Contains("aba")))
+                .ToList();
+            Assert.Equal(6, Pilulas().Count(b => b.Classes.Contains("colorida")));
+            Assert.DoesNotContain("apagada", Pilulas().Single(b => b.Command == vm.VerProjetosCommand).Classes);
+            Assert.Contains("apagada", Pilulas().Single(b => b.Command == vm.VerSessoesCommand).Classes);
+            Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
             Foto(janela, "arvore.png");
 
             // o recente mostra quando e o pedido; a base aberta mostra os projetos dela
@@ -943,9 +949,16 @@ public class JanelaTests : IDisposable
             Assert.Single(janela.GetVisualDescendants().OfType<Button>(), b => b.Classes.Contains("aba"));
             Assert.Single(janela.GetVisualDescendants().OfType<TerminalControl>());
 
-            // a primeira aba não muda a altura da faixa: a pesquisa fica onde estava
+            // a primeira aba não muda a altura da faixa: a pesquisa fica onde estava. A barra
+            // embaixo das abas tem a altura da pesquisa, e os botões dela são as mesmas pílulas
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal(Topo(janela.FindControl<Border>("BarraDaAba")!), Topo(janela.FindControl<TextBox>("CaixaDoFiltro")!));
+            var barra = janela.FindControl<Border>("BarraDaAba")!;
+            var filtro = janela.FindControl<TextBox>("CaixaDoFiltro")!;
+            Assert.Equal(Topo(barra), Topo(filtro));
+            Assert.Equal(filtro.Bounds.Height, barra.Bounds.Height);
+            Assert.All(barra.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible),
+                b => Assert.Contains("colorida", b.Classes));
+            Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
 
             // o Claude sobe direto, sem shell, com o que o cia escolheria (sem sessão: a skill),
             // e o projeto vai para a frente dos recentes do cia
@@ -1526,8 +1539,8 @@ public class JanelaTests : IDisposable
 
             // embaixo das abas, os botões da aba da frente: no lugar do menu dela
             var barra = janela.FindControl<Border>("BarraDaAba")!;
-            Button Botao(string texto) =>
-                barra.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == texto);
+            Button Botao(string texto) => barra.GetVisualDescendants().OfType<Button>()
+                .Single(b => b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == texto));
             Assert.True(barra.IsVisible);
             Assert.Same(financeiro, vm.AbaAtiva);
             Assert.Same(financeiro.EncerrarCommand, Botao("Encerrar o Claude").Command);

@@ -113,6 +113,12 @@ e por isso confirma antes.
   (`MainViewModel.AbaAtiva`). A cor é do projeto (`Projeto.Cor`, escolhida na barra e
   gravada); vazia, `GroupPalette.DoNome`, a mesma conta do GTest, para o projeto ter a
   mesma cor nos dois.
+- **Botões** — uma medida só: pílula de 24 (`Button.colorida`, a do GTest: fundo diluído,
+  contorno e texto na cor de cada um, com ícone), na barra das abas, no projeto parado, na
+  conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`, só com o
+  ícone na cor, como as abas). O mesmo botão tem a mesma cor e o mesmo ícone em qualquer
+  lugar. O principal (retomar) é a pílula cheia de 28; a barra das abas tem os 28 da
+  pesquisa ao lado.
 - **Encerrar o Claude** — encerrar, ou abrir de novo de outro jeito, manda o `/exit` antes
   de fechar o terminal (`TerminalSessao.SairAsync`: Ctrl+C para largar o que estiver
   digitado ou rodando, o comando, e o Enter depois de uma pausa). Não saindo em

@@ -1,3 +1,8 @@
+## 1.0.0.13 — 29/10/2026
+- Projetos, Sessões e o + ganharam cor: laranja, roxo e azul. A pílula do modo em uso fica inteira na cor; a outra fica só com o ícone colorido e acende com o mouse em cima.
+- Os botões ficaram todos do mesmo tamanho. A barra embaixo das abas agora tem as mesmas pílulas da tela de abrir o Claude, com as mesmas cores e ícones: Retomar em verde e Encerrar o Claude em vermelho. Ela tem a altura da pesquisa ao lado.
+- O + ficou redondo, e o botão de retomar a sessão ou a conversa virou uma pílula, como os outros.
+
 ## 1.0.0.12 — 28/10/2026
 - **Sessões**: o cl agora está no GTerm. Na pílula Sessões, em cima da barra lateral, aparecem as conversas do Claude de todas as pastas: as favoritas em cima e as outras por dia (Hoje, Ontem, Esta semana, Mais antigas). A pesquisa procura pelo título ou pelo projeto.
 - Clique numa conversa para ver o branch, quando foi, o tamanho e se está aberta. Retomar (▶, Enter ou duplo clique) abre a conversa na aba do projeto dela, como o cl com o número. Se ela já está numa aba, o GTerm só vai para a aba. Se está aberta em outro terminal, ele pergunta antes.

@@ -164,8 +164,42 @@
       <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.colorida TextBlock.glifo">
-      <Setter Property="FontSize" Value="11" />
+    <!-- só o ícone, numa bolinha do tamanho da altura -->
+    <Style Selector="Button.colorida.redonda">
+      <Setter Property="Width" Value="24" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <!-- Projetos e Sessões são uma escolha, como as abas: a escolhida é a pílula colorida
+         inteira; a outra fica com o ícone na cor e o nome apagado, e acende com o mouse em
+         cima. O glifo vem por último para ficar na cor também com o mouse em cima -->
+    <Style Selector="Button.colorida.apagada /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    </Style>
+    <Style Selector="Button.colorida.apagada:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+      <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+    </Style>
+    <Style Selector="Button.colorida.apagada TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    </Style>
+    <Style Selector="Button.colorida.apagada:pointerover TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
+    </Style>
+    <Style Selector="Button.colorida.apagada TextBlock.glifo">
+      <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+
+    <!-- o glifo é do mesmo tamanho em todas as pílulas e no botão principal -->
+    <Style Selector="Button TextBlock.glifo">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <!-- o botão principal (retomar) também é pílula, só que cheio e um pouco mais alto -->
+    <Style Selector="Button.primary">
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="Padding" Value="16,0,18,0" />
     </Style>
 
     <!-- a engrenagem das preferências, no rodapé: no azul do ícone, também com o mouse em cima -->
@@ -211,25 +245,29 @@
   <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,*">
 
     <!-- na faixa das abas, em cima da árvore: os projetos do cia ou as conversas do Claude
-         (o cl), e no modo das conversas o Claude sem nenhuma delas -->
-    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="4,6,8,6">
-      <Button Classes="pilula" Classes.ligado="{Binding !ModoSessoes}" Command="{Binding VerProjetosCommand}"
+         (o cl), e no modo das conversas o Claude sem nenhuma delas, no azul do Claude sem
+         conversa do quadro -->
+    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="10,6,8,6" Spacing="6">
+      <Button Classes="colorida" Classes.apagada="{Binding ModoSessoes}" Command="{Binding VerProjetosCommand}"
+              Foreground="{DynamicResource Orange}" Background="#24E07B00" BorderBrush="#66E07B00"
               ToolTip.Tip="Os projetos das pastas do cia, como no dashboard dele">
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Classes="glifo" Text="&#xE8B7;" FontSize="12" />
+          <TextBlock Classes="glifo" Text="&#xE8B7;" />
           <TextBlock Text="Projetos" />
         </StackPanel>
       </Button>
-      <Button Classes="pilula" Classes.ligado="{Binding ModoSessoes}" Command="{Binding VerSessoesCommand}"
+      <Button Classes="colorida" Classes.apagada="{Binding !ModoSessoes}" Command="{Binding VerSessoesCommand}"
+              Foreground="{DynamicResource Purple}" Background="#248B5CF6" BorderBrush="#668B5CF6"
               ToolTip.Tip="As conversas do Claude de todas as pastas, como o cl: retomar, favoritar e procurar pelo título">
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Classes="glifo" Text="&#xE8BD;" FontSize="12" />
+          <TextBlock Classes="glifo" Text="&#xE8BD;" />
           <TextBlock Text="Sessões" />
         </StackPanel>
       </Button>
-      <Button Classes="pilula" Command="{Binding NovaConversaCommand}" IsVisible="{Binding ModoSessoes}" Padding="7,0"
+      <Button Classes="colorida redonda" Command="{Binding NovaConversaCommand}" IsVisible="{Binding ModoSessoes}"
+              Foreground="{DynamicResource Accent}" Background="#242F7BE8" BorderBrush="#662F7BE8"
               ToolTip.Tip="Claude sem nenhuma das conversas: limpo, sem skill, na sua pasta pessoal, numa aba Claude">
-        <TextBlock Classes="glifo" Text="&#xE710;" FontSize="12" />
+        <TextBlock Classes="glifo" Text="&#xE710;" HorizontalAlignment="Center" />
       </Button>
     </StackPanel>
 
@@ -383,7 +421,7 @@
               Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
               ToolTip.Tip="Abre ou fecha o painel lateral deste projeto">
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Classes="glifo" Text="&#xE90C;" FontSize="12" />
+          <TextBlock Classes="glifo" Text="&#xE90C;" />
           <TextBlock Text="Painel" />
         </StackPanel>
       </Button>
@@ -391,7 +429,7 @@
               Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
               ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude">
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Classes="glifo" Text="&#xE756;" FontSize="12" />
+          <TextBlock Classes="glifo" Text="&#xE756;" />
           <TextBlock Text="Terminal" />
         </StackPanel>
       </Button>
@@ -399,30 +437,63 @@
 
     <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
 
-      <!-- os botões da aba da frente, no tom dela: trocar de aba troca os botões. Quem
-           encerra o Claude manda o /exit antes, e tudo que o encerra confirma -->
+      <!-- os botões da aba da frente, no tom dela: trocar de aba troca os botões. São as
+           pílulas do projeto parado, com as mesmas cores. Quem encerra o Claude manda o
+           /exit antes, e tudo que o encerra confirma. Com as pílulas de 24, a barra fica com
+           os 28 da pesquisa ao lado -->
       <Border Grid.Row="0" x:Name="BarraDaAba" IsVisible="{Binding TemAbaAtiva}" Margin="0,0,8,6">
-        <Border DataContext="{Binding AbaAtiva}" CornerRadius="8" Padding="4,3" BorderThickness="1"
+        <Border DataContext="{Binding AbaAtiva}" CornerRadius="14" Padding="1" BorderThickness="1"
                 Background="{Binding FundoDaBarra}" BorderBrush="{Binding BordaDaBarra}">
           <Grid ColumnDefinitions="*,Auto">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-              <Button Classes="tiny" Content="Retomar" Command="{Binding AbrirClaudeCommand}"
-                      ToolTip.Tip="Abre de novo retomando a última sessão, com /compact se ela estiver grande, como o cia" />
-              <Button Classes="tiny" Content="Sessão nova" Command="{Binding SessaoNovaCommand}"
-                      ToolTip.Tip="Começa do zero, sem retomar a última sessão" />
-              <Button Classes="tiny" Content="Pedido…" Command="{Binding PedidoCommand}"
-                      IsVisible="{Binding EhDaBmsoft}" ToolTip.Tip="Sessão nova no /pedido com o número do Mantis" />
-              <Button Classes="tiny" Content="Pull request" Command="{Binding PullRequestCommand}"
-                      IsVisible="{Binding EhDaBmsoft}" ToolTip.Tip="Sessão nova na /delphi-pr" />
-              <Button Classes="tiny" Content="Sem skill" Command="{Binding SemSkillCommand}"
-                      ToolTip.Tip="O Claude limpo, sem skill nenhuma" />
-              <Rectangle Width="1" Height="12" Margin="4,0" Fill="{DynamicResource Border}" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <Button Classes="colorida" Command="{Binding AbrirClaudeCommand}"
+                      Foreground="{DynamicResource Green}" Background="#241F9D55" BorderBrush="#661F9D55"
+                      ToolTip.Tip="Abre de novo retomando a última sessão, com /compact se ela estiver grande, como o cia">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE768;" />
+                  <TextBlock Text="Retomar" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding SessaoNovaCommand}"
+                      Foreground="{DynamicResource Accent}" Background="#242F7BE8" BorderBrush="#662F7BE8"
+                      ToolTip.Tip="Começa do zero, sem retomar a última sessão">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE710;" />
+                  <TextBlock Text="Sessão nova" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding PedidoCommand}" IsVisible="{Binding EhDaBmsoft}"
+                      Foreground="{DynamicResource Yellow}" Background="#24B08500" BorderBrush="#66B08500"
+                      ToolTip.Tip="Sessão nova no /pedido com o número do Mantis">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE8A5;" />
+                  <TextBlock Text="Pedido…" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding PullRequestCommand}" IsVisible="{Binding EhDaBmsoft}"
+                      Foreground="{DynamicResource Purple}" Background="#248B5CF6" BorderBrush="#668B5CF6"
+                      ToolTip.Tip="Sessão nova na /delphi-pr">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE8AB;" />
+                  <TextBlock Text="Pull request" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding SemSkillCommand}"
+                      Foreground="{DynamicResource TextDim}" Background="#246B7280" BorderBrush="#666B7280"
+                      ToolTip.Tip="O Claude limpo, sem skill nenhuma">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE894;" />
+                  <TextBlock Text="Sem skill" />
+                </StackPanel>
+              </Button>
+              <Rectangle Width="1" Height="12" Margin="2,0" Fill="{DynamicResource Border}" VerticalAlignment="Center" />
 
               <!-- a paleta dos grupos do GRepos, a mesma do GTest -->
-              <Button Classes="tiny" x:Name="CorDaAba" ToolTip.Tip="A cor da aba deste projeto">
+              <Button Classes="colorida" x:Name="CorDaAba" ToolTip.Tip="A cor da aba deste projeto"
+                      Foreground="{DynamicResource TextDim}" Background="#246B7280" BorderBrush="#666B7280">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
-                  <TextBlock Text="Cor" VerticalAlignment="Center" />
+                  <TextBlock Text="Cor" />
                 </StackPanel>
                 <Button.Flyout>
                   <MenuFlyout Placement="BottomEdgeAlignedLeft">
@@ -458,8 +529,14 @@
               </Button>
             </StackPanel>
 
-            <Button Grid.Column="1" Classes="tiny danger" Content="Encerrar o Claude" Command="{Binding EncerrarCommand}"
-                    ToolTip.Tip="Manda o /exit ao Claude e fecha a aba; o que estiver rodando é interrompido" />
+            <Button Grid.Column="1" Classes="colorida" Command="{Binding EncerrarCommand}"
+                    Foreground="{DynamicResource Red}" Background="#24D93F3F" BorderBrush="#66D93F3F"
+                    ToolTip.Tip="Manda o /exit ao Claude e fecha a aba; o que estiver rodando é interrompido">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="glifo" Text="&#xE7E8;" />
+                <TextBlock Text="Encerrar o Claude" />
+              </StackPanel>
+            </Button>
           </Grid>
         </Border>
       </Border>
@@ -622,11 +699,11 @@
               </StackPanel>
             </Border>
 
-            <Button Classes="primary" HorizontalAlignment="Center" Padding="16,6"
+            <Button Classes="primary" HorizontalAlignment="Center"
                     Command="{Binding Selecionado.IniciarCommand}"
                     ToolTip.Tip="Retoma a última sessão do projeto, com /compact se ela estiver grande, como o cia">
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Classes="glifo" Text="&#xE768;" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Classes="glifo" Text="&#xE768;" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Selecionado.RotuloDeAbrir}" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
@@ -716,11 +793,11 @@
               </StackPanel>
             </Border>
 
-            <Button Classes="primary" HorizontalAlignment="Center" Padding="16,6"
+            <Button Classes="primary" HorizontalAlignment="Center"
                     Command="{Binding SessaoAVista.RetomarCommand}"
                     ToolTip.Tip="Abre o Claude na pasta da conversa, na aba do projeto, com o --resume dela, como o cl">
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Classes="glifo" Text="&#xE768;" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Classes="glifo" Text="&#xE768;" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding SessaoAVista.RotuloDeRetomar}" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
