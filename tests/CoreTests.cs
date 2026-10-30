@@ -617,6 +617,28 @@ public class SessoesTests : IDisposable
         try { Directory.Delete(_raiz, true); } catch (IOException) { }
     }
 
+    /// <summary>
+    /// O que é da conversa na conta, só o que existe e o transcript primeiro. Id que não é uuid
+    /// não leva nada: vazio, apontaria para a pasta file-history de todas.
+    /// </summary>
+    [Fact]
+    public void RastrosDaConversa()
+    {
+        var pasta = @"D:\Projetos\DBISAM\Notas";
+        var chave = SessoesDoClaude.Chave(pasta);
+        var id = ContaDeTeste.Conversa(Conta, pasta, "Boleto", DateTime.Now);
+        var s = new SessaoDoClaude(id, "Boleto", DateTime.Now, 1, "", pasta, chave);
+        var transcript = Path.Combine(Conta, "projects", chave, id + ".jsonl");
+        Assert.Equal(new[] { transcript }, SessoesDoClaude.Rastros(Conta, s));
+
+        var historico = Path.Combine(Conta, "file-history", id);
+        Directory.CreateDirectory(historico);
+        Assert.Equal(new[] { transcript, historico }, SessoesDoClaude.Rastros(Conta, s));
+
+        Assert.Empty(SessoesDoClaude.Rastros(Conta, s with { Id = "" }));
+        Assert.Empty(SessoesDoClaude.Rastros(Conta, s with { Id = ".." }));
+    }
+
     [Fact]
     public void ConversasComoOClLe()
     {
@@ -802,6 +824,21 @@ public class JanelaTests : IDisposable
 
     private static string Tela(TerminalSessao s) =>
         string.Join("\n", Enumerable.Range(0, s.Modelo.Terminal.Rows).Select(i => s.Modelo.Terminal.Engine.GetLine(i)));
+
+    // a janela também lê sozinha, e uma leitura pedida no meio de outra volta sem ler nada
+    private static async Task LerRevisoes(MainViewModel vm)
+    {
+        Assert.True(await Esperar(() => !vm.LendoRevisoes));
+        await vm.LerRevisoesAsync();
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static async Task LerMarcas(MainViewModel vm)
+    {
+        Assert.True(await Esperar(() => !vm.LendoRevisoes));
+        await vm.LerRevisoesDosProjetosAsync();
+        Dispatcher.UIThread.RunJobs();
+    }
 
     private static void Foto(TopLevel janela, string nome)
     {
@@ -1331,6 +1368,7 @@ public class JanelaTests : IDisposable
         Assert.True(await Esperar(() => Tela(sessao).Contains('>')), "sem prompt");
 
         sessao.Modelo.Send("echo meio digitado");
+        Assert.True(await Esperar(() => Tela(sessao).Contains("meio digitado")), Tela(sessao));
         Assert.True(await sessao.SairAsync("exit", TimeSpan.FromSeconds(10)), Tela(sessao));
         Assert.True(sessao.Encerrada);
         Assert.DoesNotContain("digitadoexit", Tela(sessao));
@@ -2193,8 +2231,7 @@ public class JanelaTests : IDisposable
             janela.Show();
             Dispatcher.UIThread.RunJobs();
             Titulo(vm, "DBISAM").AlternarCommand.Execute(null);
-            await vm.LerRevisoesDosProjetosAsync();
-            Dispatcher.UIThread.RunJobs();
+            await LerMarcas(vm);
 
             TextBlock Marca(string nome) => janela.GetVisualDescendants().OfType<TextBlock>().Single(t =>
                 t.Classes.Contains("marcaDeRevisao") && t.DataContext is LinhaDoProjeto l &&
@@ -2233,8 +2270,7 @@ public class JanelaTests : IDisposable
             Directory.CreateDirectory(Path.Combine(Notas, ".git", "logs"));
             var depois = new DateTimeOffset(DateTime.Now.AddMinutes(1)).ToUnixTimeSeconds();
             File.WriteAllText(Path.Combine(Notas, ".git", "logs", "HEAD"), $"aaa bbb GF <gf@exemplo> {depois} -0300\tcommit: novo\n");
-            await vm.LerRevisoesDosProjetosAsync();
-            Dispatcher.UIThread.RunJobs();
+            await LerMarcas(vm);
             Assert.Equal("1 commit depois", notas.SituacaoDaRevisao);
             Assert.Contains("desatualizada", Marca("Notas").Classes);
             Assert.Equal("code review agora · 1 commit depois", notas.DicaDaMarcaDeRevisao);
@@ -2354,8 +2390,7 @@ public class JanelaTests : IDisposable
             var agentes = MontarRevisao(sessao.Pid!.Value, Financeiro, "22222222-3333-4444-5555-666666666666", "a9revisao");
             File.AppendAllText(Path.Combine(agentes, "agent-a9revisao.jsonl"), Passo(3));
             File.SetLastWriteTime(Path.Combine(agentes, "agent-a9revisao.forked-skill.json"), DateTime.Now.AddMinutes(-5));
-            await vm.LerRevisoesAsync();
-            Dispatcher.UIThread.RunJobs();
+            await LerRevisoes(vm);
 
             Assert.True(financeiro.RevisaoRodando);
             Assert.True(barra.IsVisible);
@@ -2387,8 +2422,7 @@ public class JanelaTests : IDisposable
 
             // terminou: cheia, verde, e o botão volta para revisar de novo
             File.WriteAllText(Path.Combine(agentes, "agent-a9revisao.meta.json"), """{ "finished": true }""");
-            await vm.LerRevisoesAsync();
-            Dispatcher.UIThread.RunJobs();
+            await LerRevisoes(vm);
             Assert.True(financeiro.RevisaoConcluida);
             Assert.True(barra.IsVisible);
             Assert.Equal(barra.Bounds.Width, preenchido.Bounds.Width, 0);
@@ -2405,8 +2439,7 @@ public class JanelaTests : IDisposable
             File.WriteAllText(Path.Combine(agentes, "agent-a9revisao.meta.json"), "{ }");
             File.WriteAllText(Path.Combine(ContaDoClaude, "projects", SessoesDoClaude.Chave(Financeiro), "22222222-3333-4444-5555-666666666666.jsonl"),
                 """{"content":"a9revisao.output</output-file>\n<status>killed</status>"}""" + "\n");
-            await vm.LerRevisoesAsync();
-            Dispatcher.UIThread.RunJobs();
+            await LerRevisoes(vm);
             Assert.True(financeiro.RevisaoParada);
             Assert.Contains("parada", barra.Classes);
             Assert.Equal("Revisão parada", financeiro.RotuloDaRevisao);
@@ -2415,8 +2448,7 @@ public class JanelaTests : IDisposable
             var notas = Projeto(vm, "Notas");
             await notas.IniciarCommand.ExecuteAsync(null);
             Assert.True(await Esperar(() => notas.Sessao is { Pid: not null }));
-            await vm.LerRevisoesAsync();
-            Dispatcher.UIThread.RunJobs();
+            await LerRevisoes(vm);
             Assert.False(barra.IsVisible);
             financeiro.MostrarCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
@@ -2487,7 +2519,7 @@ public class JanelaTests : IDisposable
 
             // o clique: o rascunho sai, o comando entra com Enter, e o botão espera o aviso
             sessao.Modelo.Send("rascunho");
-            await Task.Delay(100);
+            Assert.True(await Esperar(() => Tela(sessao).Contains("rascunho")), Tela(sessao));
             var clique = financeiro.CompactarCommand.ExecuteAsync(null);
             Assert.False(financeiro.Sessao!.EsperaComando);
             Assert.False(financeiro.CompactarCommand.CanExecute(null));
@@ -2913,6 +2945,203 @@ public class JanelaTests : IDisposable
             var ws = WorkspaceStore.Load();
             Assert.Equal(new[] { quadro }, ws.SessoesOcultas);
             Assert.Equal(new[] { boleto }, ws.GruposDasSessoes.Single(g => g.Id == sicoob).Itens);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Excluir a conversa: depois de confirmar, tudo o que é dela vai para a Lixeira, o
+    /// transcript primeiro, e nada das outras. Some dos grupos, das ocultas e das favoritas do
+    /// cl, e a linha seguinte vem para o quadro. Aberta não se exclui, nem se abriu enquanto a
+    /// pergunta estava na tela.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task ExcluirConversaMandaTudoParaALixeira()
+    {
+        Montar();
+        var quadro = ContaDeTeste.Conversa(ContaDoClaude, PastaDoGTerm, "Quadro do cia", DateTime.Now.AddMinutes(-10));
+        var boleto = ContaDeTeste.Conversa(ContaDoClaude, Notas, "Boleto do Sicoob", DateTime.Now.AddMinutes(-30));
+        var nota = ContaDeTeste.Conversa(ContaDoClaude, Financeiro, "Nota de ajuste", DateTime.Now.AddMinutes(-40));
+        File.WriteAllText(EstadoDoCl, $$"""{ "favoritas": [ "{{quadro}}" ], "ordem": "data" }""");
+
+        var transcript = Path.Combine(ContaDoClaude, "projects", SessoesDoClaude.Chave(PastaDoGTerm), quadro + ".jsonl");
+        var dela = Path.ChangeExtension(transcript, null);
+        var historico = Path.Combine(ContaDoClaude, "file-history", quadro);
+        var ambiente = Path.Combine(ContaDoClaude, "session-env", quadro);
+        var job = Path.Combine(ContaDoClaude, "jobs", quadro[..8]);
+        var daOutra = Path.Combine(ContaDoClaude, "file-history", nota);
+        foreach (var pasta in new[] { Path.Combine(dela, "subagents"), historico, ambiente, job, daOutra })
+            Directory.CreateDirectory(pasta);
+        File.WriteAllText(Path.Combine(job, "state.json"), "{}");
+
+        var dialogos = new Dialogos();
+        var vm = new MainViewModel(dialogos) { ClaudeRodando = _ => true };
+        var lixeira = new List<string>();
+        void Apagar(string caminho)
+        {
+            lixeira.Add(caminho);
+            if (Directory.Exists(caminho)) Directory.Delete(caminho, true);
+            else File.Delete(caminho);
+        }
+        vm.MandarParaLixeira = Apagar;
+
+        try
+        {
+            vm.VerSessoesCommand.Execute(null);
+            Assert.True(await Esperar(() => vm.SessoesLidas && vm.SessaoAVista is not null));
+
+            LinhaDaSessao Linha(string id) => vm.Linhas.OfType<LinhaDaSessao>().First(l => l.Sessao.Id == id);
+            string[] Ids() => vm.Linhas.OfType<LinhaDaSessao>().Select(l => l.Sessao.Id).Distinct().ToArray();
+
+            var banco = vm.CriarGrupo("Banco");
+            vm.MoverConversa(Linha(quadro), banco);
+            vm.AlternarOculta(Linha(nota));
+            Titulo(vm, "Ocultas").AlternarCommand.Execute(null);
+            Assert.Equal(quadro, vm.SessaoAVista!.Sessao.Id);
+
+            // desistir não mexe em nada, e a pergunta diz o que vai acontecer
+            await Linha(quadro).ExcluirCommand.ExecuteAsync(null);
+            Assert.Equal(1, dialogos.Perguntas);
+            Assert.Contains("“Quadro do cia”, de GTerm", dialogos.Pergunta);
+            Assert.Contains("Lixeira", dialogos.Pergunta);
+            Assert.Contains("job em segundo plano", dialogos.Pergunta);
+            Assert.Empty(lixeira);
+
+            // aberta, o item fica apagado e diz o motivo
+            var linha = Linha(quadro);
+            var fechada = linha.Sessao;
+            linha.Sessao = fechada with { Pid = 42 };
+            Assert.False(linha.ExcluirCommand.CanExecute(null));
+            Assert.Equal("Excluir conversa (está aberta)", linha.RotuloDeExcluir);
+            linha.Sessao = fechada;
+            Assert.True(linha.ExcluirCommand.CanExecute(null));
+            Assert.Equal("Excluir conversa…", linha.RotuloDeExcluir);
+
+            // abriu enquanto a pergunta estava na tela
+            dialogos.Resposta = true;
+            var abertura = Path.Combine(ContaDoClaude, "sessions", "42.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(abertura)!);
+            File.WriteAllText(abertura, $$"""{ "pid": 42, "sessionId": "{{quadro}}" }""");
+            await linha.ExcluirCommand.ExecuteAsync(null);
+            Assert.Contains("feche antes de excluir", vm.Aviso);
+            Assert.Empty(lixeira);
+            File.Delete(abertura);
+
+            // a Lixeira recusou: a conversa fica, e o motivo aparece
+            vm.MandarParaLixeira = _ => throw new IOException("arquivo em uso");
+            await linha.ExcluirCommand.ExecuteAsync(null);
+            Assert.Contains("arquivo em uso", vm.Aviso);
+            Assert.Contains(quadro, Ids());
+            vm.MandarParaLixeira = Apagar;
+
+            // a da frente: vai tudo dela, o transcript primeiro, e a seguinte vem para o quadro
+            await linha.ExcluirCommand.ExecuteAsync(null);
+            Assert.Equal(new[] { transcript, dela, historico, ambiente, job }, lixeira);
+            Assert.All(lixeira, c => Assert.False(File.Exists(c) || Directory.Exists(c)));
+            Assert.True(Directory.Exists(daOutra));
+            Assert.Equal(new[] { boleto, nota }, Ids());
+            Assert.Equal(boleto, vm.SessaoAVista!.Sessao.Id);
+            Assert.Same(vm.SessaoAVista, vm.LinhaSelecionada);
+
+            // o que o GTerm e o cl lembravam dela: o resto do estado do cl fica como estava
+            var estado = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(EstadoDoCl))!;
+            Assert.Empty(estado["favoritas"]!.AsArray());
+            Assert.Equal("data", (string?)estado["ordem"]);
+            Assert.Empty(WorkspaceStore.Load().GruposDasSessoes.Single(g => g.Id == banco).Itens);
+
+            // a que não está à vista não troca o quadro
+            await Linha(nota).ExcluirCommand.ExecuteAsync(null);
+            Assert.Equal(boleto, vm.SessaoAVista!.Sessao.Id);
+            Assert.Empty(WorkspaceStore.Load().SessoesOcultas);
+
+            // a última: sem conversa, sem quadro
+            await Linha(boleto).ExcluirCommand.ExecuteAsync(null);
+            Assert.Empty(Ids());
+            Assert.Null(vm.SessaoAVista);
+
+            // relidas do disco, não voltam
+            await vm.CarregarSessoesAsync();
+            Assert.Empty(Ids());
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+        }
+    }
+
+    /// <summary>
+    /// Os menus da árvore com o ícone de cada ação, como os do GRepos e do GRemote: toda linha,
+    /// nos dois modos e nos submenus, com o glifo e a cor da pílula. Só as marcas de "Grupos à
+    /// vista" ficam sem, porque o lugar é da marca. O tema chega à janela do menu.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task MenusDaArvoreComIcone()
+    {
+        Montar();
+        ContaDeTeste.Conversa(ContaDoClaude, Notas, "Boleto do Sicoob", DateTime.Now.AddMinutes(-30));
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            vm.CriarGrupo("Fiscal");
+            var favorito = vm.Linhas.OfType<LinhaDoProjeto>().First(l => l.Grupo == MainViewModel.GrupoFavoritos);
+
+            static IEnumerable<MenuItem> Itens(IEnumerable<object?> itens) => itens.OfType<MenuItem>()
+                .SelectMany(m => m.Header is "Grupos à vista" ? new[] { m } : Itens(m.Items).Prepend(m));
+            static void TodosComIcone(MenuFlyout menu) => Assert.All(Itens(menu.Items), m => Assert.NotNull(m.Icon));
+            static TextBlock Icone(MenuFlyout menu, string rotulo) =>
+                (TextBlock)Itens(menu.Items).Single(m => m.Header as string == rotulo).Icon!;
+
+            var doProjeto = janela.MenuDe(favorito);
+            TodosComIcone(doProjeto);
+            Assert.Contains("verde", Icone(doProjeto, "Abrir o Claude").Classes);
+            Assert.Contains("amarelo", Icone(doProjeto, "Pedido do Mantis…").Classes);
+            Assert.Equal(favorito.Projeto.GlifoDoFavorito, Icone(doProjeto, "Tirar dos favoritos").Text);
+
+            TodosComIcone(janela.MenuDe(Titulo(vm, "Fiscal")));
+            TodosComIcone(janela.MenuDe(Titulo(vm, "DBISAM")));
+            TodosComIcone(janela.MenuDe(Titulo(vm, "Favoritos")));
+            TodosComIcone(janela.MenuDe(null));
+
+            // o menu de verdade, na janela dele
+            doProjeto.ShowAt(janela);
+            Dispatcher.UIThread.RunJobs();
+            var raiz = TopLevel.GetTopLevel(doProjeto.Items.OfType<MenuItem>().First())!;
+            var glifo = Icone(doProjeto, "Abrir o Claude");
+            Assert.Contains("Segoe Fluent Icons", glifo.FontFamily.ToString());
+            Assert.Equal(Avalonia.Media.TextTrimming.None, glifo.TextTrimming);
+            Assert.Equal(14, glifo.FontSize);
+            Assert.True(janela.TryFindResource("Green", janela.ActualThemeVariant, out var verde));
+            Assert.Same(verde, glifo.Foreground);
+            Foto(raiz, "menu-projeto.png");
+            doProjeto.Hide();
+            Dispatcher.UIThread.RunJobs();
+
+            var doGrupo = janela.MenuDe(Titulo(vm, "DBISAM"));
+            doGrupo.ShowAt(janela);
+            Dispatcher.UIThread.RunJobs();
+            Foto(TopLevel.GetTopLevel(doGrupo.Items.OfType<MenuItem>().First())!, "menu-grupo.png");
+            doGrupo.Hide();
+            Dispatcher.UIThread.RunJobs();
+
+            vm.VerSessoesCommand.Execute(null);
+            Assert.True(await Esperar(() => vm.SessoesLidas && vm.Linhas.OfType<LinhaDaSessao>().Any()));
+            var doSessao = janela.MenuDe(vm.Linhas.OfType<LinhaDaSessao>().First());
+            TodosComIcone(doSessao);
+            Assert.Contains("vermelho", Icone(doSessao, "Excluir conversa…").Classes);
+
+            doSessao.ShowAt(janela);
+            Dispatcher.UIThread.RunJobs();
+            Foto(TopLevel.GetTopLevel(doSessao.Items.OfType<MenuItem>().First())!, "menu-conversa.png");
+            doSessao.Hide();
+            Dispatcher.UIThread.RunJobs();
+            Foto(janela, "conversa-com-excluir.png");
         }
         finally
         {

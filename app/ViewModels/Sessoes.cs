@@ -34,7 +34,8 @@ public sealed partial class LinhaDaSessao : LinhaDaArvore
     /// <summary>Relida a cada pouco: o título, o tamanho e se está aberta mudam enquanto ela é usada.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Titulo), nameof(Detalhe), nameof(Dica), nameof(Aberta), nameof(Quando),
-        nameof(Tamanho), nameof(TemBranch))]
+        nameof(Tamanho), nameof(TemBranch), nameof(RotuloDeExcluir))]
+    [NotifyCanExecuteChangedFor(nameof(ExcluirCommand))]
     private SessaoDoClaude _sessao;
 
     [ObservableProperty]
@@ -80,8 +81,13 @@ public sealed partial class LinhaDaSessao : LinhaDaArvore
     public string GlifoDaEstrela => Favorita ? "" : "";
     public string RotuloDaEstrela => Favorita ? "Tirar das favoritas" : "Favoritar";
 
+    public string RotuloDeExcluir => Aberta ? "Excluir conversa (está aberta)" : "Excluir conversa…";
+
+    private bool Fechada() => !Aberta;
+
     [RelayCommand] private Task Retomar() => _main.RetomarAsync(this);
     [RelayCommand] private void Favoritar() => _main.AlternarFavorita(this);
+    [RelayCommand(CanExecute = nameof(Fechada))] private Task Excluir() => _main.ExcluirAsync(this);
 }
 
 /// <summary>
@@ -337,6 +343,82 @@ public sealed partial class MainViewModel
         }
         CarregarFavoritas();
         Remontar();
+    }
+
+    /// <summary>Troca a Lixeira de verdade nos testes.</summary>
+    internal Action<string> MandarParaLixeira { get; set; } = Lixeira.Mandar;
+
+    /// <summary>Troca a conferência do processo nos testes.</summary>
+    internal Func<int, bool>? ClaudeRodando { get; set; }
+
+    /// <summary>
+    /// Manda a conversa para a Lixeira, depois de confirmar: o transcript e o que o Claude
+    /// guarda dela ao lado (<see cref="SessoesDoClaude.Rastros"/>). Aberta não se exclui: o
+    /// Claude continuaria gravando nela. O cl não tem isso: lá ela só deixa de aparecer.
+    /// </summary>
+    public async Task ExcluirAsync(LinhaDaSessao l)
+    {
+        var s = l.Sessao;
+        var job = s.Bg ? " O job em segundo plano dela vai junto." : "";
+        if (!await _dialogos.ConfirmAsync("Excluir conversa",
+                $"Excluir “{s.Titulo}”, de {l.Projeto} ({l.Tamanho})? Ela some daqui, do /resume e do cl, e vai para a Lixeira do Windows.{job}"))
+            return;
+
+        // pode ter sido aberta enquanto a pergunta estava na tela
+        var conta = ClaudeHooks.PastaDaConta(_workspace.ContaDasSessoes);
+        if (SessoesDoClaude.Abertas(conta, ClaudeRodando).ContainsKey(s.Id))
+        {
+            Aviso = $"“{s.Titulo}” foi aberta enquanto isso: feche antes de excluir.";
+            return;
+        }
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var rastro in SessoesDoClaude.Rastros(conta, s)) MandarParaLixeira(rastro);
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            Aviso = "Não foi possível excluir a conversa: " + ex.Message;
+            return;
+        }
+        Esquecer(s);
+    }
+
+    // a linha que fica no lugar da excluída, se era ela que estava à vista, e o que o GTerm
+    // e o cl lembravam dela
+    private void Esquecer(SessaoDoClaude s)
+    {
+        var aVista = SessaoAVista?.Sessao.Id == s.Id;
+        var lugar = Linhas.ToList().FindIndex(x => x is LinhaDaSessao o && o.Sessao.Id == s.Id);
+
+        _sessoes = _sessoes.Where(x => x.Id != s.Id).ToList();
+        foreach (var chave in _cache.Keys.Where(k => k.StartsWith("s|") && k.EndsWith("|" + s.Id)).ToList())
+            _cache.Remove(chave);
+
+        _workspace.SessoesOcultas.RemoveAll(i => Chaves.Equals(i, s.Id));
+        foreach (var g in _workspace.GruposDasSessoes) g.Itens.RemoveAll(i => Chaves.Equals(i, s.Id));
+        Salvar();
+
+        if (_favoritas.Contains(s.Id, Chaves))
+        {
+            try
+            {
+                SessoesDoClaude.TrocarFavorita(_workspace.EstadoDoCl, s.Id);
+                CarregarFavoritas();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                Aviso = "Não foi possível gravar as favoritas: " + ex.Message;
+            }
+        }
+
+        Remontar();
+        if (aVista)
+            SessaoAVista = Linhas.Skip(lugar).OfType<LinhaDaSessao>().FirstOrDefault()
+                           ?? Linhas.OfType<LinhaDaSessao>().LastOrDefault();
     }
 
     /// <summary>

@@ -1007,6 +1007,9 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _vigiaDasRevisoes;
     private bool _lendoRevisoes;
 
+    /// <summary>Leitura em curso: a que for pedida agora volta sem ler. O teste espera ela sair.</summary>
+    internal bool LendoRevisoes => _lendoRevisoes || _lendoMarcas;
+
     /// <summary>
     /// O /code-review de cada aba, fora da tela: vale também o digitado direto no terminal, que
     /// o GTerm não vê passar. Só a conversa da aba é olhada, e quase sempre não há nada.

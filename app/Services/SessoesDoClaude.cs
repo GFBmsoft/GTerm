@@ -319,6 +319,27 @@ public sealed class SessoesDoClaude
         return ficou;
     }
 
+    /// <summary>
+    /// O que a conversa deixa na conta, o transcript primeiro: a pasta dela em projects
+    /// (subagentes e saídas longas), o histórico de arquivos do /rewind, o ambiente e o job em
+    /// segundo plano. O history.jsonl fica: é um arquivo só, em que todo Claude aberto escreve.
+    /// </summary>
+    public static IReadOnlyList<string> Rastros(string pastaDaConta, SessaoDoClaude s)
+    {
+        // só uuid: um id vazio apontaria para a pasta file-history inteira
+        if (!Guid.TryParse(s.Id, out _)) return Array.Empty<string>();
+
+        var projeto = Path.Combine(pastaDaConta, "projects", s.Chave);
+        return new[]
+        {
+            Path.Combine(projeto, s.Id + ".jsonl"),
+            Path.Combine(projeto, s.Id),
+            Path.Combine(pastaDaConta, "file-history", s.Id),
+            Path.Combine(pastaDaConta, "session-env", s.Id),
+            Path.Combine(pastaDaConta, "jobs", s.Id[..8]),
+        }.Where(c => File.Exists(c) || Directory.Exists(c)).ToList();
+    }
+
     /// <summary>"agora", "há 5 min", "há 3 h", "ontem 14:32" ou "27/10 09:15": o _ClQuando do cl.</summary>
     public static string Quando(DateTime d, DateTime agora)
     {

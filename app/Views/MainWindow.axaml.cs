@@ -8,6 +8,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaTerminal;
@@ -157,21 +158,26 @@ public partial class MainWindow : Window, IDialogService
     {
         var menu = new MenuFlyout();
 
-        void Item(string rotulo, Action acao)
+        void Item(string rotulo, string glifo, string cor, Action acao)
         {
-            var item = new MenuItem { Header = rotulo };
+            var item = ItemDeMenu.Novo(rotulo, glifo, cor);
             item.Click += (_, _) => acao();
             menu.Items.Add(item);
         }
 
-        void Comando(string rotulo, System.Windows.Input.ICommand comando) =>
-            menu.Items.Add(new MenuItem { Header = rotulo, Command = comando });
+        MenuItem Comando(string rotulo, string glifo, string cor, System.Windows.Input.ICommand comando)
+        {
+            var item = ItemDeMenu.Novo(rotulo, glifo, cor);
+            item.Command = comando;
+            menu.Items.Add(item);
+            return item;
+        }
 
         void MoverPara(LinhaDaArvore l)
         {
-            var mover = new MenuItem { Header = "Mover para" };
+            var mover = ItemDeMenu.Novo("Mover para", Glifos.Mover, "azul");
 
-            var novo = new MenuItem { Header = "Novo grupo…" };
+            var novo = ItemDeMenu.Novo("Novo grupo…", Glifos.NovaPasta, "amarelo");
             novo.Click += async (_, _) =>
             {
                 if (await _vm.NovoGrupoAsync(null) is { } id) _vm.MoverPara(l, id);
@@ -182,11 +188,17 @@ public partial class MainWindow : Window, IDialogService
             if (destinos.Count > 0) mover.Items.Add(new Separator());
             foreach (var d in destinos)
             {
-                var item = new MenuItem { Header = d.Recuado };
+                var item = ItemDeMenu.ComBolinha(d.Recuado, Brush.Parse(d.Grupo.Cor));
                 item.Click += (_, _) => _vm.MoverPara(l, d.Grupo.Id);
                 mover.Items.Add(item);
             }
             menu.Items.Add(mover);
+        }
+
+        void Ocultar(bool oculto, Action acao)
+        {
+            if (oculto) Item("Mostrar na árvore", Glifos.Ver, "cinza", acao);
+            else Item("Ocultar da árvore", Glifos.Ocultar, "cinza", acao);
         }
 
         // num título ou fora das linhas: é por aqui que um grupo escondido volta, inclusive
@@ -195,9 +207,9 @@ public partial class MainWindow : Window, IDialogService
         {
             menu.Items.Add(new Separator());
             if (titulo is not null && titulo.Id != MainViewModel.GrupoResultados)
-                Item("Ocultar este grupo", () => _vm.MostrarOuEsconderGrupo(titulo.Id));
+                Item("Ocultar este grupo", Glifos.Ocultar, "cinza", () => _vm.MostrarOuEsconderGrupo(titulo.Id));
 
-            var lista = new MenuItem { Header = "Grupos à vista" };
+            var lista = ItemDeMenu.Novo("Grupos à vista", Glifos.Lista, "cinza");
             foreach (var g in _vm.GruposAVista())
             {
                 var item = new MenuItem { Header = g.Nome, ToggleType = MenuItemToggleType.CheckBox, IsChecked = g.Marcado };
@@ -210,55 +222,61 @@ public partial class MainWindow : Window, IDialogService
         switch (linha)
         {
             case GrupoDaArvore g when _vm.EhEditavel(g.Id):
-                Item($"Novo subgrupo em {g.Titulo}…", () => _ = _vm.NovoGrupoAsync(g.Id));
+                Item($"Novo subgrupo em {g.Titulo}…", Glifos.NovaPasta, "amarelo", () => _ = _vm.NovoGrupoAsync(g.Id));
                 if (_vm.EhDoUsuario(g.Id))
                 {
-                    Item("Editar grupo… (nome, cor e onde fica)", () => _ = _vm.EditarGrupoAsync(g.Id));
+                    Item("Editar grupo… (nome, cor e onde fica)", Glifos.Editar, "azul", () => _ = _vm.EditarGrupoAsync(g.Id));
                     menu.Items.Add(new Separator());
-                    Item("Excluir grupo…", () => _ = _vm.ExcluirGrupoAsync(g.Id));
+                    Item("Excluir grupo…", Glifos.Excluir, "vermelho", () => _ = _vm.ExcluirGrupoAsync(g.Id));
                 }
                 else
-                    Item("Cor…", () => _ = _vm.EditarGrupoAsync(g.Id));
+                {
+                    var cor = ItemDeMenu.ComBolinha("Cor…", g.Cor);
+                    cor.Click += (_, _) => _ = _vm.EditarGrupoAsync(g.Id);
+                    menu.Items.Add(cor);
+                }
                 GruposAVista(g);
                 break;
 
             case LinhaDoProjeto { Projeto: var p } l:
-                Comando("Abrir o Claude", p.AbrirClaudeCommand);
-                Comando("Sessão nova", p.SessaoNovaCommand);
+                Comando("Abrir o Claude", Glifos.Retomar, "verde", p.AbrirClaudeCommand);
+                Comando("Sessão nova", Glifos.SessaoNova, "azul", p.SessaoNovaCommand);
                 if (p.EhDaBmsoft)
                 {
-                    Comando("Pedido do Mantis…", p.PedidoCommand);
-                    Comando("Pull request", p.PullRequestCommand);
+                    Comando("Pedido do Mantis…", Glifos.Pedido, "amarelo", p.PedidoCommand);
+                    Comando("Pull request", Glifos.PullRequest, "roxo", p.PullRequestCommand);
                 }
-                Comando("Sem skill", p.SemSkillCommand);
+                Comando("Sem skill", Glifos.SemSkill, "cinza", p.SemSkillCommand);
                 menu.Items.Add(new Separator());
-                Comando(p.RotuloDoFavorito, p.FavoritarCommand);
+                Comando(p.RotuloDoFavorito, p.GlifoDoFavorito, "amarelo", p.FavoritarCommand);
                 if (l.NosFavoritos)
                 {
-                    menu.Items.Add(new MenuItem { Header = "Mover para cima", Command = l.SubirCommand, InputGesture = new KeyGesture(Key.Up, KeyModifiers.Alt) });
-                    menu.Items.Add(new MenuItem { Header = "Mover para baixo", Command = l.DescerCommand, InputGesture = new KeyGesture(Key.Down, KeyModifiers.Alt) });
+                    Comando("Mover para cima", Glifos.Subir, "azul", l.SubirCommand).InputGesture = new KeyGesture(Key.Up, KeyModifiers.Alt);
+                    Comando("Mover para baixo", Glifos.Descer, "azul", l.DescerCommand).InputGesture = new KeyGesture(Key.Down, KeyModifiers.Alt);
                 }
                 menu.Items.Add(new Separator());
                 MoverPara(l);
-                Item(_vm.EstaOculto(p) ? "Mostrar na árvore" : "Ocultar da árvore", () => _vm.AlternarOculto(p));
+                Ocultar(_vm.EstaOculto(p), () => _vm.AlternarOculto(p));
                 if (p.TemTerminal)
                 {
                     menu.Items.Add(new Separator());
-                    Comando("Encerrar o Claude", p.EncerrarCommand);
+                    Comando("Encerrar o Claude", Glifos.Encerrar, "vermelho", p.EncerrarCommand);
                 }
                 break;
 
             case LinhaDaSessao s:
-                Comando(s.RotuloDeRetomar, s.RetomarCommand);
-                Comando(s.RotuloDaEstrela, s.FavoritarCommand);
+                Comando(s.RotuloDeRetomar, Glifos.Retomar, "verde", s.RetomarCommand);
+                Comando(s.RotuloDaEstrela, s.GlifoDaEstrela, "amarelo", s.FavoritarCommand);
                 menu.Items.Add(new Separator());
                 MoverPara(s);
-                if (_vm.ConversaEmGrupo(s)) Item("Tirar do grupo", () => _vm.TirarDoGrupo(s));
-                Item(_vm.EstaOculta(s) ? "Mostrar na árvore" : "Ocultar da árvore", () => _vm.AlternarOculta(s));
+                if (_vm.ConversaEmGrupo(s)) Item("Tirar do grupo", Glifos.Tirar, "cinza", () => _vm.TirarDoGrupo(s));
+                Ocultar(_vm.EstaOculta(s), () => _vm.AlternarOculta(s));
+                menu.Items.Add(new Separator());
+                Comando(s.RotuloDeExcluir, Glifos.Excluir, "vermelho", s.ExcluirCommand);
                 break;
 
             default:
-                Item("Novo grupo…", () => _ = _vm.NovoGrupoAsync(null));
+                Item("Novo grupo…", Glifos.NovaPasta, "amarelo", () => _ = _vm.NovoGrupoAsync(null));
                 GruposAVista(linha as GrupoDaArvore);
                 break;
         }

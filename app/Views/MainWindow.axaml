@@ -277,10 +277,6 @@
       <Setter Property="TextBlock.Foreground" Value="{DynamicResource Accent}" />
     </Style>
 
-    <Style Selector="TextBlock.glifo">
-      <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
-    </Style>
-
     <!-- os glifos do cia: da Nerd Font do terminal -->
     <Style Selector="TextBlock.nerd">
       <Setter Property="FontFamily" Value="CaskaydiaCove NFM,CaskaydiaMono Nerd Font,JetBrainsMono NFM,Symbols Nerd Font Mono" />
@@ -888,6 +884,14 @@
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="glifo" Text="&#xE710;" />
                   <TextBlock Text="Claude sem conversa" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Command="{Binding SessaoAVista.ExcluirCommand}" ToolTip.ShowOnDisabled="True"
+                      Foreground="{DynamicResource Red}" Background="#24D93F3F" BorderBrush="#66D93F3F"
+                      ToolTip.Tip="Manda a conversa para a Lixeira do Windows: ela some daqui, do /resume e do cl. Aberta, só depois de fechar">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE74D;" />
+                  <TextBlock Text="{Binding SessaoAVista.RotuloDeExcluir}" />
                 </StackPanel>
               </Button>
             </StackPanel>

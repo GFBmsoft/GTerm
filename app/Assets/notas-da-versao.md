@@ -1,3 +1,8 @@
+## 1.0.0.21 — 30/10/2026
+- **Menus com ícones**: o clique direito na barra lateral ganhou o visual do GRepos e do GRemote, com um ícone colorido em cada opção, nas mesmas cores dos botões. Em "Mover para", cada grupo aparece com a bolinha da cor dele.
+- **Excluir conversa**: nas Sessões, o clique direito e o quadro da conversa agora têm "Excluir conversa…". Depois de confirmar, ela vai para a Lixeira do Windows, junto com o que o Claude guardava dela, e some da lista, do /resume e do cl. Conversa aberta só pode ser excluída depois de fechada.
+- Excluir também tira a conversa das favoritas e dos grupos. Restaurada da Lixeira, ela volta para a lista, mas não para o grupo nem para as favoritas. Se o code review do projeto foi feito nela, a marca na barra lateral sai junto.
+
 ## 1.0.0.20 — 30/10/2026
 - **Projetos que já passaram por code review**: na barra lateral aparece uma marca ao lado do nome, verde quando a revisão está em dia e amarela quando entrou commit depois dela. Passando o mouse aparece quando foi. Ao escolher o projeto, o quadro mostra quando foi a revisão, se ainda vale (`3 commits depois`, `2 arquivos alterados` ou `em dia`) e a primeira frase do resultado, em inglês, como o Claude escreve.
 - Vale para o /code-review que roda em segundo plano, pedido pelo botão ou digitado no terminal. Só as revisões que terminaram contam, e projetos sem revisão registrada ficam sem marca.

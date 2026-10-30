@@ -17,7 +17,7 @@ Windows Terminal. Por isso as abas não têm botão de fechar, e encerrar o Clau
 janela com terminal vivo **sempre confirma antes**.
 
 Nasceu do terminal embutido do GRepos (`D:\Projetos\Private\GRepos`): `ConPty`,
-`BarraDeTitulo`, `GroupPalette`, `GrupoArvore`, `SeletorDeCor`, o tema e o
+`BarraDeTitulo`, `GroupPalette`, `GrupoArvore`, `SeletorDeCor`, `ItemDeMenu`, o tema e o
 `vendor/AvaloniaTerminal` são cópias de lá. Correção feita em um desses arquivos
 provavelmente vale para o outro projeto também.
 
@@ -98,7 +98,9 @@ e por isso confirma antes.
   Os favoritos são todos numerados, como o `[n]` do cia; Ctrl+1..9 vão aos nove primeiros, e o grupo só aparece com algum à vista. A ordem deles muda arrastando a linha nos
   Favoritos (a linha acompanha o mouse e a ordem só é gravada ao soltar), com Alt+↑/↓ ou
   pelo menu. O menu do clique direito é montado na hora (`MainWindow.MenuDe`), porque o
-  "Mover para" depende dos grupos daquele momento: não há `ContextMenu` nos templates.
+  "Mover para" depende dos grupos daquele momento: não há `ContextMenu` nos templates. Cada
+  item leva o ícone na cor da ação (`ItemDeMenu`, `Glifos`), como no GRepos e no GRemote: a
+  ação que é pílula tem o glifo e a cor da pílula, e o grupo, a bolinha da cor dele.
 - **Grupos** — grupos e subgrupos como os do GRepos, nos dois modos (`ViewModels/Grupos.cs`,
   `GrupoArvore`): `Workspace.Grupos` e `GruposDasSessoes`, listas planas com o pai, e
   `Grupo.Itens` com o conteúdo na ordem da árvore (pastas ou ids de conversa). Ficam no
@@ -128,7 +130,12 @@ e por isso confirma antes.
   primeira conversa); voltar aos Projetos traz o projeto que estava à vista. Retomar abre a aba do projeto com `--resume <id>`
   (`Cia.ModoConversa`), e pasta fora das bases vira projeto avulso, com aba e sem linha na
   árvore. O + é o Claude sem conversa nenhuma, na pasta pessoal (aba "Claude"). **Mudou
-  lá, muda aqui.**
+  lá, muda aqui.** Excluir (no menu e no quadro) não vem do cl: depois de confirmar, manda
+  para a Lixeira do Windows (`Lixeira`) o transcript e o que o Claude guarda da conversa ao
+  lado (`SessoesDoClaude.Rastros`), e tira das favoritas, dos grupos e das ocultas. Aberta não
+  se exclui: o Claude continuaria gravando nela. O `history.jsonl` fica, porque é um
+  arquivo só, em que todo Claude aberto escreve. A marca de code review sai junto, se a
+  revisão foi feita naquela conversa.
 - **Projeto parado** — no lugar do terminal, o nome, a pasta e o tipo, o quadro do
   dashboard do cia (git, CLAUDE.md, a sessão que o Enter retoma e a última abertura, lidos
   em `MainViewModel.CarregarQuadroAsync` a cada escolha; o git por `Cia.Git`, sem travar o
