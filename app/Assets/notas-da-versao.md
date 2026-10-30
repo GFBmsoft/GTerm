@@ -1,3 +1,8 @@
+## 1.0.0.18 — 30/10/2026
+- **Code review com percentual**: a barra agora mostra quanto já andou, e o botão mostra, por exemplo, `Revisão ~45%`. Passando o mouse aparecem o tempo e os passos. O número é uma estimativa, feita pelo tempo que suas revisões anteriores levaram, e fica mais preciso conforme você usa: a revisão não informa em que fase está. Ele para em 99% e só chega a 100% quando ela termina de verdade.
+- **Atualizar com um clique**: clicar na versão, no rodapé da barra lateral, procura e, havendo versão nova, já pergunta se pode atualizar. Antes eram dois cliques, e o segundo se perdia enquanto o primeiro procurava. Vale a partir da próxima atualização.
+- O botão do rodapé ficou maior, e com versão nova vira uma pílula azul. Enquanto procura ou baixa, o andamento continua legível. Se algo falhar, a mensagem inteira aparece ao passar o mouse.
+
 ## 1.0.0.17 — 30/10/2026
 - **Retomar ficou imediato**: o GTerm não manda mais o /compact sozinho ao retomar uma sessão. Passados os 300 KB, toda retomada compactava de novo e levava perto de um minuto para o Claude responder. O cia no terminal continua compactando como antes.
 - **Compactar**: botão novo na barra da aba, para resumir a conversa quando você quiser. Fica disponível com o Claude parado, esperando um pedido, e esmaecido enquanto ele trabalha ou ainda está abrindo. Precisa dos avisos do Claude Code instalados em Preferências.

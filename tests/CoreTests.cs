@@ -1700,12 +1700,14 @@ public class JanelaTests : IDisposable
     {
         public bool Resposta;
         public int Perguntas;
+        public string? Pergunta;
         public string? Texto;
         public Preferencias? PreferenciasNovas;
 
         public Task<bool> ConfirmAsync(string title, string message)
         {
             Perguntas++;
+            Pergunta = message;
             return Task.FromResult(Resposta);
         }
 
@@ -2091,9 +2093,81 @@ public class JanelaTests : IDisposable
         Assert.Equal("a1nova", Ler()!.Id);
     }
 
+    /// <summary>Uma revisão já encerrada, de outra conversa, com a duração dada.</summary>
+    private void RevisaoAntiga(string agente, int minutos, string esforco = "xhigh", bool terminou = true)
+    {
+        var agentes = MontarRevisao(1, Notas, Guid.NewGuid().ToString(), agente);
+        var diario = Path.Combine(agentes, $"agent-{agente}.jsonl");
+        File.WriteAllText(diario, "{\"type\":\"user\",\"message\":{\"content\":\"`" + esforco + " effort → 10 inline angles\"}}" + Environment.NewLine);
+        if (terminou) File.WriteAllText(Path.Combine(agentes, $"agent-{agente}.meta.json"), """{ "finished": true }""");
+        File.SetLastWriteTime(Path.Combine(agentes, $"agent-{agente}.forked-skill.json"),
+            File.GetLastWriteTime(diario).AddMinutes(-minutos));
+    }
+
+    /// <summary>
+    /// O percentual é estimado pelo tempo contra a mediana das revisões terminadas, do mesmo
+    /// esforço se houver. Só sobe, passa devagar pelo fim numa revisão mais longa que as outras
+    /// e nunca chega a 100 antes de ela terminar de verdade. A parada não entra na conta.
+    /// </summary>
+    [Fact]
+    public void PercentualDaRevisaoPeloTempoDasAnteriores()
+    {
+        var tipico = TimeSpan.FromMinutes(10);
+        int Em(double minutos) => RevisoesDoClaude.Percentual(TimeSpan.FromMinutes(minutos), tipico);
+
+        Assert.Equal(1, Em(0));
+        Assert.Equal(50, Em(5));
+        Assert.Equal(90, Em(9));
+
+        var depois = new[] { 9.5, 10, 12, 15, 20, 60, 600 }.Select(Em).ToArray();
+        Assert.Equal(depois.OrderBy(p => p), depois);
+        Assert.True(depois[0] >= 90);
+        Assert.Equal(99, depois[^1]);
+
+        // sem nenhuma terminada, o valor padrão
+        const string Sessao = "33333333-4444-5555-6666-777777777777";
+        var leitor = new RevisoesDoClaude();
+        Revisao Nova(string agente, string esforco)
+        {
+            var agentes = MontarRevisao(7777, Notas, Sessao, agente);
+            File.WriteAllText(Path.Combine(agentes, $"agent-{agente}.jsonl"),
+                "{\"type\":\"user\",\"message\":{\"content\":\"`" + esforco + " effort → dedup\"}}" + Environment.NewLine);
+            File.SetLastWriteTime(Path.Combine(agentes, $"agent-{agente}.forked-skill.json"), DateTime.Now.AddMinutes(1));
+            return leitor.Ultima(ContaDoClaude, 7777, Notas, DateTime.Now)!;
+        }
+
+        var primeira = Nova("b0primeira", "xhigh");
+        Assert.Equal(RevisoesDoClaude.SemHistorico, primeira.Tipico);
+        Assert.Equal(0, primeira.Amostras);
+
+        // a mediana das terminadas do mesmo esforço: nem a de outro esforço, nem a parada
+        RevisaoAntiga("b1", 4);
+        RevisaoAntiga("b2", 6);
+        RevisaoAntiga("b3", 20);
+        RevisaoAntiga("b4", 1, "medium");
+        RevisaoAntiga("b5", 90, terminou: false);
+        var segunda = Nova("b6segunda", "xhigh");
+        Assert.Equal(TimeSpan.FromMinutes(6), segunda.Tipico);
+        Assert.Equal(3, segunda.Amostras);
+
+        // número par de amostras: a média das duas do meio
+        RevisaoAntiga("b7", 8);
+        Assert.Equal(TimeSpan.FromMinutes(7), Nova("b8terceira", "xhigh").Tipico);
+
+        // esforço sem nenhuma terminada: vale o que houver
+        var outra = Nova("b9low", "low");
+        Assert.Equal(5, outra.Amostras);
+
+        // a revisão guarda o tempo dela: uma terminada no meio do caminho não faz o número voltar
+        RevisaoAntiga("c1", 1000);
+        var mesma = leitor.Ultima(ContaDoClaude, 7777, Notas, DateTime.Now)!;
+        Assert.Equal("b9low", mesma.Id);
+        Assert.Equal(outra.Tipico, mesma.Tipico);
+    }
+
     /// <summary>
     /// O botão e a barra na aba: o botão manda o comando, e a barra aparece pelo que o Claude
-    /// grava, também se o comando foi digitado direto. Rodando, ela anda sem percentual e o
+    /// grava, também se o comando foi digitado direto. Rodando, ela mostra quanto andou, e o
     /// texto do botão é o status, legível mesmo sem aceitar clique; no fim fica cheia e verde.
     /// </summary>
     [AvaloniaFact]
@@ -2114,10 +2188,9 @@ public class JanelaTests : IDisposable
 
             var botao = janela.FindControl<Button>("CodeReview")!;
             var barra = janela.FindControl<ProgressBar>("BarraDaRevisao")!;
-            var andando = janela.FindControl<ProgressBar>("BarraDaRevisaoAndando")!;
             Dispatcher.UIThread.RunJobs();
             Assert.False(botao.IsEffectivelyEnabled); // o Claude ainda não avisou que subiu
-            Assert.False(barra.IsVisible || andando.IsVisible);
+            Assert.False(barra.IsVisible);
             Assert.Equal("Code review", financeiro.RotuloDaRevisao);
 
             sessao.Modelo.Send("echo pronto a> \"%GTERM_ESTADO%\"\r");
@@ -2131,31 +2204,39 @@ public class JanelaTests : IDisposable
             await financeiro.RevisarCommand.ExecuteAsync(null);
             Assert.True(await Esperar(() => Tela(sessao).Contains("/code-review")), Tela(sessao));
 
-            // o Claude começou a revisão em segundo plano
+            // o Claude começou a revisão em segundo plano, cinco minutos atrás; a anterior levou dez
             sessao.Modelo.Send("echo concluido b> \"%GTERM_ESTADO%\"\r"); // a conversa principal fica livre
             Assert.True(await Esperar(() => financeiro.RevisarCommand.CanExecute(null)));
+            RevisaoAntiga("a8antiga", 10);
             var agentes = MontarRevisao(sessao.Pid!.Value, Financeiro, "22222222-3333-4444-5555-666666666666", "a9revisao");
             File.AppendAllText(Path.Combine(agentes, "agent-a9revisao.jsonl"), Passo(3));
+            File.SetLastWriteTime(Path.Combine(agentes, "agent-a9revisao.forked-skill.json"), DateTime.Now.AddMinutes(-5));
             await vm.LerRevisoesAsync();
             Dispatcher.UIThread.RunJobs();
 
             Assert.True(financeiro.RevisaoRodando);
-            Assert.True(andando.IsVisible);
-            Assert.True(andando.IsIndeterminate);
-            Assert.False(barra.IsVisible);
+            Assert.True(barra.IsVisible);
+            Assert.False(barra.IsIndeterminate); // ela mostra quanto andou, não fica se movendo
+            Assert.InRange(financeiro.PercentualDaRevisao, 49, 52);
+            Assert.Equal(financeiro.PercentualDaRevisao, barra.Value);
+            var preenchido = barra.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_Indicator");
+            Assert.Equal(barra.Bounds.Width * barra.Value / 100, preenchido.Bounds.Width, 0);
             Assert.False(botao.IsEffectivelyEnabled); // uma de cada vez
             Assert.False(financeiro.RevisarCommand.CanExecute(null));
-            Assert.StartsWith("Revisando · ", financeiro.RotuloDaRevisao);
+            Assert.Equal($"Revisão ~{financeiro.PercentualDaRevisao}%", financeiro.RotuloDaRevisao);
+            Assert.Contains("há 5 min", financeiro.DicaDaRevisao);
             Assert.Contains("3 passos", financeiro.DicaDaRevisao);
+            Assert.Contains("estimativa", financeiro.DicaDaRevisao); // o número não finge ser exato
+            Assert.Contains("10 min da revisão anterior", financeiro.DicaDaRevisao);
             Assert.Equal(1, botao.Opacity); // desabilitado, mas é onde está o status
             Assert.Contains("revisando", botao.Classes);
-            Assert.Contains(botao.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.StartsWith("Revisando · ") == true);
+            Assert.Contains(botao.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.StartsWith("Revisão ~") == true);
 
             // na largura da barra da aba, sem mexer na altura dela nem no terminal embaixo
             var faixa = janela.FindControl<Border>("BarraDaAba")!;
-            Assert.True(andando.Bounds.Width > 500, "largura " + andando.Bounds.Width);
+            Assert.True(barra.Bounds.Width > 500, "largura " + barra.Bounds.Width);
             Assert.Equal(janela.FindControl<TextBox>("CaixaDoFiltro")!.Bounds.Height, faixa.Bounds.Height);
-            Assert.Equal(4, andando.Bounds.Height);
+            Assert.Equal(4, barra.Bounds.Height);
             Foto(janela, "revisao-rodando.png");
 
             // o Compactar não depende da revisão: a conversa principal segue livre
@@ -2166,10 +2247,8 @@ public class JanelaTests : IDisposable
             await vm.LerRevisoesAsync();
             Dispatcher.UIThread.RunJobs();
             Assert.True(financeiro.RevisaoConcluida);
-            Assert.False(andando.IsVisible);
             Assert.True(barra.IsVisible);
-            var cheia = barra.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_Indicator");
-            Assert.Equal(barra.Bounds.Width, cheia.Bounds.Width, 0);
+            Assert.Equal(barra.Bounds.Width, preenchido.Bounds.Width, 0);
             Assert.Equal(100, barra.Value);
             Assert.Contains("concluida", barra.Classes);
             Assert.StartsWith("Revisado · ", financeiro.RotuloDaRevisao);
@@ -2194,7 +2273,7 @@ public class JanelaTests : IDisposable
             Assert.True(await Esperar(() => notas.Sessao is { Pid: not null }));
             await vm.LerRevisoesAsync();
             Dispatcher.UIThread.RunJobs();
-            Assert.False(barra.IsVisible || andando.IsVisible);
+            Assert.False(barra.IsVisible);
             financeiro.MostrarCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.True(barra.IsVisible);
@@ -2285,6 +2364,118 @@ public class JanelaTests : IDisposable
             sessao.Modelo.Send("exit\r");
             Assert.True(await Esperar(() => sessao.Encerrada));
             Assert.False(financeiro.CompactarCommand.CanExecute(null));
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    private static Release ReleaseDe(string tag) => new()
+    {
+        Tag = tag,
+        Url = "https://exemplo/" + tag,
+        Arquivos = new() { new ReleaseAsset { Nome = $"GTerm-{tag}-standalone.exe", Url = "https://exemplo/" + tag + ".exe", Tamanho = 129 * 1024 * 1024 } },
+    };
+
+    /// <summary>
+    /// Um clique no rodapé resolve: procura e, com versão nova, já pergunta. Eram dois, e o
+    /// segundo se perdia enquanto o primeiro procurava. Procura sempre, para não instalar a
+    /// versão vista ao abrir se já saiu outra. Desistir deixa o convite, sem versão nova fica
+    /// o ✓, e a falha aparece inteira na dica, porque no rodapé ela sai cortada.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task UmCliqueNoRodapeProcuraEPergunta()
+    {
+        Montar();
+        var dialogos = new Dialogos();
+        var vm = new MainViewModel(dialogos) { VersaoEmUso = "1.0.0.16" };
+        var paginas = new List<string>();
+        var consultas = 0;
+        var release = ReleaseDe("1.0.0.17");
+        vm.ProcurarRelease = () =>
+        {
+            consultas++;
+            return Task.FromResult<Release?>(release);
+        };
+        vm.PodeTrocar = _ => true;
+        vm.AbrirPagina = paginas.Add;
+
+        // sem versão nova conhecida: o mesmo clique procura e pergunta
+        Assert.False(vm.TemAtualizacao);
+        await vm.AtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal(1, consultas);
+        Assert.Equal(1, dialogos.Perguntas);
+        Assert.Contains("1.0.0.17 (129 MB)", dialogos.Pergunta);
+
+        // desistiu: o convite continua, e a dica diz o que o clique faz
+        Assert.Equal("Atualizar para 1.0.0.17", vm.Rodape);
+        Assert.True(vm.TemAtualizacao);
+        Assert.Contains("versão 1.0.0.17", vm.DicaDoRodape);
+
+        // saiu outra enquanto o convite estava lá: o clique procura de novo e oferece a nova
+        release = ReleaseDe("1.0.0.18");
+        await vm.AtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal(2, consultas);
+        Assert.Equal(2, dialogos.Perguntas);
+        Assert.Contains("1.0.0.18", dialogos.Pergunta);
+        Assert.Equal("Atualizar para 1.0.0.18", vm.Rodape);
+
+        // o convite que sobrou da consulta ao abrir: mesma versão, e o texto volta depois de procurar
+        await vm.AtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal("Atualizar para 1.0.0.18", vm.Rodape);
+
+        // build de pasta não troca sozinho: o clique abre a página
+        vm.PodeTrocar = _ => false;
+        await vm.AtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal(new[] { "https://exemplo/1.0.0.18" }, paginas);
+        Assert.Equal(3, dialogos.Perguntas);
+
+        // sem versão nova, nem pergunta nem convite: a release sumiu, ou já está nela
+        vm.VersaoEmUso = "1.0.0.18";
+        await vm.AtualizacaoCommand.ExecuteAsync(null);
+        Assert.False(vm.TemAtualizacao);
+        Assert.Equal("GTerm 1.0.0.18  ✓", vm.Rodape);
+        Assert.Equal("Procurar atualização", vm.DicaDoRodape);
+        Assert.Equal(3, dialogos.Perguntas);
+
+        // falhou: o rodapé corta, a dica tem a frase inteira, e não fica procurando para sempre
+        vm.ProcurarRelease = () => throw new InvalidOperationException("sem rede nesta máquina");
+        await vm.AtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal("Não foi possível procurar: sem rede nesta máquina", vm.Rodape);
+        Assert.Equal(vm.Rodape, vm.DicaDoRodape);
+        Assert.True(vm.AtualizacaoCommand.CanExecute(null));
+
+        // build local não tem versão para comparar, e não consulta nada
+        vm.VersaoEmUso = "";
+        consultas = 0;
+        await vm.AtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal("Build local, sem versão", vm.Rodape);
+        Assert.Equal(0, consultas);
+    }
+
+    /// <summary>O botão do rodapé com o tamanho das pílulas, e com cara de botão quando há versão nova.</summary>
+    [AvaloniaFact]
+    public void BotaoDoRodapeNaJanela()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var botao = janela.FindControl<Button>("BotaoDoRodape")!;
+            Assert.Equal(24, botao.Bounds.Height);
+            Assert.DoesNotContain("destaque", botao.Classes);
+
+            vm.AtualizacaoTag = "1.0.0.18";
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains("destaque", botao.Classes);
+            Assert.Equal("Atualizar para 1.0.0.18", botao.Content);
+            Assert.Equal(24, botao.Bounds.Height);
+            Foto(janela, "rodape.png");
         }
         finally
         {

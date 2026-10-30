@@ -58,7 +58,8 @@ commit. É o que aparece em Preferências → Notas da versão; `AtualizadorTest
 arquivo sair do formato ou da ordem.
 
 **Atualização do app** (`Atualizador`): uma consulta por dia à release mais nova; o convite
-aparece no rodapé da árvore. O Windows não deixa sobrescrever um .exe em execução, mas
+aparece no rodapé da árvore. O clique ali procura de novo e, com versão nova, já pergunta:
+um só. O Windows não deixa sobrescrever um .exe em execução, mas
 deixa renomear: a troca é `atual → .old`, `novo → atual`, reabre, e o `.old` some na
 abertura seguinte. Só vale no arquivo único (`Assembly.GetEntryAssembly()?.Location` vazio);
 no `dist` de pasta o clique abre a página da release. Atualizar encerra todos os terminais,
@@ -149,9 +150,10 @@ e por isso confirma antes.
   `.forked-skill.json`, `.jsonl` e `.meta.json` com `finished`; interrompido, o aviso
   `killed` na conversa principal), a cada 2 s, em `MainViewModel.LerRevisoesAsync`. Vale
   também o digitado no terminal. A linha fica no vão embaixo da barra da aba, onde não mexe
-  no terminal; entre os botões, na janela padrão, sobravam 20 px. Sem percentual: o agente
-  não informa a fase da receita, e a duração varia demais para estimar. São duas
-  `ProgressBar`, porque uma só, ao sair do indeterminado, não voltava a ficar cheia.
+  no terminal; entre os botões, na janela padrão, sobravam 20 px. O percentual é estimado: o
+  agente não informa a fase da receita, então a conta é o tempo corrido contra a mediana
+  das revisões terminadas, do mesmo esforço se houver (`RevisoesDoClaude.Percentual`). Por
+  isso ele só sobe, para em 99 e leva `~` no botão. Os passos não servem: vêm em rajadas.
 - **Botões** — uma medida só: pílula de 24 (`Button.colorida`, a do GTest: fundo diluído,
   contorno e texto na cor de cada um, com ícone), na barra das abas, no projeto parado, na
   conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`, só com o

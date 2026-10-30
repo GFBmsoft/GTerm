@@ -22,11 +22,30 @@
       <Setter Property="Background" Value="Transparent" />
     </Style>
 
+    <!-- a altura das pílulas: com os 20 do tiny, na beirada da janela, o clique errava -->
     <Style Selector="Button.rodape">
+      <Setter Property="Height" Value="24" />
       <Setter Property="Foreground" Value="{DynamicResource TextFaint}" />
     </Style>
+    <!-- com versão nova ele é um botão de verdade, em pílula azul -->
     <Style Selector="Button.rodape.destaque">
       <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+      <Setter Property="Background" Value="#242F7BE8" />
+      <Setter Property="BorderBrush" Value="#662F7BE8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="10,0,11,0" />
+    </Style>
+    <Style Selector="Button.rodape.destaque:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#662F7BE8" />
+      <Setter Property="BorderBrush" Value="#662F7BE8" />
+      <Setter Property="TextBlock.Foreground" Value="{DynamicResource Accent}" />
+    </Style>
+    <!-- procurando ou baixando ele não aceita clique, mas o texto é o andamento: fica legível -->
+    <Style Selector="Button.rodape:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+      <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+      <Setter Property="TextBlock.Foreground" Value="{Binding $parent[Button].Foreground}" />
     </Style>
 
     <Style Selector="Button.grupo">
@@ -401,12 +420,12 @@
           </ListBox.DataTemplates>
         </ListBox>
 
-        <!-- a versão em uso, que vira o convite quando há uma mais nova (clicar procura ou
-             instala), e ao lado dela as preferências, no azul do ícone do app -->
+        <!-- a versão em uso, que vira o convite quando há uma mais nova (um clique procura e
+             pergunta se instala), e ao lado dela as preferências, no azul do ícone do app -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="6,2,6,7">
-          <Button Classes="tiny rodape" Classes.destaque="{Binding TemAtualizacao}"
+          <Button x:Name="BotaoDoRodape" Classes="tiny rodape" Classes.destaque="{Binding TemAtualizacao}"
                   Content="{Binding Rodape}" Command="{Binding AtualizacaoCommand}" MaxWidth="200"
-                  ToolTip.Tip="Procurar atualização" />
+                  ToolTip.ShowOnDisabled="True" ToolTip.Tip="{Binding DicaDoRodape}" />
           <Button Classes="tiny simbolo config" Content="&#xE713;" Command="{Binding AbrirPreferenciasCommand}"
                   ToolTip.Tip="Preferências: fonte e tamanho do terminal, contas do Claude" />
         </StackPanel>
@@ -557,16 +576,10 @@
 
         <!-- a linha do code review, na largura da barra, no vão até o terminal: entre os
              botões não sobra lugar na janela padrão, e aqui ela aparecer não mexe na altura do
-             terminal. O agente não informa a fase: trabalhando, ela anda sem percentual. São
-             duas porque a mesma, ao sair do modo sem percentual, não voltava a ficar cheia -->
-        <ProgressBar x:Name="BarraDaRevisaoAndando" DataContext="{Binding AbaAtiva}" Classes="revisao"
-                     IsVisible="{Binding RevisaoRodando}" IsIndeterminate="{Binding RevisaoRodando}"
-                     Height="4" MinHeight="4" MinWidth="0" CornerRadius="2"
-                     Margin="14,0,14,-5" VerticalAlignment="Bottom" IsHitTestVisible="False"
-                     Background="{DynamicResource BgHover}" />
+             terminal. O percentual é estimado pelo tempo: o agente não informa a fase -->
         <ProgressBar x:Name="BarraDaRevisao" DataContext="{Binding AbaAtiva}" Classes="revisao"
                      Classes.concluida="{Binding RevisaoConcluida}" Classes.parada="{Binding RevisaoParada}"
-                     IsVisible="{Binding RevisaoTerminou}" Minimum="0" Maximum="100" Value="100"
+                     IsVisible="{Binding TemRevisao}" Minimum="0" Maximum="100" Value="{Binding PercentualDaRevisao}"
                      Height="4" MinHeight="4" MinWidth="0" CornerRadius="2"
                      Margin="14,0,14,-5" VerticalAlignment="Bottom" IsHitTestVisible="False"
                      Background="{DynamicResource BgHover}" />

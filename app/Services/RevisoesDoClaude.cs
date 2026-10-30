@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace GTerm.Services;
 
@@ -20,7 +21,11 @@ public enum EstadoDaRevisao
 /// <param name="Id">O agente que revisa.</param>
 /// <param name="Duracao">Há quanto tempo está rodando, ou quanto levou.</param>
 /// <param name="Passos">Ferramentas que o agente usou até agora.</param>
-public sealed record Revisao(string Id, EstadoDaRevisao Estado, TimeSpan Duracao, int Passos);
+/// <param name="Percentual">100 só quando terminou; antes, a estimativa de <see cref="RevisoesDoClaude.Percentual"/>.</param>
+/// <param name="Tipico">Quanto as revisões anteriores levam.</param>
+/// <param name="Amostras">Quantas revisões anteriores entraram na conta; zero é o valor padrão.</param>
+public sealed record Revisao(string Id, EstadoDaRevisao Estado, TimeSpan Duracao, int Passos, int Percentual,
+    TimeSpan Tipico, int Amostras);
 
 /// <summary>
 /// Acompanha o /code-review pelos arquivos do Claude. Ele roda em segundo plano, como um
@@ -28,7 +33,9 @@ public sealed record Revisao(string Id, EstadoDaRevisao Estado, TimeSpan Duracao
 /// qual skill é, o .jsonl cresce a cada passo e o .meta.json ganha finished no fim. Interrompido,
 /// ele não marca nada: quem conta é o aviso na conversa principal.
 ///
-/// O agente não diz em que fase da receita está, então não há percentual a mostrar.
+/// O agente não diz em que fase da receita está: o percentual é uma estimativa, pelo tempo
+/// corrido contra a mediana das revisões terminadas. Os passos não servem: vêm em rajadas, e
+/// aos 40% do tempo as revisões reais estavam entre 25% e 58% deles.
 /// </summary>
 public sealed class RevisoesDoClaude
 {
@@ -43,8 +50,17 @@ public sealed class RevisoesDoClaude
     /// </summary>
     public static readonly TimeSpan Silencio = TimeSpan.FromMinutes(10);
 
+    /// <summary>A duração esperada enquanto não houver nenhuma revisão terminada.</summary>
+    public static readonly TimeSpan SemHistorico = TimeSpan.FromMinutes(6);
+
+    // a primeira linha da receita diz o esforço: `xhigh effort → 10 inline angles → ...
+    private static readonly Regex Esforco = new("`([a-z]+) effort", RegexOptions.Compiled);
+
     // o .jsonl cresce a cada passo: só o que chegou desde a última leitura é lido
     private readonly Dictionary<string, (long Lido, int Passos)> _lidos = new(StringComparer.OrdinalIgnoreCase);
+
+    // calculado uma vez por revisão: com o tempo fixo, o percentual dela nunca volta
+    private readonly Dictionary<string, (TimeSpan Tipico, int Amostras)> _tipicos = new();
 
     // o Claude pode estar gravando um arquivo bem na hora da leitura: fica o que já se sabia
     private readonly Dictionary<int, Revisao?> _ultimas = new();
@@ -103,8 +119,64 @@ public sealed class RevisoesDoClaude
         if (estado != EstadoDaRevisao.Rodando && agora - ultimaEscrita > Validade) return null;
 
         var fim = estado == EstadoDaRevisao.Rodando ? agora : ultimaEscrita;
-        return new Revisao(agente, estado, fim - marca.LastWriteTime, passos);
+        var duracao = fim - marca.LastWriteTime;
+
+        if (!_tipicos.TryGetValue(agente, out var tipico))
+            tipico = _tipicos[agente] = TempoTipico(pastaDaConta, existe ? EsforcoDe(diario) : "");
+
+        return new Revisao(agente, estado, duracao, passos,
+            terminou ? 100 : Percentual(duracao, tipico.Tipico), tipico.Tipico, tipico.Amostras);
     }
+
+    /// <summary>
+    /// Quanto da duração esperada já passou: reto até 90% e, daí em diante, cada vez mais
+    /// devagar, para seguir andando numa revisão mais longa que as outras. Nunca chega a 100:
+    /// esse é o da revisão que terminou de verdade.
+    /// </summary>
+    public static int Percentual(TimeSpan decorrido, TimeSpan tipico)
+    {
+        var fracao = decorrido / tipico;
+        var estimativa = fracao <= 0.9 ? fracao * 100 : 90 + 9 * (1 - Math.Exp(-2 * (fracao - 0.9)));
+        return (int)Math.Clamp(estimativa, 1, 99);
+    }
+
+    /// <summary>
+    /// A mediana das revisões terminadas da conta, as do mesmo esforço se houver: a demora
+    /// muda com ele. Parada não entra, que não diz quanto levaria.
+    /// </summary>
+    private static (TimeSpan Tipico, int Amostras) TempoTipico(string pastaDaConta, string esforco)
+    {
+        var projetos = Path.Combine(pastaDaConta, "projects");
+        if (!Directory.Exists(projetos)) return (SemHistorico, 0);
+
+        var terminadas = new List<(string Esforco, TimeSpan Duracao)>();
+        var pastas = Directory.EnumerateDirectories(projetos).SelectMany(Directory.EnumerateDirectories)
+            .Select(d => Path.Combine(d, "subagents")).Where(Directory.Exists);
+        foreach (var pasta in pastas)
+            foreach (var marca in new DirectoryInfo(pasta).GetFiles("agent-*" + Sufixo))
+            {
+                var nome = Path.Combine(pasta, marca.Name[..^Sufixo.Length]);
+                var meta = nome + ".meta.json";
+                var diario = nome + ".jsonl";
+                if (!File.Exists(meta) || !File.Exists(diario) ||
+                    Cia.Texto(JsonNode.Parse(File.ReadAllText(meta))?["finished"]) != "true" ||
+                    Cia.Texto(JsonNode.Parse(File.ReadAllText(marca.FullName))?["skillName"]) != "code-review")
+                    continue;
+
+                var duracao = File.GetLastWriteTime(diario) - marca.LastWriteTime;
+                if (duracao > TimeSpan.Zero) terminadas.Add((EsforcoDe(diario), duracao));
+            }
+
+        var mesmas = terminadas.Where(t => t.Esforco == esforco).ToList();
+        var duracoes = (mesmas.Count > 0 ? mesmas : terminadas).Select(t => t.Duracao).OrderBy(d => d).ToList();
+        if (duracoes.Count == 0) return (SemHistorico, 0);
+
+        var meio = duracoes.Count / 2;
+        return (duracoes.Count % 2 == 1 ? duracoes[meio] : (duracoes[meio - 1] + duracoes[meio]) / 2, duracoes.Count);
+    }
+
+    private static string EsforcoDe(string diario) =>
+        Esforco.Match(SessoesDoClaude.Trecho(diario, 4096, inicio: true)) is { Success: true } m ? m.Groups[1].Value : "";
 
     // só as respostas do agente: os registros dos pedidos à API repetem a conversa inteira
     private int Passos(string diario)

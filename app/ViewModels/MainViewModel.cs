@@ -359,12 +359,13 @@ public sealed partial class ProjetoViewModel : ObservableObject
 
     /// <summary>O /code-review desta conversa; null sem nenhum recente.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(RevisaoTerminou), nameof(RevisaoRodando), nameof(RevisaoConcluida), nameof(RevisaoParada),
+    [NotifyPropertyChangedFor(nameof(TemRevisao), nameof(PercentualDaRevisao), nameof(RevisaoRodando), nameof(RevisaoConcluida), nameof(RevisaoParada),
         nameof(RotuloDaRevisao), nameof(DicaDaRevisao))]
     [NotifyCanExecuteChangedFor(nameof(RevisarCommand))]
     private Revisao? _revisao;
 
-    public bool RevisaoTerminou => Revisao is { Estado: not EstadoDaRevisao.Rodando };
+    public bool TemRevisao => Revisao is not null;
+    public int PercentualDaRevisao => Revisao?.Percentual ?? 0;
     public bool RevisaoRodando => Revisao?.Estado == EstadoDaRevisao.Rodando;
     public bool RevisaoConcluida => Revisao?.Estado == EstadoDaRevisao.Concluida;
     public bool RevisaoParada => Revisao?.Estado == EstadoDaRevisao.Parada;
@@ -372,7 +373,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public string RotuloDaRevisao => Revisao switch
     {
         null => "Code review",
-        { Estado: EstadoDaRevisao.Rodando } r => "Revisando · " + RevisoesDoClaude.Tempo(r.Duracao),
+        { Estado: EstadoDaRevisao.Rodando } r => $"Revisão ~{r.Percentual}%",
         { Estado: EstadoDaRevisao.Concluida } r => "Revisado · " + RevisoesDoClaude.Tempo(r.Duracao),
         _ => "Revisão parada",
     };
@@ -381,10 +382,17 @@ public sealed partial class ProjetoViewModel : ObservableObject
     {
         null => "Manda o /code-review ao Claude, que revisa em segundo plano. Disponível com ele parado, esperando um pedido",
         { Estado: EstadoDaRevisao.Rodando } r =>
-            $"Code review em andamento há {RevisoesDoClaude.Tempo(r.Duracao)}, com {r.Passos} passos. O agente não informa em que fase está: a barra mostra que ele está trabalhando, sem percentual",
+            $"Code review em andamento há {RevisoesDoClaude.Tempo(r.Duracao)}, com {r.Passos} passos. O percentual é uma estimativa: a revisão não informa em que fase está, e a conta usa {DeOndeVemOTempo(r)}",
         { Estado: EstadoDaRevisao.Concluida } r =>
             $"Concluído em {RevisoesDoClaude.Tempo(r.Duracao)}, com {r.Passos} passos. O resultado está no terminal. Clique para revisar de novo",
         _ => "O code review foi interrompido. Clique para revisar de novo",
+    };
+
+    private static string DeOndeVemOTempo(Revisao r) => r.Amostras switch
+    {
+        0 => $"{RevisoesDoClaude.Tempo(r.Tipico)}, um valor padrão enquanto não há revisão terminada",
+        1 => $"os {RevisoesDoClaude.Tempo(r.Tipico)} da revisão anterior",
+        var n => $"os {RevisoesDoClaude.Tempo(r.Tipico)} típicos de {n} revisões anteriores",
     };
 
     /// <summary>O /code-review, pelo botão. Com um já rodando, espera ele terminar.</summary>
@@ -1434,18 +1442,31 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Encerra o aplicativo sem perguntar pelos terminais, depois de uma atualização.</summary>
     public Action? Sair { get; set; }
 
+    // só os testes trocam: nenhum deles chega à rede, nem abre o navegador
+    internal string VersaoEmUso { get; set; } = Atualizador.VersaoEmUso;
+    internal Func<Task<Release?>> ProcurarRelease { get; set; } = Atualizador.UltimaReleaseAsync;
+    internal Func<string?, bool> PodeTrocar { get; set; } = exe => Atualizador.PodeTrocarSozinho(exe);
+    internal Action<string> AbrirPagina { get; set; } = Atualizador.Reabrir;
+
     /// <summary>Tag da release mais nova que a versão em uso; vazia quando não há.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TemAtualizacao))]
+    [NotifyPropertyChangedFor(nameof(TemAtualizacao), nameof(DicaDoRodape))]
     private string _atualizacaoTag = "";
 
     public bool TemAtualizacao => AtualizacaoTag.Length > 0;
 
     /// <summary>A linha do pé da árvore: a versão, o convite para atualizar ou o andamento.</summary>
-    [ObservableProperty] private string _rodape;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DicaDoRodape))]
+    private string _rodape;
 
-    private static string RodapePadrao =>
-        Atualizador.VersaoEmUso is { Length: > 0 } versao ? "GTerm " + versao : "GTerm (build local)";
+    /// <summary>A mensagem de erro não cabe na largura da árvore: inteira, fica aqui.</summary>
+    public string DicaDoRodape =>
+        Rodape.StartsWith("Não foi possível", StringComparison.Ordinal) ? Rodape
+        : TemAtualizacao ? $"Baixar e instalar a versão {AtualizacaoTag}. O GTerm pergunta antes, porque reiniciar encerra os terminais"
+        : "Procurar atualização";
+
+    private string RodapePadrao => VersaoEmUso is { Length: > 0 } versao ? "GTerm " + versao : "GTerm (build local)";
 
     partial void OnAtualizacaoTagChanged(string value)
     {
@@ -1458,7 +1479,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public async Task VerificarAtualizacaoAsync(bool forcar = false)
     {
-        var atual = Atualizador.VersaoEmUso;
+        var atual = VersaoEmUso;
         if (atual.Length == 0) return;
 
         try
@@ -1473,7 +1494,7 @@ public sealed partial class MainViewModel : ObservableObject
 
             if (forcar || !recente)
             {
-                _release = await Atualizador.UltimaReleaseAsync();
+                _release = await ProcurarRelease();
                 tag = _release?.Tag ?? "";
 
                 _workspace.UltimaChecagem = DateTime.UtcNow.ToString("o");
@@ -1481,7 +1502,7 @@ public sealed partial class MainViewModel : ObservableObject
                 Salvar();
             }
 
-            if (tag.Length > 0 && Atualizador.TemNovidade(atual, tag)) AtualizacaoTag = tag;
+            AtualizacaoTag = tag.Length > 0 && Atualizador.TemNovidade(atual, tag) ? tag : "";
         }
         catch (Exception) when (!forcar)
         {
@@ -1490,17 +1511,15 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>O clique no pé da árvore: atualiza se há versão nova, senão procura uma.</summary>
+    /// <summary>
+    /// O clique no pé da árvore: um só resolve. Procura sempre, porque a versão vista ao abrir
+    /// já pode ter sido passada por outra, e havendo uma mais nova pergunta se atualiza. Eram
+    /// dois cliques, e o segundo se perdia enquanto o primeiro procurava.
+    /// </summary>
     [RelayCommand]
     private async Task Atualizacao()
     {
-        if (TemAtualizacao)
-        {
-            await AtualizarAgoraAsync();
-            return;
-        }
-
-        if (Atualizador.VersaoEmUso.Length == 0)
+        if (VersaoEmUso.Length == 0)
         {
             Rodape = "Build local, sem versão";
             return;
@@ -1510,13 +1529,22 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Rodape = "Procurando atualização…";
             await VerificarAtualizacaoAsync(forcar: true);
-            // o rodapé tem a largura da árvore: frase inteira ali sai cortada
-            if (!TemAtualizacao) Rodape = RodapePadrao + "  ✓";
         }
         catch (Exception e)
         {
             Rodape = "Não foi possível procurar: " + e.Message;
+            return;
         }
+
+        // o rodapé tem a largura da árvore: frase inteira ali sai cortada
+        if (!TemAtualizacao)
+        {
+            Rodape = RodapePadrao + "  ✓";
+            return;
+        }
+
+        Rodape = $"Atualizar para {AtualizacaoTag}"; // desistindo na pergunta, o convite continua
+        await AtualizarAgoraAsync();
     }
 
     /// <summary>
@@ -1528,14 +1556,12 @@ public sealed partial class MainViewModel : ObservableObject
         var trocado = false;
         try
         {
-            _release ??= await Atualizador.UltimaReleaseAsync();
-
             var exe = Atualizador.CaminhoDoExe();
             var arquivo = _release?.Standalone;
 
-            if (arquivo is null || !Atualizador.PodeTrocarSozinho(exe))
+            if (arquivo is null || !PodeTrocar(exe))
             {
-                Atualizador.Reabrir(_release?.Url is { Length: > 0 } u
+                AbrirPagina(_release?.Url is { Length: > 0 } u
                     ? u
                     : $"https://github.com/{Atualizador.Slug}/releases/latest");
                 return;
