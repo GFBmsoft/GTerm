@@ -27,6 +27,12 @@ public enum EstadoDaRevisao
 public sealed record Revisao(string Id, EstadoDaRevisao Estado, TimeSpan Duracao, int Passos, int Percentual,
     TimeSpan Tipico, int Amostras);
 
+/// <summary>O último /code-review terminado de um projeto, em qualquer conversa.</summary>
+/// <param name="Quando">Quando terminou.</param>
+/// <param name="Resumo">A primeira frase do resultado, como o agente escreveu.</param>
+/// <param name="CommitsDepois">Commits que entraram depois: a revisão não os viu.</param>
+public sealed record RevisaoDoProjeto(DateTime Quando, string Resumo, int CommitsDepois);
+
 /// <summary>
 /// Acompanha o /code-review pelos arquivos do Claude. Ele roda em segundo plano, como um
 /// agente da conversa, em projects\&lt;chave&gt;\&lt;sessão&gt;\subagents: o .forked-skill.json diz
@@ -62,6 +68,10 @@ public sealed class RevisoesDoClaude
     // calculado uma vez por revisão: com o tempo fixo, o percentual dela nunca volta
     private readonly Dictionary<string, (TimeSpan Tipico, int Amostras)> _tipicos = new();
 
+    // a árvore relê os projetos a cada pouco, e o resultado de uma revisão não muda mais
+    private readonly Dictionary<string, (DateTime Quando, string Resumo)> _resumos = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RevisaoDoProjeto?> _dosProjetos = new(StringComparer.OrdinalIgnoreCase);
+
     // o Claude pode estar gravando um arquivo bem na hora da leitura: fica o que já se sabia
     private readonly Dictionary<int, Revisao?> _ultimas = new();
 
@@ -82,6 +92,94 @@ public sealed class RevisoesDoClaude
         {
             return _ultimas.GetValueOrDefault(pid);
         }
+    }
+
+    /// <summary>
+    /// A última revisão terminada do projeto, de qualquer conversa dele, tenha sido pedida
+    /// aqui ou no terminal. Interrompida não conta: não revisou nada até o fim.
+    /// </summary>
+    public RevisaoDoProjeto? UltimaDoProjeto(string pastaDaConta, string pasta)
+    {
+        // a árvore relê todos, e escolher um projeto relê o dele: podem cruzar
+        lock (_dosProjetos)
+        {
+            try
+            {
+                return _dosProjetos[pasta] = LerDoProjeto(pastaDaConta, pasta);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                return _dosProjetos.GetValueOrDefault(pasta);
+            }
+        }
+    }
+
+    private RevisaoDoProjeto? LerDoProjeto(string pastaDaConta, string pasta)
+    {
+        var conversas = Path.Combine(pastaDaConta, "projects", SessoesDoClaude.Chave(pasta));
+        if (!Directory.Exists(conversas)) return null;
+
+        FileInfo? ultima = null;
+        var pastas = Directory.EnumerateDirectories(conversas).Select(d => Path.Combine(d, "subagents")).Where(Directory.Exists);
+        foreach (var agentes in pastas)
+            foreach (var marca in new DirectoryInfo(agentes).GetFiles("agent-*" + Sufixo))
+                if (DiarioDaTerminada(marca) is { } diario && (ultima is null || diario.LastWriteTime > ultima.LastWriteTime))
+                    ultima = diario;
+
+        return ultima is null ? null
+            : new RevisaoDoProjeto(ultima.LastWriteTime, Resumo(ultima), Cia.CommitsDepois(pasta, ultima.LastWriteTime));
+    }
+
+    // o .jsonl da revisão, se ela for um /code-review e tiver terminado
+    private static FileInfo? DiarioDaTerminada(FileInfo marca)
+    {
+        var nome = Path.Combine(marca.DirectoryName!, marca.Name[..^Sufixo.Length]);
+        var meta = nome + ".meta.json";
+        var diario = new FileInfo(nome + ".jsonl");
+        return File.Exists(meta) && diario.Exists &&
+               Cia.Texto(JsonNode.Parse(File.ReadAllText(meta))?["finished"]) == "true" &&
+               Cia.Texto(JsonNode.Parse(File.ReadAllText(marca.FullName))?["skillName"]) == "code-review"
+            ? diario : null;
+    }
+
+    // a última fala do agente é o resultado: ele não tem campos, é texto livre
+    private string Resumo(FileInfo diario)
+    {
+        if (_resumos.TryGetValue(diario.FullName, out var lido) && lido.Quando == diario.LastWriteTime) return lido.Resumo;
+
+        var resumo = "";
+        foreach (var linha in SessoesDoClaude.Trecho(diario.FullName, 256 * 1024, inicio: false).Split('\n').Reverse())
+        {
+            if (!linha.Contains("\"assistant\"", StringComparison.Ordinal)) continue;
+            try
+            {
+                var no = JsonNode.Parse(linha);
+                if (Cia.Texto(no?["type"]) != "assistant" || no?["message"]?["content"] is not JsonArray conteudo) continue;
+
+                var fala = string.Join("\n", conteudo.Where(c => Cia.Texto(c?["type"]) == "text").Select(c => Cia.Texto(c?["text"])));
+                if (fala.Trim().Length == 0) continue;
+                resumo = PrimeiraFrase(fala);
+                break;
+            }
+            catch (JsonException)
+            {
+                // a primeira linha do trecho vem cortada no meio
+            }
+        }
+
+        _resumos[diario.FullName] = (diario.LastWriteTime, resumo);
+        return resumo;
+    }
+
+    /// <summary>A primeira frase, sem a marcação de Markdown, curta o bastante para o quadro.</summary>
+    public static string PrimeiraFrase(string texto)
+    {
+        const int Maximo = 160;
+
+        var limpo = Regex.Replace(texto, "[*`#]", "").Trim().Split('\n')[0].Trim();
+        var fim = limpo.IndexOf(". ", StringComparison.Ordinal);
+        if (fim > 0) limpo = limpo[..(fim + 1)];
+        return limpo.Length > Maximo ? limpo[..(Maximo - 1)].TrimEnd() + "…" : limpo;
     }
 
     private Revisao? Ler(string pastaDaConta, int pid, string pasta, DateTime agora)
@@ -155,16 +253,10 @@ public sealed class RevisoesDoClaude
         foreach (var pasta in pastas)
             foreach (var marca in new DirectoryInfo(pasta).GetFiles("agent-*" + Sufixo))
             {
-                var nome = Path.Combine(pasta, marca.Name[..^Sufixo.Length]);
-                var meta = nome + ".meta.json";
-                var diario = nome + ".jsonl";
-                if (!File.Exists(meta) || !File.Exists(diario) ||
-                    Cia.Texto(JsonNode.Parse(File.ReadAllText(meta))?["finished"]) != "true" ||
-                    Cia.Texto(JsonNode.Parse(File.ReadAllText(marca.FullName))?["skillName"]) != "code-review")
-                    continue;
+                if (DiarioDaTerminada(marca) is not { } diario) continue;
 
-                var duracao = File.GetLastWriteTime(diario) - marca.LastWriteTime;
-                if (duracao > TimeSpan.Zero) terminadas.Add((EsforcoDe(diario), duracao));
+                var duracao = diario.LastWriteTime - marca.LastWriteTime;
+                if (duracao > TimeSpan.Zero) terminadas.Add((EsforcoDe(diario.FullName), duracao));
             }
 
         var mesmas = terminadas.Where(t => t.Esforco == esforco).ToList();

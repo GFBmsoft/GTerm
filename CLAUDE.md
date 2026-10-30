@@ -154,6 +154,11 @@ e por isso confirma antes.
   agente não informa a fase da receita, então a conta é o tempo corrido contra a mediana
   das revisões terminadas, do mesmo esforço se houver (`RevisoesDoClaude.Percentual`). Por
   isso ele só sobe, para em 99 e leva `~` no botão. Os passos não servem: vêm em rajadas.
+  A última revisão terminada de cada projeto (`RevisoesDoClaude.UltimaDoProjeto`, de
+  qualquer conversa dele) vira a marca da árvore e a linha do quadro, relidas a cada minuto
+  e ao fim de uma revisão. A marca fica amarela com commit depois dela, contado pelo reflog
+  (`Cia.CommitsDepois`), para não subir o git em dezenas de projetos; os arquivos alterados
+  só o quadro vê. O resultado é texto livre: não há como contar os achados com segurança.
 - **Botões** — uma medida só: pílula de 24 (`Button.colorida`, a do GTest: fundo diluído,
   contorno e texto na cor de cada um, com ícone), na barra das abas, no projeto parado, na
   conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`, só com o

@@ -1,3 +1,7 @@
+## 1.0.0.19 — 30/10/2026
+- **Projetos que já passaram por code review**: na barra lateral aparece uma marca ao lado do nome, verde quando a revisão está em dia e amarela quando entrou commit depois dela. Passando o mouse aparece quando foi. Ao escolher o projeto, o quadro mostra quando foi a revisão, se ainda vale (`3 commits depois`, `2 arquivos alterados` ou `em dia`) e a primeira frase do resultado, em inglês, como o Claude escreve.
+- Vale para o /code-review que roda em segundo plano, pedido pelo botão ou digitado no terminal. Só as revisões que terminaram contam, e projetos sem revisão registrada ficam sem marca.
+
 ## 1.0.0.18 — 30/10/2026
 - **Code review com percentual**: a barra agora mostra quanto já andou, e o botão mostra, por exemplo, `Revisão ~45%`. Passando o mouse aparecem o tempo e os passos. O número é uma estimativa, feita pelo tempo que suas revisões anteriores levaram, e fica mais preciso conforme você usa: a revisão não informa em que fase está. Ele para em 99% e só chega a 100% quando ela termina de verdade.
 - **Atualizar com um clique**: clicar na versão, no rodapé da barra lateral, procura e, havendo versão nova, já pergunta se pode atualizar. Antes eram dois cliques, e o segundo se perdia enquanto o primeiro procurava. Vale a partir da próxima atualização.

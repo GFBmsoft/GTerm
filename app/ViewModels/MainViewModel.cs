@@ -240,8 +240,46 @@ public sealed partial class ProjetoViewModel : ObservableObject
     /// <summary>Null até o git ser lido: o quadro mostra "carregando…".</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(GitLido), nameof(SemGit), nameof(GitRecusou), nameof(ComGit), nameof(Limpo),
-        nameof(Alterado), nameof(TextoDasAlteracoes), nameof(AFrenteAtras), nameof(TemCommit), nameof(TextoDoCommit))]
+        nameof(Alterado), nameof(TextoDasAlteracoes), nameof(AFrenteAtras), nameof(TemCommit), nameof(TextoDoCommit),
+        nameof(SituacaoDaRevisao), nameof(RevisaoForaDeDia), nameof(DicaDaMarcaDeRevisao))]
     private InfoDoGit? _git;
+
+    // ------------------------------------------------------------ o code review que já passou
+
+    /// <summary>O último /code-review terminado do projeto; null sem nenhum.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TemRevisaoAnterior), nameof(RevisaoDesatualizada), nameof(SituacaoDaRevisao),
+        nameof(RevisaoForaDeDia))]
+    private RevisaoDoProjeto? _ultimaRevisao;
+
+    public bool TemRevisaoAnterior => UltimaRevisao is not null;
+
+    /// <summary>Entraram commits depois dela: a marca da árvore fica amarela.</summary>
+    public bool RevisaoDesatualizada => UltimaRevisao is { CommitsDepois: > 0 };
+
+    public string TextoDaRevisaoAnterior =>
+        UltimaRevisao is { } r ? "code review " + Cia.Quando(r.Quando, DateTime.Now) : "";
+
+    /// <summary>"3 commits depois", "2 arquivos alterados" ou "em dia"; os alterados só com o git lido.</summary>
+    public string SituacaoDaRevisao => UltimaRevisao switch
+    {
+        null => "",
+        { CommitsDepois: 1 } => "1 commit depois",
+        { CommitsDepois: > 1 and var n } => n + " commits depois",
+        _ => Alterado ? TextoDasAlteracoes : "em dia",
+    };
+
+    public bool RevisaoForaDeDia => RevisaoDesatualizada || (TemRevisaoAnterior && Alterado);
+
+    public string DicaDaMarcaDeRevisao => $"{TextoDaRevisaoAnterior} · {SituacaoDaRevisao}";
+
+    /// <summary>Relida, ela pode ser a mesma: o "há 2 h" do texto é que anda.</summary>
+    public void MostrarRevisao(RevisaoDoProjeto? revisao)
+    {
+        UltimaRevisao = revisao;
+        OnPropertyChanged(nameof(TextoDaRevisaoAnterior));
+        OnPropertyChanged(nameof(DicaDaMarcaDeRevisao));
+    }
 
     public bool GitLido => Git is not null;
     public bool SemGit => Git is { Repositorio: false };
@@ -496,7 +534,14 @@ public sealed partial class MainViewModel : ObservableObject
         _releituraDasSessoes = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _releituraDasSessoes.Tick += (_, _) => _ = CarregarSessoesAsync();
         _vigiaDasRevisoes = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _vigiaDasRevisoes.Tick += (_, _) => _ = LerRevisoesAsync();
+        var tiques = 0;
+        _vigiaDasRevisoes.Tick += (_, _) =>
+        {
+            _ = LerRevisoesAsync();
+
+            // as marcas da árvore a cada minuto: a revisão pode ter sido feita em outro terminal
+            if (++tiques % 30 == 0) _ = LerRevisoesDosProjetosAsync();
+        };
         _vigiaDasRevisoes.Start();
 
         CarregarProjetos();
@@ -558,6 +603,9 @@ public sealed partial class MainViewModel : ObservableObject
         p.UltimaSessao = await Task.Run(() => Cia.UltimaSessao(p.Pasta, conta));
         p.SessaoLida = true;
         p.Git = await git;
+
+        var contaDasRevisoes = ClaudeHooks.PastaDaConta(_workspace.ContaDasSessoes);
+        p.MostrarRevisao(await Task.Run(() => _revisoes.UltimaDoProjeto(contaDasRevisoes, p.Pasta)));
     }
 
     // ------------------------------------------------------------ projetos e árvore
@@ -978,12 +1026,43 @@ public sealed partial class MainViewModel : ObservableObject
             var lidas = await Task.Run(() => abas.Select(a => _revisoes.Ultima(conta, a.Pid, a.Projeto.Pasta, agora)).ToList());
 
             // enquanto lia, a aba pode ter sido encerrada
+            var terminou = false;
             for (var i = 0; i < abas.Count; i++)
-                if (abas[i].Projeto.Sessao?.Pid == abas[i].Pid) abas[i].Projeto.Revisao = lidas[i];
+            {
+                if (abas[i].Projeto.Sessao?.Pid != abas[i].Pid) continue;
+                terminou |= abas[i].Projeto.RevisaoRodando && lidas[i]?.Estado == EstadoDaRevisao.Concluida;
+                abas[i].Projeto.Revisao = lidas[i];
+            }
+
+            // a marca do projeto aparece na hora, sem esperar a próxima volta
+            if (terminou) _ = LerRevisoesDosProjetosAsync();
         }
         finally
         {
             _lendoRevisoes = false;
+        }
+    }
+
+    private bool _lendoMarcas;
+
+    /// <summary>
+    /// O último code review de cada projeto, para as marcas da árvore. Só olha arquivos,
+    /// sem subir o git: são dezenas de projetos, e quase todos sem revisão nenhuma.
+    /// </summary>
+    internal async Task LerRevisoesDosProjetosAsync()
+    {
+        if (_lendoMarcas) return;
+        _lendoMarcas = true;
+        try
+        {
+            var conta = ClaudeHooks.PastaDaConta(_workspace.ContaDasSessoes);
+            var projetos = Projetos.ToList();
+            var lidas = await Task.Run(() => projetos.Select(p => _revisoes.UltimaDoProjeto(conta, p.Pasta)).ToList());
+            for (var i = 0; i < projetos.Count; i++) projetos[i].MostrarRevisao(lidas[i]);
+        }
+        finally
+        {
+            _lendoMarcas = false;
         }
     }
 

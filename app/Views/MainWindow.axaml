@@ -210,6 +210,15 @@
       <Setter Property="Opacity" Value="1" />
     </Style>
 
+    <!-- o projeto já passou por code review, na árvore e no quadro: verde em dia, amarelo com
+         commit ou alteração que a revisão não viu -->
+    <Style Selector="TextBlock.marcaDeRevisao">
+      <Setter Property="Foreground" Value="{DynamicResource Green}" />
+    </Style>
+    <Style Selector="TextBlock.marcaDeRevisao.desatualizada">
+      <Setter Property="Foreground" Value="{DynamicResource Yellow}" />
+    </Style>
+
     <!-- a barra do code review, em linha como a do GConv: azul trabalhando, verde no fim -->
     <Style Selector="ProgressBar.revisao">
       <Setter Property="Foreground" Value="{DynamicResource Accent}" />
@@ -366,29 +375,35 @@
             <DataTemplate DataType="vm:LinhaDoProjeto">
               <Border Classes="linha" Classes.antes="{Binding SoltarAntes}" Classes.depois="{Binding SoltarDepois}"
                       ToolTip.Tip="{Binding Projeto.Pasta}">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="{Binding Recuo}">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="{Binding Recuo}">
                   <!-- o tipo do projeto, como no cia: os glifos são da Nerd Font do terminal -->
                   <TextBlock Grid.Column="0" Classes="nerd" Text="{Binding Projeto.Icone}" Foreground="{Binding Projeto.CorDoIcone}"
                              FontSize="13" Width="16" Margin="0,0,7,0" VerticalAlignment="Center" />
                   <TextBlock Grid.Column="1" Text="{Binding Projeto.Nome}" VerticalAlignment="Center" Margin="0,0,6,0"
                              Classes.atencao="{Binding Projeto.PedeAtencao}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="2" Text="{Binding Extra}" IsVisible="{Binding TemExtra}" Classes="faint"
+
+                  <!-- já passou por code review: verde em dia, amarela com commit depois dele -->
+                  <TextBlock Grid.Column="2" Classes="glifo marcaDeRevisao" Classes.desatualizada="{Binding Projeto.RevisaoDesatualizada}"
+                             Text="&#xE73E;" IsVisible="{Binding Projeto.TemRevisaoAnterior}" FontSize="10" Margin="0,0,6,0"
+                             VerticalAlignment="Center" ToolTip.Tip="{Binding Projeto.DicaDaMarcaDeRevisao}" />
+
+                  <TextBlock Grid.Column="3" Text="{Binding Extra}" IsVisible="{Binding TemExtra}" Classes="faint"
                              FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0" />
 
                   <!-- favoritar sem abrir o menu: o projeto entra no fim dos favoritos, ou sai.
                        Lá, arrastar a linha muda a ordem -->
-                  <Button Grid.Column="3" Classes="tiny simbolo acao estrela" Classes.favorito="{Binding Projeto.Favorito}"
+                  <Button Grid.Column="4" Classes="tiny simbolo acao estrela" Classes.favorito="{Binding Projeto.Favorito}"
                           Content="{Binding Projeto.GlifoDoFavorito}" Command="{Binding Projeto.FavoritarCommand}"
                           ToolTip.Tip="{Binding Projeto.RotuloDoFavorito}" />
 
                   <!-- sem terminal: nada roda no projeto até o clique aqui (ou Enter, ou duplo clique) -->
-                  <Button Grid.Column="4" Classes="tiny simbolo acao" Content="&#xE768;" Margin="0,0,2,0"
+                  <Button Grid.Column="5" Classes="tiny simbolo acao" Content="&#xE768;" Margin="0,0,2,0"
                           Command="{Binding Projeto.IniciarCommand}" IsVisible="{Binding Projeto.Parado}"
                           ToolTip.Tip="Abrir o Claude neste projeto" />
 
                   <!-- apagado no prompt; amarelo rodando (piscando se espera por você); verde
                        ao terminar bem; vermelho ao terminar com erro -->
-                  <Ellipse Grid.Column="5" Classes="estado" IsVisible="{Binding Projeto.Vivo}"
+                  <Ellipse Grid.Column="6" Classes="estado" IsVisible="{Binding Projeto.Vivo}"
                            Classes.rodando="{Binding Projeto.Rodando}" Classes.aguardando="{Binding Projeto.Aguardando}"
                            Classes.concluido="{Binding Projeto.Concluido}" Classes.erro="{Binding Projeto.Erro}" />
                 </Grid>
@@ -726,6 +741,18 @@
                              IsVisible="{Binding Selecionado.TemClaudeMd}" />
                   <TextBlock Grid.Column="2" Text="não" Classes="faint" IsVisible="{Binding !Selecionado.TemClaudeMd}" />
                 </Grid>
+
+                <!-- o último code review terminado, e se ele ainda vale para o que está aqui -->
+                <StackPanel Spacing="1" IsVisible="{Binding Selecionado.TemRevisaoAnterior}">
+                  <Grid ColumnDefinitions="22,Auto,*">
+                    <TextBlock Classes="glifo" Text="&#xE721;" FontSize="11" Foreground="{DynamicResource Orange}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Selecionado.TextoDaRevisaoAnterior}" />
+                    <TextBlock Grid.Column="2" Classes="marcaDeRevisao" Classes.desatualizada="{Binding Selecionado.RevisaoForaDeDia}"
+                               Text="{Binding Selecionado.SituacaoDaRevisao}" Margin="10,0,0,0" />
+                  </Grid>
+                  <TextBlock Classes="detalhe" Text="{Binding Selecionado.UltimaRevisao.Resumo}"
+                             TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
 
                 <StackPanel Spacing="1" IsVisible="{Binding Selecionado.TemSessao}">
                   <Grid ColumnDefinitions="22,Auto,*">

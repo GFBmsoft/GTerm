@@ -307,6 +307,24 @@ public static class Cia
             : InfoDoGit.Recusado;
     }
 
+    /// <summary>
+    /// Quantas vezes o branch recebeu commits depois do momento dado (commit, merge, pull ou
+    /// rebase), pelo reflog: lê um arquivo em vez de subir o git, para valer na árvore inteira.
+    /// Um pull com vários commits conta como um. Sem reflog, zero.
+    /// </summary>
+    public static int CommitsDepois(string pasta, DateTime quando)
+    {
+        var reflog = Path.Combine(pasta, ".git", "logs", "HEAD");
+        if (!File.Exists(reflog)) return 0;
+
+        var desde = new DateTimeOffset(quando).ToUnixTimeSeconds();
+        return EntradaDoReflog.Matches(SessoesDoClaude.Trecho(reflog, 64 * 1024, inicio: false))
+            .Count(m => long.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) > desde);
+    }
+
+    private static readonly Regex EntradaDoReflog =
+        new(@"> ([0-9]+) [+-][0-9]{4}\t(?:commit|merge|pull|rebase \(finish\))", RegexOptions.Compiled);
+
     /// <summary>A saída do <c>git status --porcelain=v2 --branch</c> e do <c>git log -1</c> (data e assunto).</summary>
     public static InfoDoGit LerGit(string status, string? log)
     {

@@ -49,6 +49,7 @@ public partial class MainWindow : Window, IDialogService
             _vm.CorrigirHooks();
             _ = _vm.VerificarAtualizacaoAsync(); // em segundo plano, no máximo uma consulta por dia
             _ = _vm.CarregarSessoesAsync(); // fora da tela: as Sessões abrem sem esperar pelos .jsonl
+            _ = _vm.LerRevisoesDosProjetosAsync();
         };
 
         // atualização instalada: o aviso de que os terminais fecham já foi confirmado, e o

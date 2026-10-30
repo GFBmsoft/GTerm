@@ -2094,14 +2094,157 @@ public class JanelaTests : IDisposable
     }
 
     /// <summary>Uma revisão já encerrada, de outra conversa, com a duração dada.</summary>
-    private void RevisaoAntiga(string agente, int minutos, string esforco = "xhigh", bool terminou = true)
+    /// <param name="resultado">A última fala do agente.</param>
+    /// <param name="fim">Quando terminou; sem isso, agora.</param>
+    private void RevisaoAntiga(string agente, int minutos, string esforco = "xhigh", bool terminou = true,
+        string resultado = "", DateTime? fim = null, string? pasta = null)
     {
-        var agentes = MontarRevisao(1, Notas, Guid.NewGuid().ToString(), agente);
+        var agentes = MontarRevisao(1, pasta ?? Notas, Guid.NewGuid().ToString(), agente);
         var diario = Path.Combine(agentes, $"agent-{agente}.jsonl");
         File.WriteAllText(diario, "{\"type\":\"user\",\"message\":{\"content\":\"`" + esforco + " effort → 10 inline angles\"}}" + Environment.NewLine);
+        if (resultado.Length > 0)
+            File.AppendAllText(diario, System.Text.Json.JsonSerializer.Serialize(new
+            {
+                type = "assistant",
+                message = new { content = new object[] { new { type = "thinking" }, new { type = "text", text = resultado } } },
+            }) + Environment.NewLine + """{"type":"api-request-blob"}""" + Environment.NewLine);
         if (terminou) File.WriteAllText(Path.Combine(agentes, $"agent-{agente}.meta.json"), """{ "finished": true }""");
+        if (fim is { } quando) File.SetLastWriteTime(diario, quando);
         File.SetLastWriteTime(Path.Combine(agentes, $"agent-{agente}.forked-skill.json"),
             File.GetLastWriteTime(diario).AddMinutes(-minutos));
+    }
+
+    /// <summary>
+    /// Os commits depois da revisão vêm do reflog, sem subir o git: commit, merge, pull e fim
+    /// de rebase contam, trocar de branch não, e só o que veio depois do momento dado.
+    /// </summary>
+    [Fact]
+    public void CommitsDepoisDaRevisaoPeloReflog()
+    {
+        var pasta = Path.Combine(_raiz, "ComGit");
+        Directory.CreateDirectory(Path.Combine(pasta, ".git", "logs"));
+        var revisao = new DateTime(2026, 10, 30, 10, 0, 0, DateTimeKind.Local);
+
+        string Linha(int minutos, string acao) =>
+            $"aaa bbb GF <gf@exemplo> {new DateTimeOffset(revisao.AddMinutes(minutos)).ToUnixTimeSeconds()} -0300\t{acao}\n";
+
+        File.WriteAllText(Path.Combine(pasta, ".git", "logs", "HEAD"),
+            Linha(-5, "commit: antes da revisão") + Linha(1, "commit: depois") + Linha(2, "checkout: moving from main to x") +
+            Linha(3, "commit (amend): acerto") + Linha(4, "pull: Fast-forward") + Linha(5, "merge x: Fast-forward") +
+            Linha(6, "rebase (finish): returning to refs/heads/main") + Linha(7, "reset: moving to HEAD~1"));
+
+        Assert.Equal(5, Cia.CommitsDepois(pasta, revisao));
+        Assert.Equal(6, Cia.CommitsDepois(pasta, revisao.AddMinutes(-6)));
+        Assert.Equal(0, Cia.CommitsDepois(pasta, revisao.AddHours(1)));
+        Assert.Equal(0, Cia.CommitsDepois(Path.Combine(_raiz, "SemGit"), revisao));
+    }
+
+    /// <summary>
+    /// A última revisão do projeto vem de qualquer conversa dele: a parada não conta, e a mais
+    /// nova ganha. O resumo é a primeira frase da última fala do agente, sem a marcação.
+    /// </summary>
+    [Fact]
+    public void UltimoCodeReviewDoProjeto()
+    {
+        var leitor = new RevisoesDoClaude();
+        Assert.Null(leitor.UltimaDoProjeto(ContaDoClaude, Notas));
+
+        RevisaoAntiga("d1", 5, terminou: false, resultado: "Interrompida.");
+        Assert.Null(leitor.UltimaDoProjeto(ContaDoClaude, Notas));
+
+        var ontem = DateTime.Now.AddDays(-1);
+        RevisaoAntiga("d2", 5, resultado: "**Review scope:** `git diff` is empty. Nothing else.", fim: ontem);
+        var primeira = leitor.UltimaDoProjeto(ContaDoClaude, Notas)!;
+        Assert.Equal("Review scope: git diff is empty.", primeira.Resumo);
+        Assert.Equal(ontem, primeira.Quando, TimeSpan.FromSeconds(1));
+        Assert.Equal(0, primeira.CommitsDepois);
+
+        RevisaoAntiga("d3", 5, resultado: "I reviewed `c54643a` (tag `1.0.0.53`, which is also `origin/main`), and there is one critical bug. At certain widths it breaks.");
+        Assert.Equal("I reviewed c54643a (tag 1.0.0.53, which is also origin/main), and there is one critical bug.",
+            leitor.UltimaDoProjeto(ContaDoClaude, Notas)!.Resumo);
+
+        // revisão de outro projeto não conta para este
+        RevisaoAntiga("d4", 5, resultado: "Outro.", pasta: Financeiro);
+        Assert.Equal("Outro.", leitor.UltimaDoProjeto(ContaDoClaude, Financeiro)!.Resumo);
+        Assert.StartsWith("I reviewed", leitor.UltimaDoProjeto(ContaDoClaude, Notas)!.Resumo);
+
+        // sem ponto, ou comprida demais para o quadro
+        Assert.Equal("sem ponto no fim", RevisoesDoClaude.PrimeiraFrase("sem ponto no fim\nsegunda linha"));
+        var longa = RevisoesDoClaude.PrimeiraFrase(new string('x', 400));
+        Assert.Equal(160, longa.Length);
+        Assert.EndsWith("…", longa);
+    }
+
+    /// <summary>
+    /// O projeto que já passou por code review, na janela de verdade: a marca verde na árvore,
+    /// amarela com commit depois da revisão; projeto sem revisão fica sem marca. O quadro diz
+    /// quando foi, se ainda vale e a primeira frase do resultado.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task CodeReviewDoProjetoNaArvoreENoQuadro()
+    {
+        Montar();
+        RevisaoAntiga("e1", 8, resultado: "I reviewed `abc1234`, and there is one critical bug. At certain widths it breaks.");
+
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            Titulo(vm, "DBISAM").AlternarCommand.Execute(null);
+            await vm.LerRevisoesDosProjetosAsync();
+            Dispatcher.UIThread.RunJobs();
+
+            TextBlock Marca(string nome) => janela.GetVisualDescendants().OfType<TextBlock>().Single(t =>
+                t.Classes.Contains("marcaDeRevisao") && t.DataContext is LinhaDoProjeto l &&
+                l.Grupo == "base:" + Bmsoft && l.Projeto.Nome == nome);
+
+            var notas = Projeto(vm, "Notas");
+            Assert.True(Marca("Notas").IsVisible);
+            Assert.False(Marca("Financeiro").IsVisible);
+            Assert.DoesNotContain("desatualizada", Marca("Notas").Classes);
+            Assert.Equal("code review agora · em dia", notas.DicaDaMarcaDeRevisao);
+
+            // aparece também nos outros grupos em que o projeto está
+            notas.FavoritarCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains(janela.GetVisualDescendants().OfType<TextBlock>(), t => t.Classes.Contains("marcaDeRevisao") &&
+                t.IsVisible && t.DataContext is LinhaDoProjeto { Grupo: MainViewModel.GrupoFavoritos });
+            Foto(janela, "marca.png");
+
+            // o quadro: quando, se ainda vale e o que achou
+            vm.Ver(notas);
+            Assert.True(await Esperar(() => notas.GitLido && notas.TemRevisaoAnterior));
+            Dispatcher.UIThread.RunJobs();
+            var quadro = Quadro(janela);
+            Assert.Contains("code review agora", quadro);
+            Assert.Contains("em dia", quadro);
+            Assert.Contains("I reviewed abc1234, and there is one critical bug.", quadro);
+            Foto(janela, "quadro-revisao.png");
+
+            // arquivos alterados agora: o quadro avisa, mas a marca da árvore olha só os commits
+            notas.Git = InfoDoGit.SemGit with { Repositorio = true, Branch = "main", Alterados = 2 };
+            Assert.Equal("2 arquivos alterados", notas.SituacaoDaRevisao);
+            Assert.True(notas.RevisaoForaDeDia);
+            Assert.False(notas.RevisaoDesatualizada);
+
+            // entrou commit depois: a marca fica amarela
+            Directory.CreateDirectory(Path.Combine(Notas, ".git", "logs"));
+            var depois = new DateTimeOffset(DateTime.Now.AddMinutes(1)).ToUnixTimeSeconds();
+            File.WriteAllText(Path.Combine(Notas, ".git", "logs", "HEAD"), $"aaa bbb GF <gf@exemplo> {depois} -0300\tcommit: novo\n");
+            await vm.LerRevisoesDosProjetosAsync();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("1 commit depois", notas.SituacaoDaRevisao);
+            Assert.Contains("desatualizada", Marca("Notas").Classes);
+            Assert.Equal("code review agora · 1 commit depois", notas.DicaDaMarcaDeRevisao);
+            Foto(janela, "marca-amarela.png");
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
     }
 
     /// <summary>
@@ -2255,6 +2398,7 @@ public class JanelaTests : IDisposable
             Assert.Contains(botao.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.StartsWith("Revisado · ") == true);
             Assert.True(financeiro.RevisarCommand.CanExecute(null));
             Assert.True(botao.IsEffectivelyEnabled);
+            Assert.True(await Esperar(() => financeiro.TemRevisaoAnterior)); // a marca do projeto, na hora
             Foto(janela, "revisao-concluida.png");
 
             // interrompida: fica vermelha
