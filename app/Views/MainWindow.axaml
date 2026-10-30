@@ -178,6 +178,30 @@
       <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <!-- à espera (o Compactar, com o Claude ocupado): a mesma pílula, esmaecida -->
+    <Style Selector="Button.colorida:disabled">
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <Style Selector="Button.colorida:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+      <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+    </Style>
+    <!-- o Code review rodando não aceita clique, mas o texto dele é o status: fica legível -->
+    <Style Selector="Button.colorida.revisando:disabled">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <!-- a barra do code review, em linha como a do GConv: azul trabalhando, verde no fim -->
+    <Style Selector="ProgressBar.revisao">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+    </Style>
+    <Style Selector="ProgressBar.revisao.concluida">
+      <Setter Property="Foreground" Value="{DynamicResource Green}" />
+    </Style>
+    <Style Selector="ProgressBar.revisao.parada">
+      <Setter Property="Foreground" Value="{DynamicResource Red}" />
+    </Style>
+
     <!-- só o ícone, numa bolinha do tamanho da altura -->
     <Style Selector="Button.colorida.redonda">
       <Setter Property="Width" Value="24" />
@@ -445,13 +469,14 @@
            /exit antes, e tudo que o encerra confirma. Com as pílulas de 24, a barra fica com
            os 28 da pesquisa ao lado -->
       <Border Grid.Row="0" x:Name="BarraDaAba" IsVisible="{Binding TemAbaAtiva}" Margin="0,0,8,6">
+        <Grid>
         <Border DataContext="{Binding AbaAtiva}" CornerRadius="14" Padding="1" BorderThickness="1"
                 Background="{Binding FundoDaBarra}" BorderBrush="{Binding BordaDaBarra}">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="4">
               <Button Classes="colorida" Command="{Binding AbrirClaudeCommand}"
                       Foreground="{DynamicResource Green}" Background="#241F9D55" BorderBrush="#661F9D55"
-                      ToolTip.Tip="Abre de novo retomando a última sessão, com /compact se ela estiver grande, como o cia">
+                      ToolTip.Tip="Abre de novo retomando a última sessão, como o cia">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Classes="glifo" Text="&#xE768;" />
                   <TextBlock Text="Retomar" />
@@ -491,6 +516,24 @@
               </Button>
               <Rectangle Width="1" Height="12" Margin="2,0" Fill="{DynamicResource Border}" VerticalAlignment="Center" />
 
+              <!-- depois do traço, o que age na aba sem abrir o Claude de novo -->
+              <Button Classes="colorida" Command="{Binding CompactarCommand}" ToolTip.ShowOnDisabled="True"
+                      Foreground="#0E9384" Background="#240E9384" BorderBrush="#660E9384"
+                      ToolTip.Tip="Manda o /compact ao Claude, para resumir a conversa. Disponível com ele parado, esperando um pedido">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE73F;" />
+                  <TextBlock Text="Compactar" />
+                </StackPanel>
+              </Button>
+              <Button Classes="colorida" Classes.revisando="{Binding RevisaoRodando}" x:Name="CodeReview"
+                      Command="{Binding RevisarCommand}" ToolTip.ShowOnDisabled="True" ToolTip.Tip="{Binding DicaDaRevisao}"
+                      Foreground="{DynamicResource Orange}" Background="#24E07B00" BorderBrush="#66E07B00">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="glifo" Text="&#xE721;" />
+                  <TextBlock Text="{Binding RotuloDaRevisao}" />
+                </StackPanel>
+              </Button>
+
               <!-- a paleta do GRepos abre aqui, montada no código da janela -->
               <Button Classes="colorida" x:Name="CorDaAba" ToolTip.Tip="A cor da aba deste projeto"
                       Foreground="{DynamicResource TextDim}" Background="#246B7280" BorderBrush="#666B7280">
@@ -511,6 +554,23 @@
             </Button>
           </Grid>
         </Border>
+
+        <!-- a linha do code review, na largura da barra, no vão até o terminal: entre os
+             botões não sobra lugar na janela padrão, e aqui ela aparecer não mexe na altura do
+             terminal. O agente não informa a fase: trabalhando, ela anda sem percentual. São
+             duas porque a mesma, ao sair do modo sem percentual, não voltava a ficar cheia -->
+        <ProgressBar x:Name="BarraDaRevisaoAndando" DataContext="{Binding AbaAtiva}" Classes="revisao"
+                     IsVisible="{Binding RevisaoRodando}" IsIndeterminate="{Binding RevisaoRodando}"
+                     Height="4" MinHeight="4" MinWidth="0" CornerRadius="2"
+                     Margin="14,0,14,-5" VerticalAlignment="Bottom" IsHitTestVisible="False"
+                     Background="{DynamicResource BgHover}" />
+        <ProgressBar x:Name="BarraDaRevisao" DataContext="{Binding AbaAtiva}" Classes="revisao"
+                     Classes.concluida="{Binding RevisaoConcluida}" Classes.parada="{Binding RevisaoParada}"
+                     IsVisible="{Binding RevisaoTerminou}" Minimum="0" Maximum="100" Value="100"
+                     Height="4" MinHeight="4" MinWidth="0" CornerRadius="2"
+                     Margin="14,0,14,-5" VerticalAlignment="Bottom" IsHitTestVisible="False"
+                     Background="{DynamicResource BgHover}" />
+        </Grid>
       </Border>
 
       <!-- o terminal encaixado num cartão: a janela em volta é a moldura, no tom da
@@ -673,7 +733,7 @@
 
             <Button Classes="primary" HorizontalAlignment="Center"
                     Command="{Binding Selecionado.IniciarCommand}"
-                    ToolTip.Tip="Retoma a última sessão do projeto, com /compact se ela estiver grande, como o cia">
+                    ToolTip.Tip="Retoma a última sessão do projeto, como o cia">
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Classes="glifo" Text="&#xE768;" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Selecionado.RotuloDeAbrir}" VerticalAlignment="Center" />

@@ -38,6 +38,11 @@ public partial class MainWindow : Window, IDialogService
                     or nameof(MainViewModel.SessaoAVista) && !_pelasSetas)
                 Dispatcher.UIThread.Post(Focar, DispatcherPriority.Background);
         };
+
+        // abrir ou retomar não muda de projeto, e o botão clicado some: sem isto o teclado
+        // ficava sem dono até um clique no terminal
+        _vm.ClaudeAberto += () => Dispatcher.UIThread.Post(Focar, DispatcherPriority.Background);
+
         Opened += (_, _) =>
         {
             Focar();

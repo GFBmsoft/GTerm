@@ -97,6 +97,9 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
     /// <summary>Rodando, aguardando, concluído ou erro: a cor do ponto na sidebar.</summary>
     [ObservableProperty] private EstadoDoTerminal _estado;
 
+    /// <summary>O Claude está parado esperando um pedido: <see cref="ComandoAsync"/> não interrompe nada.</summary>
+    [ObservableProperty] private bool _esperaComando;
+
     /// <summary>O estado atual é dos que pedem aviso: terminou ou está perguntando algo.</summary>
     public bool ChamaAtencao => !Encerrada && _atividade.ChamaAtencao;
 
@@ -173,6 +176,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
             LerAvisoDoClaude();
             _atividade.Tique(DateTime.UtcNow);
             Estado = _atividade.Estado;
+            EsperaComando = _atividade.EsperaComando;
         };
     }
 
@@ -212,6 +216,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         Encerrada = false;
         _atividade.Reiniciar();
         Estado = _atividade.Estado;
+        EsperaComando = false;
         _relogio.Start();
         var aoSair = arranque.AoSair ?? "processo encerrado — Enter abre outro";
 
@@ -222,6 +227,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
             _relogio.Stop();
             _atividade.Reiniciar();
             Estado = _atividade.Estado;
+            EsperaComando = false;
             Modelo.Feed("\r\n\x1b[2m[" + aoSair + "]\x1b[0m\r\n");
         });
 
@@ -309,15 +315,6 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
             if (e.PropertyName == nameof(Encerrada) && Encerrada) saiu.TrySetResult();
         }
 
-        // entre um passo e outro o processo pode ter saído, ou a sessão ter sido descartada
-        async Task<bool> Teclar(string texto, int pausa)
-        {
-            if (Encerrada || _pty != pty) return false;
-            pty.Escrever(Encoding.UTF8.GetBytes(texto));
-            await Task.Delay(pausa);
-            return true;
-        }
-
         PropertyChanged += Mudou;
         try
         {
@@ -326,8 +323,8 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
             // novo para sair". O Enter vai depois de outra: junto com o texto, chegaria como
             // parte dele
             var ocupado = Estado is EstadoDoTerminal.Rodando or EstadoDoTerminal.Aguardando;
-            if ((!ocupado || await Teclar("\x03", 1500)) &&
-                await Teclar("\x03", 300) && await Teclar(comando, 200) && await Teclar("\r", 0))
+            if ((!ocupado || await Teclar(pty, "\x03", 1500)) &&
+                await Teclar(pty, "\x03", 300) && await Teclar(pty, comando, 200) && await Teclar(pty, "\r", 0))
                 await Task.WhenAny(saiu.Task, Task.Delay(prazo));
             return Encerrada;
         }
@@ -335,6 +332,30 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         {
             PropertyChanged -= Mudou;
         }
+    }
+
+    // entre um passo e outro o processo pode ter saído, ou a sessão ter sido descartada
+    private async Task<bool> Teclar(ConPty pty, string texto, int pausa)
+    {
+        if (Encerrada || _pty != pty) return false;
+        pty.Escrever(Encoding.UTF8.GetBytes(texto));
+        await Task.Delay(pausa);
+        return true;
+    }
+
+    /// <summary>
+    /// Digita um comando no Claude parado, como o usuário faria: o Ctrl+C antes larga o que
+    /// estiver escrito na entrada, que senão iria junto. Conta como rodando até o próximo
+    /// aviso dele; o SessionStart do fim do /compact é um deles.
+    /// </summary>
+    public async Task ComandoAsync(string comando)
+    {
+        if (!EsperaComando || _pty is not { } pty) return;
+
+        _atividade.Claude("rodando");
+        Estado = _atividade.Estado;
+        EsperaComando = false;
+        _ = await Teclar(pty, "\x03", 300) && await Teclar(pty, comando, 200) && await Teclar(pty, "\r", 0);
     }
 
     private void LerAvisoDoClaude()

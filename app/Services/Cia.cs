@@ -42,7 +42,7 @@ public sealed record InfoDoGit(bool Repositorio, bool Erro, string Branch, int A
 }
 
 /// <summary>Como o Claude abre no projeto, decidido como o cia decidiria.</summary>
-/// <param name="Argumentos">Da linha de comando do claude: --resume, /compact, a skill.</param>
+/// <param name="Argumentos">Da linha de comando do claude: --resume ou a skill.</param>
 /// <param name="Modo">O que vai para o recente (retomada, writer, memória, pr, limpo).</param>
 /// <param name="Pedido">O número do pedido do Mantis, ou vazio.</param>
 public sealed record Abertura(string Argumentos, string Modo, string Pedido);
@@ -55,9 +55,6 @@ public sealed record Abertura(string Argumentos, string Modo, string Pedido);
 /// </summary>
 public static class Cia
 {
-    /// <summary>Acima disso o cia retoma a sessão já mandando /compact ($global:CiaCompactKB).</summary>
-    public const int CompactarKB = 300;
-
     /// <summary>Desvio usado só pelos testes, para nunca lerem nem gravarem o estado real do cia.</summary>
     internal static string? PastaDeTeste { get; set; }
 
@@ -374,10 +371,13 @@ public static class Cia
 
     /// <summary>
     /// O que o Open-CIA (Modules\aliases.ps1) decide ao abrir o projeto, para o GTerm chamar
-    /// o Claude direto, sem shell no meio. Sem modo, retoma a última sessão com conversa,
-    /// com /compact acima de <see cref="CompactarKB"/>. Sem sessão, ou nos outros modos, abre
-    /// na skill: /delphi-writer na base da BMSoft, /retomar nas outras, /pedido, /delphi-pr,
-    /// ou nenhuma. Mudou lá, muda aqui.
+    /// o Claude direto, sem shell no meio. Sem modo, retoma a última sessão com conversa. Sem
+    /// sessão, ou nos outros modos, abre na skill: /delphi-writer na base da BMSoft, /retomar
+    /// nas outras, /pedido, /delphi-pr, ou nenhuma. Mudou lá, muda aqui.
+    ///
+    /// A exceção de propósito é o /compact que o cia manda acima de $global:CiaCompactKB:
+    /// o .jsonl nunca diminui, então passados os 300 KB toda retomada compactava de novo, e
+    /// levava perto de um minuto para o Claude responder. Aqui é o botão Compactar da aba.
     /// </summary>
     /// <param name="modo">
     /// -Novo, -Limpo, -Pr, o número de um pedido, <see cref="ModoConversa"/> com o id de uma
@@ -386,7 +386,7 @@ public static class Cia
     /// <param name="ultimaSessao">Só é chamada quando o modo retoma: os .jsonl são grandes.</param>
     public static Abertura Decidir(string? modo, bool daBmsoft, Func<UltimaSessao?> ultimaSessao)
     {
-        // a conversa escolhida no modo Sessões, como o cl <n>: o --resume dela, sem /compact
+        // a conversa escolhida no modo Sessões, como o cl <n>: o --resume dela
         if (modo is not null && modo.StartsWith(ModoConversa, StringComparison.Ordinal) &&
             modo[ModoConversa.Length..] is { Length: > 0 } id && id.All(c => char.IsAsciiHexDigit(c) || c == '-'))
             return new Abertura("--resume " + id, "retomada", "");
@@ -402,7 +402,7 @@ public static class Cia
             : daBmsoft ? "/delphi-writer"
             : "/retomar";
         var argumentos = sessao is not null
-            ? "--resume " + sessao.Id + (sessao.KB >= CompactarKB ? " /compact" : "")
+            ? "--resume " + sessao.Id
             : prompt is null ? "" : Aspas(prompt);
 
         // o modo que o cia grava no recente

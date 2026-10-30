@@ -220,14 +220,12 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public string RotuloDeAbrir => UltimaSessao is null ? "Abrir o Claude" : "Retomar a sessão";
 
     /// <summary>
-    /// Embaixo do botão de abrir, o que o cia vai fazer de diferente: sem sessão, a skill;
-    /// com sessão grande, o /compact. A sessão em si está no quadro.
+    /// Embaixo do botão de abrir, o que o cia vai fazer de diferente: sem sessão, a skill. A
+    /// sessão em si está no quadro.
     /// </summary>
-    public string TextoDaSessao => !SessaoLida ? ""
-        : UltimaSessao is { } s
-            ? (s.KB >= Cia.CompactarKB ? $"Abre com /compact: a sessão passou de {Cia.CompactarKB} KB" : "")
-            : "Nenhuma sessão com conversa: abre " +
-              (EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto");
+    public string TextoDaSessao => !SessaoLida || UltimaSessao is not null ? ""
+        : "Nenhuma sessão com conversa: abre " +
+          (EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto");
 
     public bool TemTextoDaSessao => TextoDaSessao.Length > 0;
 
@@ -319,10 +317,17 @@ public sealed partial class ProjetoViewModel : ObservableObject
     {
         if (oldValue is not null) oldValue.PropertyChanged -= SessaoMudou;
         if (newValue is not null) newValue.PropertyChanged += SessaoMudou;
+        CompactarCommand.NotifyCanExecuteChanged();
+        RevisarCommand.NotifyCanExecuteChanged();
     }
 
     private void SessaoMudou(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(TerminalSessao.EsperaComando))
+        {
+            CompactarCommand.NotifyCanExecuteChanged();
+            RevisarCommand.NotifyCanExecuteChanged();
+        }
         if (e.PropertyName is not (nameof(TerminalSessao.Encerrada) or nameof(TerminalSessao.Estado))) return;
         OnPropertyChanged(nameof(Vivo));
         OnPropertyChanged(nameof(Rodando));
@@ -342,6 +347,51 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [RelayCommand] private Task Pedido() => _main.AbrirPedidoAsync(this);
     [RelayCommand] private void Favoritar() => _main.AlternarFavorito(this);
     [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
+
+    /// <summary>
+    /// O /compact, quando o usuário pede: abrir não compacta mais sozinho. Só com o Claude
+    /// parado, porque o Ctrl+C que vai antes do comando interromperia o que ele estivesse fazendo.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(PodeCompactar))]
+    private Task Compactar() => Sessao?.ComandoAsync("/compact") ?? Task.CompletedTask;
+
+    private bool PodeCompactar() => Sessao?.EsperaComando == true;
+
+    /// <summary>O /code-review desta conversa; null sem nenhum recente.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RevisaoTerminou), nameof(RevisaoRodando), nameof(RevisaoConcluida), nameof(RevisaoParada),
+        nameof(RotuloDaRevisao), nameof(DicaDaRevisao))]
+    [NotifyCanExecuteChangedFor(nameof(RevisarCommand))]
+    private Revisao? _revisao;
+
+    public bool RevisaoTerminou => Revisao is { Estado: not EstadoDaRevisao.Rodando };
+    public bool RevisaoRodando => Revisao?.Estado == EstadoDaRevisao.Rodando;
+    public bool RevisaoConcluida => Revisao?.Estado == EstadoDaRevisao.Concluida;
+    public bool RevisaoParada => Revisao?.Estado == EstadoDaRevisao.Parada;
+
+    public string RotuloDaRevisao => Revisao switch
+    {
+        null => "Code review",
+        { Estado: EstadoDaRevisao.Rodando } r => "Revisando · " + RevisoesDoClaude.Tempo(r.Duracao),
+        { Estado: EstadoDaRevisao.Concluida } r => "Revisado · " + RevisoesDoClaude.Tempo(r.Duracao),
+        _ => "Revisão parada",
+    };
+
+    public string DicaDaRevisao => Revisao switch
+    {
+        null => "Manda o /code-review ao Claude, que revisa em segundo plano. Disponível com ele parado, esperando um pedido",
+        { Estado: EstadoDaRevisao.Rodando } r =>
+            $"Code review em andamento há {RevisoesDoClaude.Tempo(r.Duracao)}, com {r.Passos} passos. O agente não informa em que fase está: a barra mostra que ele está trabalhando, sem percentual",
+        { Estado: EstadoDaRevisao.Concluida } r =>
+            $"Concluído em {RevisoesDoClaude.Tempo(r.Duracao)}, com {r.Passos} passos. O resultado está no terminal. Clique para revisar de novo",
+        _ => "O code review foi interrompido. Clique para revisar de novo",
+    };
+
+    /// <summary>O /code-review, pelo botão. Com um já rodando, espera ele terminar.</summary>
+    [RelayCommand(CanExecute = nameof(PodeRevisar))]
+    private Task Revisar() => Sessao?.ComandoAsync("/code-review") ?? Task.CompletedTask;
+
+    private bool PodeRevisar() => PodeCompactar() && !RevisaoRodando;
 
     /// <summary>O clique na aba: traz o projeto para a frente.</summary>
     [RelayCommand] private void Mostrar() => _main.Ver(this);
@@ -437,6 +487,9 @@ public sealed partial class MainViewModel : ObservableObject
         _releitura.Tick += (_, _) => Reler();
         _releituraDasSessoes = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _releituraDasSessoes.Tick += (_, _) => _ = CarregarSessoesAsync();
+        _vigiaDasRevisoes = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _vigiaDasRevisoes.Tick += (_, _) => _ = LerRevisoesAsync();
+        _vigiaDasRevisoes.Start();
 
         CarregarProjetos();
         CarregarEstado();
@@ -892,6 +945,40 @@ public sealed partial class MainViewModel : ObservableObject
         if (Projetos.Count == 0 || Selecionado is null) AtualizarAviso();
     }
 
+    // ------------------------------------------------------------ code review
+
+    private readonly RevisoesDoClaude _revisoes = new();
+    private readonly DispatcherTimer _vigiaDasRevisoes;
+    private bool _lendoRevisoes;
+
+    /// <summary>
+    /// O /code-review de cada aba, fora da tela: vale também o digitado direto no terminal, que
+    /// o GTerm não vê passar. Só a conversa da aba é olhada, e quase sempre não há nada.
+    /// </summary>
+    internal async Task LerRevisoesAsync()
+    {
+        if (_lendoRevisoes) return;
+
+        var abas = Abertos.Where(p => p.Sessao?.Pid is not null).Select(p => (Projeto: p, Pid: p.Sessao!.Pid!.Value)).ToList();
+        if (abas.Count == 0) return;
+
+        _lendoRevisoes = true;
+        try
+        {
+            var conta = ClaudeHooks.PastaDaConta(_workspace.ContaDasSessoes);
+            var agora = DateTime.Now;
+            var lidas = await Task.Run(() => abas.Select(a => _revisoes.Ultima(conta, a.Pid, a.Projeto.Pasta, agora)).ToList());
+
+            // enquanto lia, a aba pode ter sido encerrada
+            for (var i = 0; i < abas.Count; i++)
+                if (abas[i].Projeto.Sessao?.Pid == abas[i].Pid) abas[i].Projeto.Revisao = lidas[i];
+        }
+        finally
+        {
+            _lendoRevisoes = false;
+        }
+    }
+
     // ------------------------------------------------------------ atenção
 
     /// <summary>A janela está na frente, com o teclado. Quem informa é a própria janela.</summary>
@@ -1125,6 +1212,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (p.Sessao is not { } sessao) return;
         Sessoes.Remove(sessao);
         p.Sessao = null;
+        p.Revisao = null;
         sessao.Dispose();
         p.PedeAtencao = false;
         p.AVista = false;
@@ -1292,12 +1380,16 @@ public sealed partial class MainViewModel : ObservableObject
         await AbrirAsync(p, pedido);
     }
 
+    /// <summary>O Claude acabou de abrir à vista: é para digitar nele.</summary>
+    public event Action? ClaudeAberto;
+
     private void Iniciar(ProjetoViewModel p, string? modo)
     {
         Ver(p);
         Abrir(p, modo);
         Mostrar();
         OnPropertyChanged(nameof(MostrarParado));
+        ClaudeAberto?.Invoke();
     }
 
     public async Task EncerrarAsync(ProjetoViewModel p)
@@ -1308,9 +1400,16 @@ public sealed partial class MainViewModel : ObservableObject
             return;
 
         if (!await SairDoClaudeAsync(p)) return;
+
+        var aFrente = ProjetoAVista == p;
+        var lugar = Abertos.IndexOf(p);
         Fechar(p);
         Mostrar();
-        if (Selecionado == p)
+
+        // a aba da frente fechou: a que ficou no lugar dela vem para a frente, com o teclado
+        // no terminal, e a última dá lugar à anterior. Sem outra aba, fica o quadro do projeto
+        if (aFrente && Abertos.Count > 0) Ver(Abertos[Math.Min(lugar, Abertos.Count - 1)]);
+        else if (Selecionado == p)
         {
             AtualizarAviso();
             _ = CarregarQuadroAsync(p);
@@ -1325,6 +1424,7 @@ public sealed partial class MainViewModel : ObservableObject
         _vigias.Clear();
         _releitura.Stop();
         _releituraDasSessoes.Stop();
+        _vigiaDasRevisoes.Stop();
     }
 
     // ------------------------------------------------------------ atualização

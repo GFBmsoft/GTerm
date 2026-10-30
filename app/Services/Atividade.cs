@@ -48,6 +48,12 @@ public sealed class Atividade
         Estado is EstadoDoTerminal.Concluido or EstadoDoTerminal.Erro ||
         (Estado == EstadoDoTerminal.Aguardando && !_porSilencio);
 
+    /// <summary>
+    /// O Claude subiu, o que só o hook sabe dizer, e está parado esperando um pedido: um
+    /// comando digitado agora não interrompe nada.
+    /// </summary>
+    public bool EsperaComando => _claude && Estado is not (EstadoDoTerminal.Rodando or EstadoDoTerminal.Aguardando);
+
     /// <summary>O shell já desenhou um prompt: está pronto para receber o comando de abertura.</summary>
     public bool ViuPrompt { get; private set; }
     public void Reiniciar()

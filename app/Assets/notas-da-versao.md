@@ -1,3 +1,10 @@
+## 1.0.0.17 — 30/10/2026
+- **Retomar ficou imediato**: o GTerm não manda mais o /compact sozinho ao retomar uma sessão. Passados os 300 KB, toda retomada compactava de novo e levava perto de um minuto para o Claude responder. O cia no terminal continua compactando como antes.
+- **Compactar**: botão novo na barra da aba, para resumir a conversa quando você quiser. Fica disponível com o Claude parado, esperando um pedido, e esmaecido enquanto ele trabalha ou ainda está abrindo. Precisa dos avisos do Claude Code instalados em Preferências.
+- **Code review**: botão novo na barra da aba, que manda o /code-review ao Claude. Ao lado dele, uma barra em linha mostra a revisão, também quando você digita o comando no terminal: azul e em movimento enquanto trabalha, com o tempo no botão, verde ao terminar e vermelha se for interrompida. A revisão não informa em que fase está, então a barra não mostra percentual. Passando o mouse aparecem os passos. Depois de 30 minutos do fim ela some.
+- Abrir ou retomar o Claude já deixa o teclado no terminal: dá para digitar sem clicar nele antes.
+- Encerrar a aba da frente traz a próxima, com o teclado no terminal. Se ela era a última da fila, vem a anterior.
+
 ## 1.0.0.16 — 30/10/2026
 - O grupo **Favoritos** só aparece quando há algum favorito: marcar a estrela do primeiro projeto faz o grupo surgir, e tirar a do último faz ele sumir.
 - **Escolher os grupos da barra lateral**: clique direito no título de um grupo e use "Ocultar este grupo", ou marque e desmarque em "Grupos à vista". Vale para qualquer grupo, como Recentes, Ocultos, DBISAM ou os dias das Sessões, e também para os que você criou. O grupo sai com o que está dentro, e a pesquisa continua achando. Para trazer de volta, use "Grupos à vista" no clique direito em outro título ou no fundo da lista.

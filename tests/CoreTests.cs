@@ -452,11 +452,13 @@ public class CiaTests : IDisposable
     public void AberturaDecididaComoOCia()
     {
         var pequena = new UltimaSessao("abc", DateTime.Now, 120, "Boleto");
-        var grande = pequena with { KB = Cia.CompactarKB };
+        var grande = pequena with { KB = 500_000 };
         UltimaSessao? NaoProcura() => throw new InvalidOperationException("a sessão não devia ser procurada");
 
         Assert.Equal(new Abertura("--resume abc", "retomada", ""), Cia.Decidir(null, true, () => pequena));
-        Assert.Equal(new Abertura("--resume abc /compact", "retomada", ""), Cia.Decidir(null, false, () => grande));
+
+        // de propósito, diferente do cia: sessão grande não compacta ao abrir. É o botão da aba
+        Assert.Equal(new Abertura("--resume abc", "retomada", ""), Cia.Decidir(null, false, () => grande));
         Assert.Equal(new Abertura("/delphi-writer", "writer", ""), Cia.Decidir(null, true, () => null));
         Assert.Equal(new Abertura("/retomar", "memória", ""), Cia.Decidir(null, false, () => null));
         Assert.Equal(new Abertura("/delphi-writer", "writer", ""), Cia.Decidir("-Novo", true, NaoProcura));
@@ -1021,7 +1023,8 @@ public class JanelaTests : IDisposable
             Assert.DoesNotContain("limpo", quadro);
             Assert.DoesNotContain("sem git", quadro);
             Assert.Equal("Retomar a sessão", notas.RotuloDeAbrir);
-            Assert.Equal("Abre com /compact: a sessão passou de 300 KB", notas.TextoDaSessao);
+            Assert.Equal("", notas.TextoDaSessao); // com sessão, nada a avisar
+            Assert.False(notas.TemTextoDaSessao);
             Foto(janela, "quadro.png");
         }
         finally
@@ -1940,6 +1943,442 @@ public class JanelaTests : IDisposable
             janela.MouseUp(titulo, MouseButton.Left);
             Dispatcher.UIThread.RunJobs();
             Assert.True(Titulo(vm, "Fiscal").Recolhido);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Retomar é para digitar: com o clique de verdade no botão do projeto parado, que some, e
+    /// com o Enter na árvore, o teclado acaba no terminal do Claude. Digitar chega ao processo.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task RetomarLevaOTecladoAoTerminal()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var financeiro = vm.Selecionado!;
+
+            var botao = janela.GetVisualDescendants().OfType<Button>()
+                .Single(b => b.Classes.Contains("primary") && b.IsEffectivelyVisible);
+            var meio = botao.TranslatePoint(new Point(botao.Bounds.Width / 2, botao.Bounds.Height / 2), janela)!.Value;
+            janela.MouseDown(meio, MouseButton.Left);
+            janela.MouseUp(meio, MouseButton.Left);
+            Assert.True(await Esperar(() => financeiro.Sessao is { Pid: not null }));
+            Dispatcher.UIThread.RunJobs();
+
+            var foco = Assert.IsType<TerminalControl>(janela.FocusManager!.GetFocusedElement());
+            Assert.True(foco.IsVisible);
+            Assert.Same(financeiro.Sessao!.Modelo, foco.Model);
+
+            // o que se digita vai direto para o Claude, sem clicar no terminal antes
+            Assert.True(await Esperar(() => Tela(financeiro.Sessao!).Contains(">")), Tela(financeiro.Sessao!));
+            janela.KeyTextInput("echo digitado");
+            janela.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Assert.True(await Esperar(() => Tela(financeiro.Sessao!).Contains("echo digitado")), Tela(financeiro.Sessao!));
+
+            // o mesmo com o Enter na árvore, em outro projeto
+            var notas = Projeto(vm, "Notas");
+            vm.Ver(notas);
+            Dispatcher.UIThread.RunJobs();
+            await notas.IniciarCommand.ExecuteAsync(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(notas.Sessao!.Modelo, Assert.IsType<TerminalControl>(janela.FocusManager!.GetFocusedElement()).Model);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>Os arquivos de um /code-review, como o Claude grava: a aba é a do processo informado.</summary>
+    private string MontarRevisao(int pid, string pasta, string sessao, string agente, string skill = "code-review")
+    {
+        var sessoes = Path.Combine(ContaDoClaude, "sessions");
+        Directory.CreateDirectory(sessoes);
+        File.WriteAllText(Path.Combine(sessoes, pid + ".json"), $$"""{ "pid": {{pid}}, "sessionId": "{{sessao}}", "cwd": {{Json(pasta)}} }""");
+
+        var agentes = Path.Combine(ContaDoClaude, "projects", SessoesDoClaude.Chave(pasta), sessao, "subagents");
+        Directory.CreateDirectory(agentes);
+        File.WriteAllText(Path.Combine(agentes, $"agent-{agente}.forked-skill.json"), $$"""{ "skillName": "{{skill}}" }""");
+        File.WriteAllText(Path.Combine(agentes, $"agent-{agente}.meta.json"), """{ "agentType": "general-purpose" }""");
+        File.WriteAllText(Path.Combine(agentes, $"agent-{agente}.jsonl"), "");
+        return agentes;
+    }
+
+    private static string Passo(int ferramentas) => JsonLinha("assistant", ferramentas);
+
+    private static string JsonLinha(string tipo, int ferramentas)
+    {
+        var itens = string.Join(",", Enumerable.Repeat("""{"type":"tool_use","name":"Read"}""", ferramentas));
+        return "{\"type\":\"" + tipo + "\",\"message\":{\"content\":[" + itens + "]}}" + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// A revisão pelos arquivos do Claude: rodando enquanto o agente escreve, concluída com o
+    /// finished, parada com o aviso de killed ou com o silêncio longo. Os passos contam só as
+    /// respostas do agente, sem a linha pela metade e sem os pedidos à API, que repetem a
+    /// conversa. Agente de outra skill não conta, e a terminada há muito tempo sai da barra.
+    /// </summary>
+    [Fact]
+    public void RevisaoLidaDosArquivosDoClaude()
+    {
+        const string Sessao = "11111111-2222-3333-4444-555555555555";
+        var leitor = new RevisoesDoClaude();
+        Revisao? Ler(DateTime? quando = null) => leitor.Ultima(ContaDoClaude, 4242, Notas, quando ?? DateTime.Now);
+
+        Assert.Null(Ler()); // aba sem conversa conhecida
+
+        // agente de outra skill não é revisão
+        var agentes = MontarRevisao(4242, Notas, Sessao, "a0outro", "simplify");
+        Assert.Null(Ler());
+
+        File.WriteAllText(Path.Combine(agentes, "agent-a0outro.forked-skill.json"), """{ "skillName": "code-review" }""");
+        var diario = Path.Combine(agentes, "agent-a0outro.jsonl");
+        Assert.Equal(EstadoDaRevisao.Rodando, Ler()!.Estado);
+        Assert.Equal(0, Ler()!.Passos);
+
+        // só as respostas contam, e a linha ainda sendo gravada espera a próxima leitura
+        File.AppendAllText(diario, Passo(2) + JsonLinha("api-request-blob", 9) + JsonLinha("user", 3));
+        Assert.Equal(2, Ler()!.Passos);
+        File.AppendAllText(diario, Passo(1).TrimEnd('\n'));
+        Assert.Equal(2, Ler()!.Passos);
+        File.AppendAllText(diario, "\n" + Passo(1));
+        Assert.Equal(4, Ler()!.Passos);
+        Assert.Equal(4, Ler()!.Passos); // relida sem novidade, não conta de novo
+
+        // o aviso de que foi parada, no fim da conversa principal
+        var conversa = Path.Combine(ContaDoClaude, "projects", SessoesDoClaude.Chave(Notas), Sessao + ".jsonl");
+        File.WriteAllText(conversa, """{"content":"<output-file>tasks\\a0outro.output</output-file>\n<status>killed</status>"}""" + "\n");
+        Assert.Equal(EstadoDaRevisao.Parada, Ler()!.Estado);
+
+        // o aviso de outro agente, ou o de que terminou bem, não para esta
+        File.WriteAllText(conversa, """{"content":"<output-file>tasks\\a0outro.output</output-file>\n<status>completed</status>"}""" + "\n");
+        Assert.Equal(EstadoDaRevisao.Rodando, Ler()!.Estado);
+
+        // calado por muito tempo, sem terminar: o agente morreu com o processo
+        Assert.Equal(EstadoDaRevisao.Parada, Ler(DateTime.Now + RevisoesDoClaude.Silencio + TimeSpan.FromMinutes(1))!.Estado);
+
+        // terminou: a duração é até a última escrita, e não cresce mais
+        File.WriteAllText(Path.Combine(agentes, "agent-a0outro.meta.json"), """{ "finished": true }""");
+        var fim = File.GetLastWriteTime(diario);
+        File.SetLastWriteTime(Path.Combine(agentes, "agent-a0outro.forked-skill.json"), fim.AddMinutes(-8));
+        var pronta = Ler(fim.AddMinutes(5))!;
+        Assert.Equal(EstadoDaRevisao.Concluida, pronta.Estado);
+        Assert.Equal(TimeSpan.FromMinutes(8), pronta.Duracao);
+        Assert.Equal("8 min", RevisoesDoClaude.Tempo(pronta.Duracao));
+        Assert.Equal("40 s", RevisoesDoClaude.Tempo(TimeSpan.FromSeconds(40)));
+
+        // passado o prazo, some da barra
+        Assert.Null(Ler(fim + RevisoesDoClaude.Validade + TimeSpan.FromMinutes(1)));
+
+        // a mais nova da conversa é a que vale
+        MontarRevisao(4242, Notas, Sessao, "a1nova");
+        File.SetLastWriteTime(Path.Combine(agentes, "agent-a1nova.forked-skill.json"), DateTime.Now.AddMinutes(1));
+        Assert.Equal("a1nova", Ler()!.Id);
+
+        // arquivo pela metade na hora da leitura: fica o que já se sabia
+        File.WriteAllText(Path.Combine(ContaDoClaude, "sessions", "4242.json"), "{ quebrado");
+        Assert.Equal("a1nova", Ler()!.Id);
+    }
+
+    /// <summary>
+    /// O botão e a barra na aba: o botão manda o comando, e a barra aparece pelo que o Claude
+    /// grava, também se o comando foi digitado direto. Rodando, ela anda sem percentual e o
+    /// texto do botão é o status, legível mesmo sem aceitar clique; no fim fica cheia e verde.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task CodeReviewNaBarraDaAba()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var financeiro = vm.Selecionado!;
+            await financeiro.IniciarCommand.ExecuteAsync(null);
+            Assert.True(await Esperar(() => financeiro.Sessao is { Pid: not null }));
+            var sessao = financeiro.Sessao!;
+            Assert.True(await Esperar(() => Tela(sessao).Contains(">")), Tela(sessao));
+
+            var botao = janela.FindControl<Button>("CodeReview")!;
+            var barra = janela.FindControl<ProgressBar>("BarraDaRevisao")!;
+            var andando = janela.FindControl<ProgressBar>("BarraDaRevisaoAndando")!;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(botao.IsEffectivelyEnabled); // o Claude ainda não avisou que subiu
+            Assert.False(barra.IsVisible || andando.IsVisible);
+            Assert.Equal("Code review", financeiro.RotuloDaRevisao);
+
+            sessao.Modelo.Send("echo pronto a> \"%GTERM_ESTADO%\"\r");
+            Assert.True(await Esperar(() => financeiro.RevisarCommand.CanExecute(null)));
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(botao.IsEffectivelyEnabled);
+            Assert.Equal(24, botao.Bounds.Height);
+            Assert.Equal(EstadoDoTerminal.Ocioso, sessao.Estado);
+
+            // o clique manda o comando
+            await financeiro.RevisarCommand.ExecuteAsync(null);
+            Assert.True(await Esperar(() => Tela(sessao).Contains("/code-review")), Tela(sessao));
+
+            // o Claude começou a revisão em segundo plano
+            sessao.Modelo.Send("echo concluido b> \"%GTERM_ESTADO%\"\r"); // a conversa principal fica livre
+            Assert.True(await Esperar(() => financeiro.RevisarCommand.CanExecute(null)));
+            var agentes = MontarRevisao(sessao.Pid!.Value, Financeiro, "22222222-3333-4444-5555-666666666666", "a9revisao");
+            File.AppendAllText(Path.Combine(agentes, "agent-a9revisao.jsonl"), Passo(3));
+            await vm.LerRevisoesAsync();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(financeiro.RevisaoRodando);
+            Assert.True(andando.IsVisible);
+            Assert.True(andando.IsIndeterminate);
+            Assert.False(barra.IsVisible);
+            Assert.False(botao.IsEffectivelyEnabled); // uma de cada vez
+            Assert.False(financeiro.RevisarCommand.CanExecute(null));
+            Assert.StartsWith("Revisando · ", financeiro.RotuloDaRevisao);
+            Assert.Contains("3 passos", financeiro.DicaDaRevisao);
+            Assert.Equal(1, botao.Opacity); // desabilitado, mas é onde está o status
+            Assert.Contains("revisando", botao.Classes);
+            Assert.Contains(botao.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.StartsWith("Revisando · ") == true);
+
+            // na largura da barra da aba, sem mexer na altura dela nem no terminal embaixo
+            var faixa = janela.FindControl<Border>("BarraDaAba")!;
+            Assert.True(andando.Bounds.Width > 500, "largura " + andando.Bounds.Width);
+            Assert.Equal(janela.FindControl<TextBox>("CaixaDoFiltro")!.Bounds.Height, faixa.Bounds.Height);
+            Assert.Equal(4, andando.Bounds.Height);
+            Foto(janela, "revisao-rodando.png");
+
+            // o Compactar não depende da revisão: a conversa principal segue livre
+            Assert.True(financeiro.CompactarCommand.CanExecute(null));
+
+            // terminou: cheia, verde, e o botão volta para revisar de novo
+            File.WriteAllText(Path.Combine(agentes, "agent-a9revisao.meta.json"), """{ "finished": true }""");
+            await vm.LerRevisoesAsync();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(financeiro.RevisaoConcluida);
+            Assert.False(andando.IsVisible);
+            Assert.True(barra.IsVisible);
+            var cheia = barra.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_Indicator");
+            Assert.Equal(barra.Bounds.Width, cheia.Bounds.Width, 0);
+            Assert.Equal(100, barra.Value);
+            Assert.Contains("concluida", barra.Classes);
+            Assert.StartsWith("Revisado · ", financeiro.RotuloDaRevisao);
+            Assert.Contains(botao.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.StartsWith("Revisado · ") == true);
+            Assert.True(financeiro.RevisarCommand.CanExecute(null));
+            Assert.True(botao.IsEffectivelyEnabled);
+            Foto(janela, "revisao-concluida.png");
+
+            // interrompida: fica vermelha
+            File.WriteAllText(Path.Combine(agentes, "agent-a9revisao.meta.json"), "{ }");
+            File.WriteAllText(Path.Combine(ContaDoClaude, "projects", SessoesDoClaude.Chave(Financeiro), "22222222-3333-4444-5555-666666666666.jsonl"),
+                """{"content":"a9revisao.output</output-file>\n<status>killed</status>"}""" + "\n");
+            await vm.LerRevisoesAsync();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(financeiro.RevisaoParada);
+            Assert.Contains("parada", barra.Classes);
+            Assert.Equal("Revisão parada", financeiro.RotuloDaRevisao);
+
+            // outra aba tem a própria revisão: trocar de aba troca a barra
+            var notas = Projeto(vm, "Notas");
+            await notas.IniciarCommand.ExecuteAsync(null);
+            Assert.True(await Esperar(() => notas.Sessao is { Pid: not null }));
+            await vm.LerRevisoesAsync();
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(barra.IsVisible || andando.IsVisible);
+            financeiro.MostrarCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(barra.IsVisible);
+
+            // encerrado o Claude, a revisão sai junto
+            vm.PrazoDaSaida = TimeSpan.FromMilliseconds(100);
+            sessao.Modelo.Send("exit\r");
+            Assert.True(await Esperar(() => sessao.Encerrada));
+            await financeiro.EncerrarCommand.ExecuteAsync(null);
+            Assert.Null(financeiro.Revisao);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// O botão Compactar só vale com o Claude parado, o que só os hooks dizem: esmaecido na
+    /// subida, enquanto ele trabalha e até o aviso do fim da compactação. O que estava escrito
+    /// na entrada sai antes do comando, e o clique não interrompe nada que não devia.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task CompactarSoComOClaudeParado()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var financeiro = vm.Selecionado!;
+            await financeiro.IniciarCommand.ExecuteAsync(null);
+            Assert.True(await Esperar(() => financeiro.Sessao is { Pid: not null }));
+            var sessao = financeiro.Sessao!;
+            Assert.True(await Esperar(() => Tela(sessao).Contains(">")), Tela(sessao));
+
+            var botao = janela.GetVisualDescendants().OfType<Button>()
+                .Single(b => b.IsEffectivelyVisible && ReferenceEquals(b.Command, financeiro.CompactarCommand));
+            Assert.Equal(24, botao.Bounds.Height);
+
+            // sem o aviso de que o Claude subiu, nada: o Ctrl+C no meio da subida o derrubaria
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(botao.IsEffectivelyEnabled);
+            Foto(janela, "compactar-esperando.png");
+
+            // parado: o que o hook faria, gravado pelo próprio shell
+            sessao.Modelo.Send("echo pronto a> \"%GTERM_ESTADO%\"\r");
+            Assert.True(await Esperar(() => financeiro.CompactarCommand.CanExecute(null)), "ficou em " + sessao.Estado);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(botao.IsEffectivelyEnabled);
+            Foto(janela, "compactar.png");
+
+            // trabalhando, e parado de novo no fim da resposta
+            sessao.Modelo.Send("echo rodando b> \"%GTERM_ESTADO%\"\r");
+            Assert.True(await Esperar(() => !financeiro.CompactarCommand.CanExecute(null)));
+            sessao.Modelo.Send("echo concluido c> \"%GTERM_ESTADO%\"\r");
+            Assert.True(await Esperar(() => financeiro.CompactarCommand.CanExecute(null)));
+
+            // perguntando: o Ctrl+C responderia à pergunta
+            sessao.Modelo.Send("echo aguardando d> \"%GTERM_ESTADO%\"\r");
+            Assert.True(await Esperar(() => !financeiro.CompactarCommand.CanExecute(null)));
+            sessao.Modelo.Send("echo concluido e> \"%GTERM_ESTADO%\"\r");
+            Assert.True(await Esperar(() => financeiro.CompactarCommand.CanExecute(null)));
+
+            // o clique: o rascunho sai, o comando entra com Enter, e o botão espera o aviso
+            sessao.Modelo.Send("rascunho");
+            await Task.Delay(100);
+            var clique = financeiro.CompactarCommand.ExecuteAsync(null);
+            Assert.False(financeiro.Sessao!.EsperaComando);
+            Assert.False(financeiro.CompactarCommand.CanExecute(null));
+            await clique;
+            Assert.True(await Esperar(() => Tela(sessao).Contains("/compact")), Tela(sessao));
+            Assert.DoesNotContain("rascunho/compact", Tela(sessao));
+
+            await Task.Delay(1200); // mais de um tique: sem o aviso, continua esperando
+            Assert.False(financeiro.CompactarCommand.CanExecute(null));
+            Assert.Equal(EstadoDoTerminal.Rodando, sessao.Estado);
+
+            // o SessionStart do fim da compactação libera
+            sessao.Modelo.Send("echo pronto f> \"%GTERM_ESTADO%\"\r");
+            Assert.True(await Esperar(() => financeiro.CompactarCommand.CanExecute(null)));
+            Assert.Equal(EstadoDoTerminal.Ocioso, sessao.Estado);
+
+            // encerrado, não há o que compactar
+            sessao.Modelo.Send("exit\r");
+            Assert.True(await Esperar(() => sessao.Encerrada));
+            Assert.False(financeiro.CompactarCommand.CanExecute(null));
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Encerrar a aba da frente traz a que ficou no lugar dela, com o teclado no terminal, sem
+    /// precisar clicar em nada; a última dá lugar à anterior. Encerrar uma aba de trás não tira
+    /// ninguém da frente, e sem outra aba fica o quadro do projeto.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task EncerrarAAbaDaFrenteTrazAProxima()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var financeiro = Projeto(vm, "Financeiro");
+            var notas = Projeto(vm, "Notas");
+            var gterm = Projeto(vm, "GTerm");
+
+            async Task Abrir(ProjetoViewModel p)
+            {
+                await p.IniciarCommand.ExecuteAsync(null);
+                Assert.True(await Esperar(() => p.Sessao is { Pid: not null }));
+            }
+
+            // o Claude já tinha saído: sem a pergunta de confirmação
+            async Task Encerrar(ProjetoViewModel p)
+            {
+                p.Sessao!.Modelo.Send("exit\r");
+                Assert.True(await Esperar(() => p.Sessao!.Encerrada));
+                await p.EncerrarCommand.ExecuteAsync(null);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            void NaFrente(ProjetoViewModel p)
+            {
+                Assert.Same(p, vm.Selecionado);
+                Assert.Same(p, vm.AbaAtiva);
+                Assert.True(p.AVista);
+                Assert.False(vm.MostrarParado);
+                var foco = Assert.IsType<TerminalControl>(janela.FocusManager!.GetFocusedElement());
+                Assert.Same(p.Sessao!.Modelo, foco.Model);
+            }
+
+            await Abrir(financeiro);
+            await Abrir(notas);
+            await Abrir(gterm);
+            Assert.Equal(new[] { financeiro, notas, gterm }, vm.Abertos);
+
+            // a do meio: vem a que estava à direita, e ela fica no lugar da que saiu
+            vm.Ver(notas);
+            Dispatcher.UIThread.RunJobs();
+            await Encerrar(notas);
+            Assert.Equal(new[] { financeiro, gterm }, vm.Abertos);
+            NaFrente(gterm);
+
+            // a última da fila: vem a anterior
+            await Encerrar(gterm);
+            Assert.Equal(new[] { financeiro }, vm.Abertos);
+            NaFrente(financeiro);
+
+            // uma aba de trás encerrada não tira a da frente do lugar
+            await Abrir(notas);
+            NaFrente(notas);
+            await Encerrar(financeiro);
+            Assert.Equal(new[] { notas }, vm.Abertos);
+            NaFrente(notas);
+
+            // com uma conversa à vista nas Sessões, a tela continua nela
+            await Abrir(gterm);
+            ContaDeTeste.Conversa(ContaDoClaude, Notas, "Boleto", DateTime.Now.AddMinutes(-1));
+            await vm.CarregarSessoesAsync();
+            vm.VerSessoesCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.MostrarSessao);
+            await Encerrar(gterm);
+            Assert.True(vm.MostrarSessao);
+            vm.VerProjetosCommand.Execute(null);
+            vm.Ver(notas);
+            Dispatcher.UIThread.RunJobs();
+
+            // sem outra aba: o quadro do projeto que fechou, como sempre foi
+            await Encerrar(notas);
+            Assert.Empty(vm.Abertos);
+            Assert.Same(notas, vm.Selecionado);
+            Assert.True(vm.MostrarParado);
         }
         finally
         {

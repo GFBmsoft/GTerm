@@ -175,7 +175,7 @@ public sealed class SessoesDoClaude
     public static string Chave(string caminho) => Regex.Replace(caminho, "[^A-Za-z0-9]", "-");
 
     // até `maximo` bytes do fim (ou do começo) como texto; o Claude pode estar gravando nele
-    private static string Trecho(string arquivo, long maximo, bool inicio)
+    internal static string Trecho(string arquivo, long maximo, bool inicio)
     {
         using var fluxo = new FileStream(arquivo, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var n = (int)Math.Min(Math.Min(maximo, fluxo.Length), int.MaxValue);

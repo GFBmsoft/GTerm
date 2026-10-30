@@ -79,9 +79,11 @@ e por isso confirma antes.
   pseudoconsole, sem shell** (`Arranque.DoClaude`, `claude.exe` do PATH ou de
   `~\.local\bin`): `Cia.Decidir` repete o `Open-CIA` do perfil (`Modules\aliases.ps1`) —
   retomar a última sessão com conversa (`UltimaSessao`, o `Get-UltimaSessao` do cia-dash)
-  com `/compact` a partir de 300 KB, ou abrir na skill do modo (`/delphi-writer` na
-  primeira base, `/retomar` nas outras, `/pedido N`, `/delphi-pr`, nenhuma). **Mudou lá,
-  muda aqui.** Com um Claude já aberto, outro modo só depois de confirmar. Ao sair do
+  ou abrir na skill do modo (`/delphi-writer` na primeira base, `/retomar` nas outras,
+  `/pedido N`, `/delphi-pr`, nenhuma). **Mudou lá, muda aqui.** A exceção de propósito é o
+  `/compact` que o cia manda a partir de 300 KB: o .jsonl nunca diminui, então toda
+  retomada compactava de novo, com mediana de 49 s até o Claude responder. Aqui ele é o
+  botão Compactar da barra da aba. Com um Claude já aberto, outro modo só depois de confirmar. Ao sair do
   Claude o terminal fica com o aviso, e o Enter sobe outro retomando a sessão. O segundo
   terminal continua sendo um shell. Vigias de pasta (`FileSystemWatcher`) relêem o estado
   quando o cia grava um recente e a base quando aparece pasta nova.
@@ -131,13 +133,25 @@ e por isso confirma antes.
   em `MainViewModel.CarregarQuadroAsync` a cada escolha; o git por `Cia.Git`, sem travar o
   índice) e os botões de abrir o Claude.
 - **Abas** — `MainViewModel.Abertos`, na ordem em que foram abertos (Ctrl+Tab passa por
-  elas). A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;
+  elas). Encerrar a da frente traz a que ficou no lugar dela (a última dá lugar à anterior);
+  sem outra aba, fica o quadro do projeto. A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;
   as outras ficam com o ponto da cor, o nome apagado e o ponto de estado. A aba não tem
-  menu: os botões dela (retomar, sessão nova, pedido, pull request, sem skill, cor,
-  encerrar) ficam na barra embaixo das abas, no tom da aba da frente, e trocam com ela
-  (`MainViewModel.AbaAtiva`). A cor é do projeto (`Projeto.Cor`, escolhida na barra e
+  menu: os botões dela (retomar, sessão nova, pedido, pull request, sem skill, compactar,
+  code review, cor, encerrar) ficam na barra embaixo das abas, no tom da aba da frente, e trocam com ela
+  (`MainViewModel.AbaAtiva`). Compactar digita o `/compact` no Claude
+  (`TerminalSessao.ComandoAsync`) e só vale com ele parado, o que só os hooks sabem dizer
+  (`EsperaComando`): o Ctrl+C antes do comando interromperia um trabalho, e no meio da
+  subida derrubaria o Claude. A cor é do projeto (`Projeto.Cor`, escolhida na barra e
   gravada); vazia, `GroupPalette.DoNome`, a mesma conta do GTest, para o projeto ter a
   mesma cor nos dois.
+- **Code review** — o `/code-review` roda em segundo plano, como um agente da conversa, e
+  `RevisoesDoClaude` o acompanha pelos arquivos dele (`projects\<chave>\<sessão>\subagents`:
+  `.forked-skill.json`, `.jsonl` e `.meta.json` com `finished`; interrompido, o aviso
+  `killed` na conversa principal), a cada 2 s, em `MainViewModel.LerRevisoesAsync`. Vale
+  também o digitado no terminal. A linha fica no vão embaixo da barra da aba, onde não mexe
+  no terminal; entre os botões, na janela padrão, sobravam 20 px. Sem percentual: o agente
+  não informa a fase da receita, e a duração varia demais para estimar. São duas
+  `ProgressBar`, porque uma só, ao sair do indeterminado, não voltava a ficar cheia.
 - **Botões** — uma medida só: pílula de 24 (`Button.colorida`, a do GTest: fundo diluído,
   contorno e texto na cor de cada um, com ícone), na barra das abas, no projeto parado, na
   conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`, só com o
