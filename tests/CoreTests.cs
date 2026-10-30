@@ -1949,6 +1949,40 @@ public class JanelaTests : IDisposable
     }
 
     /// <summary>
+    /// O grupo Favoritos só existe com algum favorito à vista: a estrela do primeiro faz ele
+    /// aparecer, aberto mesmo que tenha sido recolhido antes, e a do último faz ele sumir.
+    /// </summary>
+    [AvaloniaFact]
+    public void FavoritosSoAparecemComAlgumFavorito()
+    {
+        Montar();
+        var vm = new MainViewModel(new Dialogos());
+        var financeiro = Projeto(vm, "Financeiro");
+        var notas = Projeto(vm, "Notas");
+
+        Titulo(vm, "Favoritos").AlternarCommand.Execute(null);
+        Assert.True(Titulo(vm, "Favoritos").Recolhido);
+
+        // tirar o último faz o grupo sumir, e o estado do cia fica sem favoritos
+        vm.AlternarFavorito(financeiro);
+        Assert.Equal(new[] { "Recentes", "DBISAM", "Private" }, Titulos(vm));
+        Assert.Empty(Cia.LerEstado(Estado)!.Favoritos);
+
+        // o primeiro traz o grupo de volta, aberto, com o favorito à vista
+        vm.AlternarFavorito(notas);
+        Assert.Equal(new[] { "Favoritos", "Recentes", "DBISAM", "Private" }, Titulos(vm));
+        Assert.False(Titulo(vm, "Favoritos").Recolhido);
+        Assert.Equal(new[] { "Notas" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+
+        // com o único favorito oculto também não há o que mostrar, e o menu ainda lista o grupo
+        vm.AlternarOculto(notas);
+        Assert.DoesNotContain("Favoritos", Titulos(vm));
+        Assert.Contains(vm.GruposAVista(), g => g.Id == MainViewModel.GrupoFavoritos);
+        vm.AlternarOculto(notas);
+        Assert.Contains("Favoritos", Titulos(vm));
+    }
+
+    /// <summary>
     /// Ocultar tira o projeto de todos os grupos (o favorito guarda o número do cia) e o manda
     /// para Ocultos, no fim e fechado. A pesquisa ainda acha, e voltar devolve ao lugar dele.
     /// </summary>
@@ -2148,12 +2182,166 @@ public class JanelaTests : IDisposable
             var destinos = vm.DestinosDe(noGrupo).Select(d => d.Grupo.Nome).ToArray();
             Assert.Equal(new[] { "Private" }, destinos); // Fiscal é onde ele já está
 
-            // o título: o do usuário edita e exclui, a base só cor, o fixo só cria grupo
-            Assert.Equal(new[] { "Novo subgrupo em Fiscal…", "Editar grupo… (nome, cor e onde fica)", "Excluir grupo…" },
+            // o título: o do usuário edita e exclui, a base só cor, o fixo só cria grupo. Todos
+            // podem sair da árvore, e fora das linhas só dá para trazer um de volta
+            Assert.Equal(new[] { "Novo subgrupo em Fiscal…", "Editar grupo… (nome, cor e onde fica)", "Excluir grupo…", "Ocultar este grupo", "Grupos à vista" },
                 Rotulos(janela.MenuDe(Titulo(vm, "Fiscal"))));
-            Assert.Equal(new[] { "Novo subgrupo em DBISAM…", "Cor…" }, Rotulos(janela.MenuDe(Titulo(vm, "DBISAM"))));
-            Assert.Equal(new[] { "Novo grupo…" }, Rotulos(janela.MenuDe(Titulo(vm, "Favoritos"))));
-            Assert.Equal(new[] { "Novo grupo…" }, Rotulos(janela.MenuDe(null)));
+            Assert.Equal(new[] { "Novo subgrupo em DBISAM…", "Cor…", "Ocultar este grupo", "Grupos à vista" }, Rotulos(janela.MenuDe(Titulo(vm, "DBISAM"))));
+            Assert.Equal(new[] { "Novo grupo…", "Ocultar este grupo", "Grupos à vista" }, Rotulos(janela.MenuDe(Titulo(vm, "Favoritos"))));
+            Assert.Equal(new[] { "Novo grupo…", "Grupos à vista" }, Rotulos(janela.MenuDe(null)));
+
+            // Resultados não é um grupo de verdade: não tem o que ocultar
+            vm.Filtro = "notas";
+            Assert.Equal(new[] { "Novo grupo…", "Grupos à vista" }, Rotulos(janela.MenuDe(Titulo(vm, "Resultados"))));
+            vm.Filtro = "";
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Mostrar ou não um grupo, fixo ou do usuário: sai da árvore com o que está dentro, a
+    /// pesquisa continua achando, fica gravado e volta pelo menu "Grupos à vista", marcado
+    /// com o que está à vista. Quem sai não recebe mais nada pelo "Mover para".
+    /// </summary>
+    [AvaloniaFact]
+    public void EsconderGruposDaArvore()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var financeiro = Projeto(vm, "Financeiro");
+            vm.AlternarOculto(Projeto(vm, "GTerm"));
+            var fiscal = vm.CriarGrupo("Fiscal");
+            var nfe = vm.CriarGrupo("NFe", null, fiscal);
+            vm.MoverProjeto(Projeto(vm, "Notas"), nfe);
+            Assert.Equal(new[] { "Favoritos", "Recentes", "Fiscal", "NFe", "DBISAM", "Private", "Ocultos" }, Titulos(vm));
+
+            GrupoAVista Marca(string nome) => vm.GruposAVista().Single(g => g.Nome.Trim() == nome);
+            Assert.Equal(new[] { "Favoritos", "Recentes", "DBISAM", "Fiscal", "   NFe", "Private", "Ocultos" },
+                vm.GruposAVista().Select(g => g.Nome));
+            Assert.All(vm.GruposAVista(), g => Assert.True(g.Marcado));
+
+            // o caso que motivou: Recentes e Ocultos fora da árvore
+            vm.MostrarOuEsconderGrupo(MainViewModel.GrupoRecentes);
+            vm.MostrarOuEsconderGrupo(MainViewModel.GrupoOcultos);
+            Assert.Equal(new[] { "Favoritos", "Fiscal", "NFe", "DBISAM", "Private" }, Titulos(vm));
+            Assert.False(Marca("Recentes").Marcado);
+            Assert.False(Marca("Ocultos").Marcado);
+            Assert.True(Marca("Favoritos").Marcado);
+
+            // quem está na base continua contado; os recentes continuam sendo gravados
+            Assert.Equal(new[] { MainViewModel.GrupoRecentes, MainViewModel.GrupoOcultos }, WorkspaceStore.Load().GruposEscondidos);
+            Assert.Equal(new[] { "Favoritos", "Fiscal", "NFe", "DBISAM", "Private" }, Titulos(new MainViewModel(new Dialogos())));
+
+            // a pesquisa acha o oculto, com o grupo Ocultos fora da árvore
+            vm.Filtro = "gterm";
+            Assert.Equal(new[] { "GTerm" }, Nomes(vm, MainViewModel.GrupoResultados));
+            vm.Filtro = "";
+
+            // o marcado do menu é o estado do grupo, e o clique troca
+            var lista = janela.MenuDe(Titulo(vm, "Favoritos")).Items.OfType<MenuItem>().Single(m => m.Header as string == "Grupos à vista");
+            var recentes = lista.Items.OfType<MenuItem>().Single(m => m.Header as string == "Recentes");
+            Assert.Equal(MenuItemToggleType.CheckBox, recentes.ToggleType);
+            Assert.False(recentes.IsChecked);
+            Assert.True(lista.Items.OfType<MenuItem>().Single(m => m.Header as string == "Favoritos").IsChecked);
+
+            // grupo do usuário sai com o que está dentro, e a contagem do pai acompanha o filho
+            Assert.Equal(1, Titulo(vm, "Fiscal").Contagem);
+            vm.MostrarOuEsconderGrupo(nfe);
+            Assert.DoesNotContain("NFe", Titulos(vm));
+            Assert.Equal(0, Titulo(vm, "Fiscal").Contagem);
+            vm.MostrarOuEsconderGrupo(nfe);
+            vm.MostrarOuEsconderGrupo(fiscal);
+            Assert.Equal(new[] { "Favoritos", "DBISAM", "Private" }, Titulos(vm));
+
+            // o "Mover para" não leva para um grupo fora da árvore
+            var linha = vm.Linhas.OfType<LinhaDoProjeto>().First(l => l.Projeto == financeiro);
+            Assert.DoesNotContain(vm.DestinosDe(linha), d => d.Grupo.Id == fiscal || d.Grupo.Id == nfe);
+
+            // criar um subgrupo dentro de quem está fora traz o pai de volta
+            vm.CriarGrupo("Boleto", null, fiscal);
+            Assert.Contains("Fiscal", Titulos(vm));
+            Assert.Contains("Boleto", Titulos(vm));
+
+            // tudo fora da árvore: a lista fica vazia, e o clique direito nela ainda traz de volta
+            foreach (var g in vm.GruposAVista().Where(g => g.Marcado)) vm.MostrarOuEsconderGrupo(g.Id);
+            Assert.Empty(vm.Linhas);
+            Dispatcher.UIThread.RunJobs();
+
+            var arvore = janela.FindControl<ListBox>("Lista")!;
+            var pedidos = 0;
+            arvore.AddHandler(Control.ContextRequestedEvent, (_, _) => pedidos++, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+            var meio = arvore.TranslatePoint(new Point(arvore.Bounds.Width / 2, arvore.Bounds.Height / 2), janela)!.Value;
+            janela.MouseDown(meio, MouseButton.Right);
+            janela.MouseUp(meio, MouseButton.Right);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(1, pedidos);
+            Assert.Contains("Grupos à vista", Rotulos(janela.MenuDe(null)));
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Nas Sessões vale o mesmo: um dia, as Favoritas ou as Ocultas fora da árvore. O dia fora
+    /// não gasta o limite de conversas, a favorita não vira a primeira com as Favoritas fora, e
+    /// os grupos de cada modo são marcados à parte.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task EsconderGruposNasSessoes()
+    {
+        Montar();
+        var boleto = ContaDeTeste.Conversa(ContaDoClaude, Notas, "Boleto do Sicoob", DateTime.Now.AddMinutes(-30));
+        var quadro = ContaDeTeste.Conversa(ContaDoClaude, PastaDoGTerm, "Quadro do cia", DateTime.Now.AddDays(-1));
+        var nota = ContaDeTeste.Conversa(ContaDoClaude, Financeiro, "Nota de ajuste", DateTime.Now.AddDays(-30));
+        File.WriteAllText(EstadoDoCl, $$"""{ "favoritas": [ "{{quadro}}" ] }""");
+
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            vm.VerSessoesCommand.Execute(null);
+            Assert.True(await Esperar(() => vm.SessoesLidas));
+            Dispatcher.UIThread.RunJobs();
+
+            string[] Ids() => vm.Linhas.OfType<LinhaDaSessao>().Select(l => l.Sessao.Id).ToArray();
+            Assert.Equal(new[] { "Favoritas", "Hoje", "Mais antigas" }, Titulos(vm));
+            Assert.Equal(new[] { "Favoritas", "Hoje", "Ontem", "Esta semana", "Mais antigas", "Ocultas" },
+                vm.GruposAVista().Select(g => g.Nome));
+
+            // um dia sai da árvore
+            vm.MostrarOuEsconderGrupo("s:Mais antigas");
+            Assert.Equal(new[] { "Favoritas", "Hoje" }, Titulos(vm));
+            Assert.Equal(new[] { quadro, boleto }, Ids());
+
+            // a pesquisa ainda acha, e fora dela o grupo continua de fora
+            vm.Filtro = "ajuste";
+            Assert.Equal(new[] { nota }, Ids());
+            vm.Filtro = "";
+            Assert.Equal(new[] { "Favoritas", "Hoje" }, Titulos(vm));
+
+            // com as Favoritas fora, a primeira é a primeira da árvore
+            vm.MostrarOuEsconderGrupo("s:favoritas");
+            vm.VerProjetosCommand.Execute(null);
+            Assert.Equal(new[] { "Favoritos", "Recentes", "DBISAM", "Private" }, Titulos(vm)); // nada muda nos projetos
+            vm.VerSessoesCommand.Execute(null);
+            Assert.Equal(boleto, vm.SessaoAVista!.Sessao.Id);
+            Assert.Same(vm.SessaoAVista, vm.LinhaSelecionada);
+
+            // a favorita não some junto com as Favoritas: volta para o dia dela
+            Assert.Equal(new[] { "Hoje", "Ontem" }, Titulos(vm));
         }
         finally
         {

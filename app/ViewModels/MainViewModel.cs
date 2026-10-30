@@ -630,6 +630,7 @@ public sealed partial class MainViewModel : ObservableObject
         void Fixo(string id, string titulo, string cor, IEnumerable<(ProjetoViewModel P, string Extra)> itens,
             bool sempreAberto = false)
         {
+            if (Escondido(id)) return;
             var lista = itens.ToList();
             var g = TituloDoGrupo(id, titulo, cor, lista.Count, sempreAberto);
             novas.Add(g);
@@ -652,9 +653,9 @@ public sealed partial class MainViewModel : ObservableObject
         bool Visivel(ProjetoViewModel p) => !ocultos.Contains(p.Pasta);
 
         // todos numerados, como o [n] do cia; o Ctrl+número alcança só os nove primeiros, e o
-        // oculto guarda o número dele
-        Fixo(GrupoFavoritos, "Favoritos", "#B08500",
-            _favoritos.Select((p, i) => (p, (i + 1).ToString())).Where(x => Visivel(x.p)));
+        // oculto guarda o número dele. Sem nenhum à vista o grupo não aparece, como as Favoritas
+        var favoritos = _favoritos.Select((p, i) => (p, (i + 1).ToString())).Where(x => Visivel(x.p)).ToList();
+        if (favoritos.Count > 0) Fixo(GrupoFavoritos, "Favoritos", "#B08500", favoritos);
 
         Fixo(GrupoRecentes, "Recentes", "#0E9384", _estado.Recentes
             .Select(r => (P: Achar(r.Referencia), R: r))
@@ -674,7 +675,8 @@ public sealed partial class MainViewModel : ObservableObject
         // contagem é de tudo abaixo; recolhido, esconde tudo abaixo
         void Desenhar(Grupo g, int nivel)
         {
-            var total = GrupoArvore.ComDescendentes(todos, g.Id).Sum(id => porGrupo.GetValueOrDefault(id)?.Count ?? 0);
+            if (Escondido(g.Id)) return;
+            var total = AVistaAbaixo(todos, g.Id).Sum(id => porGrupo.GetValueOrDefault(id)?.Count ?? 0);
             var titulo = TituloDoGrupo(g.Id, g.Nome, g.Cor, total, nivel: nivel);
             novas.Add(titulo);
             if (titulo.Recolhido) return;
@@ -750,7 +752,12 @@ public sealed partial class MainViewModel : ObservableObject
     public void AlternarFavorito(ProjetoViewModel p)
     {
         var lista = _favoritos.ToList();
-        if (!lista.Remove(p)) lista.Add(p);
+        if (!lista.Remove(p))
+        {
+            // o primeiro faz o grupo aparecer: recolhido, o favorito não ficaria à vista
+            if (lista.Count == 0) _workspace.Recolhidos?.RemoveAll(i => Chaves.Equals(i, GrupoFavoritos));
+            lista.Add(p);
+        }
         GravarFavoritos(lista);
     }
 

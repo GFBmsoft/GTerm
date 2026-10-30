@@ -183,6 +183,24 @@ public partial class MainWindow : Window, IDialogService
             menu.Items.Add(mover);
         }
 
+        // num título ou fora das linhas: é por aqui que um grupo escondido volta, inclusive
+        // com a árvore vazia
+        void GruposAVista(GrupoDaArvore? titulo)
+        {
+            menu.Items.Add(new Separator());
+            if (titulo is not null && titulo.Id != MainViewModel.GrupoResultados)
+                Item("Ocultar este grupo", () => _vm.MostrarOuEsconderGrupo(titulo.Id));
+
+            var lista = new MenuItem { Header = "Grupos à vista" };
+            foreach (var g in _vm.GruposAVista())
+            {
+                var item = new MenuItem { Header = g.Nome, ToggleType = MenuItemToggleType.CheckBox, IsChecked = g.Marcado };
+                item.Click += (_, _) => _vm.MostrarOuEsconderGrupo(g.Id);
+                lista.Items.Add(item);
+            }
+            menu.Items.Add(lista);
+        }
+
         switch (linha)
         {
             case GrupoDaArvore g when _vm.EhEditavel(g.Id):
@@ -195,6 +213,7 @@ public partial class MainWindow : Window, IDialogService
                 }
                 else
                     Item("Cor…", () => _ = _vm.EditarGrupoAsync(g.Id));
+                GruposAVista(g);
                 break;
 
             case LinhaDoProjeto { Projeto: var p } l:
@@ -234,6 +253,7 @@ public partial class MainWindow : Window, IDialogService
 
             default:
                 Item("Novo grupo…", () => _ = _vm.NovoGrupoAsync(null));
+                GruposAVista(linha as GrupoDaArvore);
                 break;
         }
         return menu;

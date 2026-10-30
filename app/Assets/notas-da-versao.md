@@ -1,3 +1,7 @@
+## 1.0.0.16 — 30/10/2026
+- O grupo **Favoritos** só aparece quando há algum favorito: marcar a estrela do primeiro projeto faz o grupo surgir, e tirar a do último faz ele sumir.
+- **Escolher os grupos da barra lateral**: clique direito no título de um grupo e use "Ocultar este grupo", ou marque e desmarque em "Grupos à vista". Vale para qualquer grupo, como Recentes, Ocultos, DBISAM ou os dias das Sessões, e também para os que você criou. O grupo sai com o que está dentro, e a pesquisa continua achando. Para trazer de volta, use "Grupos à vista" no clique direito em outro título ou no fundo da lista.
+
 ## 1.0.0.15 — 30/10/2026
 - **Grupos e subgrupos** na barra lateral, como no GRepos: o botão de pasta ao lado da pesquisa cria um grupo, e o clique direito num grupo cria um subgrupo, edita o nome, a cor e onde ele fica, ou exclui. Excluir não apaga nada: o que estava dentro sobe um nível. DBISAM e Private também recebem subgrupos e podem mudar de cor.
 - **Arrastar**: leve um projeto para um grupo, ou para o meio de outros, e a ordem fica gravada. Um traço mostra onde ele vai cair. Arrastar para a pasta dele o devolve, e arrastar para Favoritos favorita. Um grupo arrastado para outro vira subgrupo. O clique direito tem o mesmo caminho em "Mover para".

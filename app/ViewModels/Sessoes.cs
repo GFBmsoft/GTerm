@@ -178,14 +178,14 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// A primeira das favoritas, como aparece no topo da árvore; sem favorita, a primeira
-    /// conversa. Oculta não conta. Vale também com o grupo recolhido: o quadro aparece, só a
-    /// linha não.
+    /// conversa. Oculta não conta, nem a favorita com as Favoritas fora da árvore. Vale também
+    /// com o grupo recolhido: o quadro aparece, só a linha não.
     /// </summary>
     private void VerPrimeiraSessao()
     {
         var visiveis = _sessoes.Where(x => !_workspace.SessoesOcultas.Contains(x.Id, Chaves)).ToList();
-        var s = visiveis.FirstOrDefault(x => _favoritas.Contains(x.Id, Chaves)) ?? visiveis.FirstOrDefault();
-        if (s is not null) SessaoAVista = LinhaDe(s, PidsDasAbas(), "");
+        var favorita = Escondido(GrupoFavoritas) ? null : visiveis.FirstOrDefault(x => _favoritas.Contains(x.Id, Chaves));
+        if ((favorita ?? visiveis.FirstOrDefault()) is { } s) SessaoAVista = LinhaDe(s, PidsDasAbas(), "");
     }
 
     private HashSet<int> PidsDasAbas() => Abertos.Select(p => p.Sessao?.Pid).OfType<int>().ToHashSet();
@@ -205,7 +205,7 @@ public sealed partial class MainViewModel
     /// A árvore do cl: as favoritas em cima, de qualquer pasta, os grupos do usuário e depois
     /// as outras por dia, as mais novas primeiro. Ocultas ficam num grupo só delas, no fim.
     /// Grupo fixo vazio não aparece; o do usuário sim, para receber conversas. Com pesquisa,
-    /// só o que bate, com os grupos abertos.
+    /// só o que bate, com os grupos abertos, também os que estão fora da árvore.
     /// </summary>
     private List<LinhaDaArvore> LinhasDasSessoes()
     {
@@ -221,6 +221,7 @@ public sealed partial class MainViewModel
                 NomeDoProjeto(s, ProjetoDaConversa(s)).Contains(termo, StringComparison.CurrentCultureIgnoreCase))
             .ToList();
         var visiveis = achadas.Where(s => !ocultas.Contains(s.Id)).ToList();
+        bool Fora(string grupo) => !buscando && Escondido(grupo);
 
         void Acrescentar(string id, IEnumerable<SessaoDoClaude> itens, int nivel)
         {
@@ -234,7 +235,7 @@ public sealed partial class MainViewModel
 
         void Fixo(string id, string titulo, string cor, List<SessaoDoClaude> itens)
         {
-            if (itens.Count == 0) return;
+            if (itens.Count == 0 || Fora(id)) return;
             var g = TituloDoGrupo(id, titulo, cor, itens.Count, sempreAberto: buscando);
             novas.Add(g);
             if (!g.Recolhido) Acrescentar(id, itens, 0);
@@ -255,7 +256,9 @@ public sealed partial class MainViewModel
 
         void Desenhar(Grupo g, int nivel)
         {
-            var total = GrupoArvore.ComDescendentes(todos, g.Id).Sum(id => porGrupo.GetValueOrDefault(id)?.Count ?? 0);
+            if (Fora(g.Id)) return;
+            var abaixo = buscando ? GrupoArvore.ComDescendentes(todos, g.Id) : AVistaAbaixo(todos, g.Id);
+            var total = abaixo.Sum(id => porGrupo.GetValueOrDefault(id)?.Count ?? 0);
             if (buscando && total == 0) return;
 
             var titulo = TituloDoGrupo(g.Id, g.Nome, g.Cor, total, sempreAberto: buscando, nivel: nivel);
@@ -271,7 +274,11 @@ public sealed partial class MainViewModel
         Fixo(GrupoFavoritas, "Favoritas", "#B08500", visiveis.Where(Favorita).ToList());
         foreach (var g in GrupoArvore.Filhos(todos, null)) Desenhar(g, 0);
 
-        var soltas = visiveis.Where(s => !Favorita(s) && !colocadas.Contains(s.Id))
+        // o dia fora da árvore não gasta o limite do cl; com as Favoritas fora, a favorita
+        // volta para o dia dela, para não sumir
+        var soltas = visiveis
+            .Where(s => (!Favorita(s) || Fora(GrupoFavoritas)) && !colocadas.Contains(s.Id) &&
+                        !Fora("s:" + SessoesDoClaude.Dia(s.Quando, agora)))
             .Take(buscando ? int.MaxValue : MaxSessoes).ToList();
         foreach (var (titulo, cor) in Dias)
             Fixo("s:" + titulo, titulo, cor, soltas.Where(s => SessoesDoClaude.Dia(s.Quando, agora) == titulo).ToList());

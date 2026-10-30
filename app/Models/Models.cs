@@ -67,6 +67,12 @@ public sealed class Workspace
     /// <summary>Grupos e subgrupos da árvore das conversas, no modo Sessões.</summary>
     public List<Grupo> GruposDasSessoes { get; set; } = new();
 
+    /// <summary>
+    /// Ids dos grupos fora da árvore, nos dois modos: fixos (Recentes, Ocultos, um dia, uma
+    /// base) ou do usuário. Levam junto o que está dentro, e a pesquisa continua achando.
+    /// </summary>
+    public List<string> GruposEscondidos { get; set; } = new();
+
     /// <summary>Pastas dos projetos ocultos: saem dos grupos e ficam só em Ocultos e na pesquisa.</summary>
     public List<string> Ocultos { get; set; } = new();
 

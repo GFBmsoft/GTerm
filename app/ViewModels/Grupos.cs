@@ -14,6 +14,10 @@ namespace GTerm.ViewModels;
 /// <param name="Depois">Cai depois da vizinha, e não antes.</param>
 public sealed record DestinoDoArraste(GrupoDaArvore Grupo, LinhaDaArvore? Vizinha, bool Depois);
 
+/// <summary>Uma linha do menu "Grupos à vista".</summary>
+/// <param name="Nome">Com o recuo do nível, nos subgrupos.</param>
+public sealed record GrupoAVista(string Id, string Nome, bool Marcado);
+
 /// <summary>
 /// Organizar a árvore, nos dois modos: grupos e subgrupos como os do GRepos, com a mesma
 /// paleta, arrastar projetos e conversas para eles, e ocultar o que não se usa. Tudo fica no
@@ -188,7 +192,55 @@ public sealed partial class MainViewModel
     private void AbrirGrupos(string id)
     {
         var lista = _workspace.Recolhidos ??= RecolhidosPadrao();
-        foreach (var g in GrupoArvore.Ancestrais(GruposDoModo(), id)) lista.RemoveAll(i => Chaves.Equals(i, g.Id));
+        foreach (var g in GrupoArvore.Ancestrais(GruposDoModo(), id))
+        {
+            lista.RemoveAll(i => Chaves.Equals(i, g.Id));
+            _workspace.GruposEscondidos.RemoveAll(i => Chaves.Equals(i, g.Id));
+        }
+    }
+
+    // ------------------------------------------------------------ mostrar ou não um grupo
+
+    private bool Escondido(string id) => _workspace.GruposEscondidos.Contains(id, Chaves);
+
+    /// <summary>O grupo e o que está à vista abaixo dele: quem saiu da árvore leva os de dentro.</summary>
+    private HashSet<string> AVistaAbaixo(List<Grupo> todos, string id)
+    {
+        var ids = new HashSet<string> { id };
+        foreach (var filho in GrupoArvore.Filhos(todos, id).Where(f => !Escondido(f.Id)))
+            ids.UnionWith(AVistaAbaixo(todos, filho.Id));
+        return ids;
+    }
+
+    /// <summary>
+    /// Os grupos da árvore à vista, fixos e do usuário, marcados ou não: o menu "Grupos à
+    /// vista". Ocultos entra mesmo vazio, para sair antes de ter o que mostrar.
+    /// </summary>
+    public IReadOnlyList<GrupoAVista> GruposAVista()
+    {
+        GrupoAVista Item(string id, string nome) => new(id, nome, !Escondido(id));
+
+        var lista = new List<GrupoAVista>();
+        if (ModoSessoes) lista.Add(Item(GrupoFavoritas, "Favoritas"));
+        else lista.AddRange(new[] { Item(GrupoFavoritos, "Favoritos"), Item(GrupoRecentes, "Recentes") });
+
+        lista.AddRange(GrupoArvore.EmOrdem(GruposDoModo()).Select(g => Item(g.Grupo.Id, g.Recuado)));
+
+        if (ModoSessoes)
+        {
+            lista.AddRange(Dias.Select(d => Item("s:" + d.Titulo, d.Titulo)));
+            lista.Add(Item(GrupoOcultas, "Ocultas"));
+        }
+        else lista.Add(Item(GrupoOcultos, "Ocultos"));
+        return lista;
+    }
+
+    /// <summary>Tira o grupo da árvore, ou devolve: o que está nele continua na pesquisa.</summary>
+    public void MostrarOuEsconderGrupo(string id)
+    {
+        if (_workspace.GruposEscondidos.RemoveAll(i => Chaves.Equals(i, id)) == 0) _workspace.GruposEscondidos.Add(id);
+        Salvar();
+        Remontar();
     }
 
     // ------------------------------------------------------------ ocultar
@@ -436,7 +488,12 @@ public sealed partial class MainViewModel
             LinhaDaSessao s => ConversaCabe(s, id, null),
             _ => false,
         };
-        return GrupoArvore.EmOrdem(GruposDoModo()).Where(g => Cabe(g.Grupo.Id)).ToList();
+
+        // ir para um grupo fora da árvore seria sumir com ele
+        var todos = GruposDoModo();
+        return GrupoArvore.EmOrdem(todos)
+            .Where(g => Cabe(g.Grupo.Id) && !GrupoArvore.Ancestrais(todos, g.Grupo.Id).Any(a => Escondido(a.Id)))
+            .ToList();
     }
 
     /// <summary>A escolha no menu "Mover para": vai para o fim do grupo.</summary>

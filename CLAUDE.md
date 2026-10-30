@@ -92,7 +92,7 @@ e por isso confirma antes.
   por grupo e pasta para a lista não perder a seleção). A estrela e o ▶ da linha só
   aparecem com o mouse em cima e na escolhida (escondidos, guardam o lugar): a estrela
   favorita ou tira. Cheia, nos favoritos, fica sempre à vista. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
-  Os favoritos são todos numerados, como o `[n]` do cia; Ctrl+1..9 vão aos nove primeiros. A ordem deles muda arrastando a linha nos
+  Os favoritos são todos numerados, como o `[n]` do cia; Ctrl+1..9 vão aos nove primeiros, e o grupo só aparece com algum à vista. A ordem deles muda arrastando a linha nos
   Favoritos (a linha acompanha o mouse e a ordem só é gravada ao soltar), com Alt+↑/↓ ou
   pelo menu. O menu do clique direito é montado na hora (`MainWindow.MenuDe`), porque o
   "Mover para" depende dos grupos daquele momento: não há `ContextMenu` nos templates.
@@ -108,7 +108,10 @@ e por isso confirma antes.
   em Ocultos oculta. Grupo dentro de grupo também arrasta; para a raiz, só pela edição.
   Ocultar (`Workspace.Ocultos`, `SessoesOcultas`) tira de todos os grupos sem esquecer
   onde estava; o favorito oculto guarda o número, para continuar igual ao do cia. A
-  pesquisa acha os ocultos.
+  pesquisa acha os ocultos. Qualquer grupo, fixo ou do usuário, também pode sair da árvore
+  (`Workspace.GruposEscondidos`, em "Ocultar este grupo" e "Grupos à vista", no clique
+  direito nos títulos e no fundo da lista, por onde ele volta): leva o que está dentro, e
+  a pesquisa continua achando. Com as Favoritas fora, a conversa favorita volta para o dia.
 - **Sessões** — o `cl` do perfil (`Modules\claude-sessoes.ps1`, as conversas do `/resume`)
   com tela: as pílulas Projetos/Sessões em cima da árvore trocam o que ela mostra
   (`MainViewModel.ModoSessoes`, em `ViewModels/Sessoes.cs`). As conversas de todas as
