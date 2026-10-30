@@ -1,4 +1,4 @@
-## 1.0.0.19 — 30/10/2026
+## 1.0.0.20 — 30/10/2026
 - **Projetos que já passaram por code review**: na barra lateral aparece uma marca ao lado do nome, verde quando a revisão está em dia e amarela quando entrou commit depois dela. Passando o mouse aparece quando foi. Ao escolher o projeto, o quadro mostra quando foi a revisão, se ainda vale (`3 commits depois`, `2 arquivos alterados` ou `em dia`) e a primeira frase do resultado, em inglês, como o Claude escreve.
 - Vale para o /code-review que roda em segundo plano, pedido pelo botão ou digitado no terminal. Só as revisões que terminaram contam, e projetos sem revisão registrada ficam sem marca.
 

@@ -148,7 +148,9 @@ public sealed class RevisoesDoClaude
         if (_resumos.TryGetValue(diario.FullName, out var lido) && lido.Quando == diario.LastWriteTime) return lido.Resumo;
 
         var resumo = "";
-        foreach (var linha in SessoesDoClaude.Trecho(diario.FullName, 256 * 1024, inicio: false).Split('\n').Reverse())
+
+        // Enumerable por extenso: num SDK mais novo, .Reverse() num array é o do Span, que não devolve nada
+        foreach (var linha in Enumerable.Reverse(SessoesDoClaude.Trecho(diario.FullName, 256 * 1024, inicio: false).Split('\n')))
         {
             if (!linha.Contains("\"assistant\"", StringComparison.Ordinal)) continue;
             try

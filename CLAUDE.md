@@ -220,6 +220,10 @@ e por isso confirma antes.
   `cmd.exe /k echo` (`Workspace.Claude`), que mostra os argumentos e fica aberto como ele.
 - Com o app aberto o `dotnet build` falha (exe em uso). Para testar sem fechar:
   `dotnet test --artifacts-path <pasta temporária>`.
+- Esta máquina tem o SDK 8, e a esteira compila num mais novo, com `LangVersion` em
+  `latest`: o que compila aqui pode quebrar lá. Foi o que tirou a 1.0.0.19 do ar: num SDK
+  mais novo, `.Reverse()` num array é o do `Span`, que não devolve nada. Use
+  `Enumerable.Reverse(...)`.
 - Tudo que encerra um shell confirma antes. É a razão de o app existir.
 - Bindings reflexivos (`AvaloniaUseCompiledBindingsByDefault` é `false`). Comando usado em
   menu de contexto fica no view model da linha (`ProjetoViewModel`): o menu é um popup e
