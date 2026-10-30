@@ -4,10 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GTerm.Models;
 using GTerm.Services;
 
 namespace GTerm.ViewModels;
@@ -17,11 +19,17 @@ public sealed partial class LinhaDaSessao : LinhaDaArvore
 {
     private readonly MainViewModel _main;
 
-    public LinhaDaSessao(MainViewModel main, SessaoDoClaude sessao)
+    public LinhaDaSessao(MainViewModel main, SessaoDoClaude sessao, string grupo)
     {
         _main = main;
         _sessao = sessao;
+        Grupo = grupo;
     }
+
+    /// <summary>A mesma conversa aparece nas Favoritas e no grupo dela: uma linha em cada.</summary>
+    public string Grupo { get; }
+
+    public override Thickness Recuo => new(16 + Nivel * PassoDoRecuo, 0, 0, 0);
 
     /// <summary>Relida a cada pouco: o título, o tamanho e se está aberta mudam enquanto ela é usada.</summary>
     [ObservableProperty]
@@ -170,13 +178,14 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// A primeira das favoritas, como aparece no topo da árvore; sem favorita, a primeira
-    /// conversa. Vale também com o grupo recolhido: o quadro aparece, só a linha não.
+    /// conversa. Oculta não conta. Vale também com o grupo recolhido: o quadro aparece, só a
+    /// linha não.
     /// </summary>
     private void VerPrimeiraSessao()
     {
-        var s = _sessoes.FirstOrDefault(x => _favoritas.Contains(x.Id, StringComparer.OrdinalIgnoreCase))
-                ?? _sessoes.FirstOrDefault();
-        if (s is not null) SessaoAVista = LinhaDe(s, PidsDasAbas());
+        var visiveis = _sessoes.Where(x => !_workspace.SessoesOcultas.Contains(x.Id, Chaves)).ToList();
+        var s = visiveis.FirstOrDefault(x => _favoritas.Contains(x.Id, Chaves)) ?? visiveis.FirstOrDefault();
+        if (s is not null) SessaoAVista = LinhaDe(s, PidsDasAbas(), "");
     }
 
     private HashSet<int> PidsDasAbas() => Abertos.Select(p => p.Sessao?.Pid).OfType<int>().ToHashSet();
@@ -193,51 +202,108 @@ public sealed partial class MainViewModel
     };
 
     /// <summary>
-    /// A árvore do cl: as favoritas em cima, de qualquer pasta, e depois as outras por dia,
-    /// as mais novas primeiro. Grupo vazio não aparece.
+    /// A árvore do cl: as favoritas em cima, de qualquer pasta, os grupos do usuário e depois
+    /// as outras por dia, as mais novas primeiro. Ocultas ficam num grupo só delas, no fim.
+    /// Grupo fixo vazio não aparece; o do usuário sim, para receber conversas. Com pesquisa,
+    /// só o que bate, com os grupos abertos.
     /// </summary>
     private List<LinhaDaArvore> LinhasDasSessoes()
     {
         var novas = new List<LinhaDaArvore>();
         var agora = DateTime.Now;
         var termo = Filtro.Trim();
+        var buscando = termo.Length > 0;
         var pidsDasAbas = PidsDasAbas();
+        var ocultas = _workspace.SessoesOcultas.ToHashSet(Chaves);
 
-        var linhas = _sessoes.Select(s => LinhaDe(s, pidsDasAbas))
-            .Where(l => termo.Length == 0 ||
-                        l.Titulo.Contains(termo, StringComparison.CurrentCultureIgnoreCase) ||
-                        l.Projeto.Contains(termo, StringComparison.CurrentCultureIgnoreCase))
+        var achadas = _sessoes.Where(s => !buscando ||
+                s.Titulo.Contains(termo, StringComparison.CurrentCultureIgnoreCase) ||
+                NomeDoProjeto(s, ProjetoDaConversa(s)).Contains(termo, StringComparison.CurrentCultureIgnoreCase))
             .ToList();
-        var favoritas = linhas.Where(l => l.Favorita).ToList();
-        var outras = linhas.Where(l => !l.Favorita).Take(termo.Length > 0 ? int.MaxValue : MaxSessoes).ToList();
+        var visiveis = achadas.Where(s => !ocultas.Contains(s.Id)).ToList();
 
-        void Grupo(string id, string titulo, string cor, List<LinhaDaSessao> itens)
+        void Acrescentar(string id, IEnumerable<SessaoDoClaude> itens, int nivel)
         {
-            if (itens.Count == 0) return;
-            var g = TituloDoGrupo(id, titulo, cor, itens.Count);
-            novas.Add(g);
-            if (!g.Recolhido) novas.AddRange(itens);
+            foreach (var s in itens)
+            {
+                var l = LinhaDe(s, pidsDasAbas, id);
+                l.Nivel = nivel;
+                novas.Add(l);
+            }
         }
 
-        Grupo("s:favoritas", "Favoritas", "#B08500", favoritas);
+        void Fixo(string id, string titulo, string cor, List<SessaoDoClaude> itens)
+        {
+            if (itens.Count == 0) return;
+            var g = TituloDoGrupo(id, titulo, cor, itens.Count, sempreAberto: buscando);
+            novas.Add(g);
+            if (!g.Recolhido) Acrescentar(id, itens, 0);
+        }
+
+        var todos = _workspace.GruposDasSessoes;
+        var porId = new Dictionary<string, SessaoDoClaude>(Chaves);
+        foreach (var s in visiveis) porId[s.Id] = s;
+
+        var porGrupo = new Dictionary<string, List<SessaoDoClaude>>();
+        var colocadas = new HashSet<string>(Chaves);
+        foreach (var g in todos)
+        {
+            porGrupo[g.Id] = new();
+            foreach (var id in g.Itens)
+                if (porId.TryGetValue(id, out var s) && colocadas.Add(id)) porGrupo[g.Id].Add(s);
+        }
+
+        void Desenhar(Grupo g, int nivel)
+        {
+            var total = GrupoArvore.ComDescendentes(todos, g.Id).Sum(id => porGrupo.GetValueOrDefault(id)?.Count ?? 0);
+            if (buscando && total == 0) return;
+
+            var titulo = TituloDoGrupo(g.Id, g.Nome, g.Cor, total, sempreAberto: buscando, nivel: nivel);
+            novas.Add(titulo);
+            if (titulo.Recolhido) return;
+
+            foreach (var filho in GrupoArvore.Filhos(todos, g.Id)) Desenhar(filho, nivel + 1);
+            Acrescentar(g.Id, porGrupo[g.Id], nivel);
+        }
+
+        bool Favorita(SessaoDoClaude s) => _favoritas.Contains(s.Id, Chaves);
+
+        Fixo(GrupoFavoritas, "Favoritas", "#B08500", visiveis.Where(Favorita).ToList());
+        foreach (var g in GrupoArvore.Filhos(todos, null)) Desenhar(g, 0);
+
+        var soltas = visiveis.Where(s => !Favorita(s) && !colocadas.Contains(s.Id))
+            .Take(buscando ? int.MaxValue : MaxSessoes).ToList();
         foreach (var (titulo, cor) in Dias)
-            Grupo("s:" + titulo, titulo, cor, outras.Where(l => SessoesDoClaude.Dia(l.Sessao.Quando, agora) == titulo).ToList());
+            Fixo("s:" + titulo, titulo, cor, soltas.Where(s => SessoesDoClaude.Dia(s.Quando, agora) == titulo).ToList());
+
+        Fixo(GrupoOcultas, "Ocultas", "#6B7280", achadas.Where(s => ocultas.Contains(s.Id)).ToList());
+
+        // a conversa à vista pode estar num grupo recolhido: o quadro dela segue em dia
+        if (SessaoAVista is { } vista && _sessoes.FirstOrDefault(s => s.Id == vista.Sessao.Id) is { } atual)
+            LinhaDe(atual, pidsDasAbas, vista.Grupo);
         return novas;
     }
 
-    // a mesma linha para a mesma conversa: relida, ela só troca os dados, e a lista não perde a seleção
-    private LinhaDaSessao LinhaDe(SessaoDoClaude s, HashSet<int> pidsDasAbas)
+    private ProjetoViewModel? ProjetoDaConversa(SessaoDoClaude s) =>
+        s.Pasta.Length > 0 ? Projetos.FirstOrDefault(p => Mesma(p.Pasta, s.Pasta)) : null;
+
+    private static string NomeDoProjeto(SessaoDoClaude s, ProjetoViewModel? projeto) =>
+        projeto?.Nome ?? (s.Pasta.Length > 0 ? NomeDaPasta(s.Pasta) : s.Chave);
+
+    // a mesma linha para a mesma conversa no mesmo grupo: relida, ela só troca os dados, e a
+    // lista não perde a seleção
+    private LinhaDaSessao LinhaDe(SessaoDoClaude s, HashSet<int> pidsDasAbas, string grupo)
     {
-        var chave = "s|" + s.Id;
+        var chave = "s|" + grupo + "|" + s.Id;
         var l = (LinhaDaSessao)(_cache.TryGetValue(chave, out var achada)
             ? achada
-            : _cache[chave] = new LinhaDaSessao(this, s));
+            : _cache[chave] = new LinhaDaSessao(this, s, grupo));
         l.Sessao = s;
-        l.Favorita = _favoritas.Contains(s.Id, StringComparer.OrdinalIgnoreCase);
+        l.Favorita = _favoritas.Contains(s.Id, Chaves);
         l.AbertaAqui = s.Pid is { } pid && pidsDasAbas.Contains(pid);
 
-        var projeto = s.Pasta.Length > 0 ? Projetos.FirstOrDefault(p => Mesma(p.Pasta, s.Pasta)) : null;
-        l.Projeto = projeto?.Nome ?? (s.Pasta.Length > 0 ? NomeDaPasta(s.Pasta) : s.Chave);
+        var projeto = ProjetoDaConversa(s);
+        l.Projeto = NomeDoProjeto(s, projeto);
         (l.Icone, l.CorDoIcone) = projeto is not null ? (projeto.Icone, projeto.CorDoIcone) : IconeDaPasta(s.Pasta);
         return l;
     }

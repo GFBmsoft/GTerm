@@ -4,12 +4,15 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaTerminal;
+using GTerm.Controls;
+using GTerm.Services;
 using GTerm.ViewModels;
 
 namespace GTerm.Views;
@@ -40,6 +43,7 @@ public partial class MainWindow : Window, IDialogService
             Focar();
             _vm.CorrigirHooks();
             _ = _vm.VerificarAtualizacaoAsync(); // em segundo plano, no máximo uma consulta por dia
+            _ = _vm.CarregarSessoesAsync(); // fora da tela: as Sessões abrem sem esperar pelos .jsonl
         };
 
         // atualização instalada: o aviso de que os terminais fecham já foi confirmado, e o
@@ -83,7 +87,8 @@ public partial class MainWindow : Window, IDialogService
                 e.Handled = true;
             }
         }, RoutingStrategies.Tunnel);
-        ArrastarFavoritos(lista);
+        ArrasteNaArvore.Habilitar(lista, _vm);
+        lista.ContextRequested += AbrirMenuDaArvore;
         lista.AddHandler(KeyUpEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);
         lista.AddHandler(PointerPressedEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);
         lista.DoubleTapped += (_, e) =>
@@ -114,85 +119,124 @@ public partial class MainWindow : Window, IDialogService
             }
             e.Handled = true;
         }, RoutingStrategies.Tunnel);
+
+        // a cor da aba, na paleta do GRepos: a mesma dos grupos
+        var botaoDaCor = this.FindControl<Button>("CorDaAba")!;
+        var paleta = new PaletaDeCores("A cor da aba deste projeto, que vale também no GTest quando é a tirada do nome.");
+        var painelDaCor = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft, Content = paleta };
+        painelDaCor.Opening += (_, _) => paleta.Marcar(_vm.AbaAtiva?.CorHex);
+        paleta.Escolhida += hex =>
+        {
+            painelDaCor.Hide();
+            if (_vm.AbaAtiva is { } aba) _vm.MudarCor(aba, hex);
+        };
+        botaoDaCor.Flyout = painelDaCor;
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 
-    /// <summary>
-    /// Arrastar uma linha dos Favoritos muda a ordem deles (a do Ctrl+número e do [n] do
-    /// cia): a linha acompanha o mouse, e a ordem nova é gravada ao soltar. Começa só depois
-    /// de o mouse andar um pouco, para o clique continuar sendo clique; na estrela e no ▶
-    /// não começa.
-    /// </summary>
-    private void ArrastarFavoritos(ListBox lista)
+    private void AbrirMenuDaArvore(object? sender, ContextRequestedEventArgs e)
     {
-        LinhaDoProjeto? pega = null;
-        var inicio = default(Point);
-        var arrastando = false;
-
-        void Soltar()
-        {
-            if (arrastando)
-            {
-                arrastando = false;
-                lista.Cursor = null;
-                _vm.SoltarFavorito();
-            }
-            pega = null;
-        }
-
-        lista.AddHandler(PointerPressedEvent, (_, e) =>
-        {
-            pega = null;
-            if (!e.GetCurrentPoint(lista).Properties.IsLeftButtonPressed) return;
-            if ((e.Source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is not null) return;
-            if ((e.Source as StyledElement)?.DataContext is not LinhaDoProjeto { NosFavoritos: true } linha) return;
-            pega = linha;
-            inicio = e.GetPosition(lista);
-        }, RoutingStrategies.Tunnel, handledEventsToo: true);
-
-        lista.AddHandler(PointerMovedEvent, (_, e) =>
-        {
-            if (pega is null) return;
-            var aqui = e.GetPosition(lista);
-            if (!arrastando)
-            {
-                if (Math.Abs(aqui.Y - inicio.Y) < 6) return;
-                arrastando = true;
-                e.Pointer.Capture(lista);
-                lista.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
-            }
-            if (FavoritoEm(lista, aqui.Y) is { } alvo) _vm.ArrastarFavorito(pega.Projeto, alvo);
-            e.Handled = true;
-        }, RoutingStrategies.Tunnel, handledEventsToo: true);
-
-        lista.AddHandler(PointerReleasedEvent, (_, e) =>
-        {
-            if (arrastando)
-            {
-                e.Pointer.Capture(null);
-                e.Handled = true;
-            }
-            Soltar();
-        }, RoutingStrategies.Tunnel, handledEventsToo: true);
-
-        lista.PointerCaptureLost += (_, _) => Soltar();
+        if (e.Source is not Control onde) return;
+        MenuDe(onde.DataContext as LinhaDaArvore).ShowAt(onde, showAtPointer: true);
+        e.Handled = true;
     }
 
     /// <summary>
-    /// O favorito na altura do mouse; acima do primeiro é o primeiro, abaixo do último é o
-    /// último, para dar para levar ao começo e ao fim sem mirar.
+    /// O menu do clique direito, montado na hora: os grupos para onde a linha pode ir mudam a
+    /// cada momento, e um menu pronto em cada linha não os acompanharia. Fora das
+    /// linhas, só criar um grupo.
     /// </summary>
-    private static ProjetoViewModel? FavoritoEm(ListBox lista, double y)
+    internal MenuFlyout MenuDe(LinhaDaArvore? linha)
     {
-        var linhas = lista.GetVisualDescendants().OfType<ListBoxItem>()
-            .Where(i => i.IsVisible && i.DataContext is LinhaDoProjeto { NosFavoritos: true })
-            .Select(i => (Projeto: ((LinhaDoProjeto)i.DataContext!).Projeto,
-                Fim: (i.TranslatePoint(default, lista)?.Y ?? 0) + i.Bounds.Height))
-            .OrderBy(x => x.Fim)
-            .ToList();
-        if (linhas.Count == 0) return null;
-        return linhas.FirstOrDefault(x => y < x.Fim).Projeto ?? linhas[^1].Projeto;
+        var menu = new MenuFlyout();
+
+        void Item(string rotulo, Action acao)
+        {
+            var item = new MenuItem { Header = rotulo };
+            item.Click += (_, _) => acao();
+            menu.Items.Add(item);
+        }
+
+        void Comando(string rotulo, System.Windows.Input.ICommand comando) =>
+            menu.Items.Add(new MenuItem { Header = rotulo, Command = comando });
+
+        void MoverPara(LinhaDaArvore l)
+        {
+            var mover = new MenuItem { Header = "Mover para" };
+
+            var novo = new MenuItem { Header = "Novo grupo…" };
+            novo.Click += async (_, _) =>
+            {
+                if (await _vm.NovoGrupoAsync(null) is { } id) _vm.MoverPara(l, id);
+            };
+            mover.Items.Add(novo);
+
+            var destinos = _vm.DestinosDe(l);
+            if (destinos.Count > 0) mover.Items.Add(new Separator());
+            foreach (var d in destinos)
+            {
+                var item = new MenuItem { Header = d.Recuado };
+                item.Click += (_, _) => _vm.MoverPara(l, d.Grupo.Id);
+                mover.Items.Add(item);
+            }
+            menu.Items.Add(mover);
+        }
+
+        switch (linha)
+        {
+            case GrupoDaArvore g when _vm.EhEditavel(g.Id):
+                Item($"Novo subgrupo em {g.Titulo}…", () => _ = _vm.NovoGrupoAsync(g.Id));
+                if (_vm.EhDoUsuario(g.Id))
+                {
+                    Item("Editar grupo… (nome, cor e onde fica)", () => _ = _vm.EditarGrupoAsync(g.Id));
+                    menu.Items.Add(new Separator());
+                    Item("Excluir grupo…", () => _ = _vm.ExcluirGrupoAsync(g.Id));
+                }
+                else
+                    Item("Cor…", () => _ = _vm.EditarGrupoAsync(g.Id));
+                break;
+
+            case LinhaDoProjeto { Projeto: var p } l:
+                Comando("Abrir o Claude", p.AbrirClaudeCommand);
+                Comando("Sessão nova", p.SessaoNovaCommand);
+                if (p.EhDaBmsoft)
+                {
+                    Comando("Pedido do Mantis…", p.PedidoCommand);
+                    Comando("Pull request", p.PullRequestCommand);
+                }
+                Comando("Sem skill", p.SemSkillCommand);
+                menu.Items.Add(new Separator());
+                Comando(p.RotuloDoFavorito, p.FavoritarCommand);
+                if (l.NosFavoritos)
+                {
+                    menu.Items.Add(new MenuItem { Header = "Mover para cima", Command = l.SubirCommand, InputGesture = new KeyGesture(Key.Up, KeyModifiers.Alt) });
+                    menu.Items.Add(new MenuItem { Header = "Mover para baixo", Command = l.DescerCommand, InputGesture = new KeyGesture(Key.Down, KeyModifiers.Alt) });
+                }
+                menu.Items.Add(new Separator());
+                MoverPara(l);
+                Item(_vm.EstaOculto(p) ? "Mostrar na árvore" : "Ocultar da árvore", () => _vm.AlternarOculto(p));
+                if (p.TemTerminal)
+                {
+                    menu.Items.Add(new Separator());
+                    Comando("Encerrar o Claude", p.EncerrarCommand);
+                }
+                break;
+
+            case LinhaDaSessao s:
+                Comando(s.RotuloDeRetomar, s.RetomarCommand);
+                Comando(s.RotuloDaEstrela, s.FavoritarCommand);
+                menu.Items.Add(new Separator());
+                MoverPara(s);
+                if (_vm.ConversaEmGrupo(s)) Item("Tirar do grupo", () => _vm.TirarDoGrupo(s));
+                Item(_vm.EstaOculta(s) ? "Mostrar na árvore" : "Ocultar da árvore", () => _vm.AlternarOculta(s));
+                break;
+
+            default:
+                Item("Novo grupo…", () => _ = _vm.NovoGrupoAsync(null));
+                break;
+        }
+        return menu;
     }
 
     private void Focar() =>
@@ -248,4 +292,8 @@ public partial class MainWindow : Window, IDialogService
 
     public async Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas) =>
         await new PreferenciasWindow(atuais, contas).ShowDialog<Preferencias?>(this);
+
+    public async Task<GrupoEscolhido?> GrupoAsync(string titulo, string nome, string cor, string? paiId,
+        IReadOnlyList<GrupoNaArvore>? pais) =>
+        await new GrupoWindow(titulo, nome, cor, paiId, pais).ShowDialog<GrupoEscolhido?>(this);
 }

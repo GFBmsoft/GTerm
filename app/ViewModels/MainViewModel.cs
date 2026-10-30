@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -23,7 +24,14 @@ public interface IDialogService
     /// <summary>Devolve as preferências escolhidas, ou null quando o usuário cancela.</summary>
     /// <param name="contas">Pastas de configuração do Claude onde os avisos podem ser instalados.</param>
     Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas);
+
+    /// <summary>Nome, cor e pai do grupo, ou null quando o usuário cancela.</summary>
+    /// <param name="pais">Onde ele pode ficar; null numa base, que só escolhe a cor.</param>
+    Task<GrupoEscolhido?> GrupoAsync(string titulo, string nome, string cor, string? paiId,
+        IReadOnlyList<GrupoNaArvore>? pais);
 }
+
+public sealed record GrupoEscolhido(string Nome, string Cor, string? PaiId);
 
 /// <param name="Fonte">Vazia usa a lista padrão.</param>
 /// <param name="PainelComando">Script do painel lateral; vazio, sem painel.</param>
@@ -31,28 +39,55 @@ public interface IDialogService
 public sealed record Preferencias(string Fonte, double Tamanho, string PainelComando, bool Avisar = true);
 
 /// <summary>Uma linha da árvore: o título de um grupo ou um projeto dentro dele.</summary>
-public abstract class LinhaDaArvore : ObservableObject
+public abstract partial class LinhaDaArvore : ObservableObject
 {
+    /// <summary>Quanto cada nível de subgrupo recua o que está dentro dele.</summary>
+    protected const double PassoDoRecuo = 14;
+
     /// <summary>Só a linha de projeto se escolhe: o título abre e fecha no clique, e as setas passam por ele.</summary>
     public abstract bool Selecionavel { get; }
+
+    /// <summary>Quantos grupos há em volta: o nível principal é zero.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Recuo))]
+    private int _nivel;
+
+    public abstract Thickness Recuo { get; }
+
+    // a marca de onde a linha arrastada vai cair: em cima ou embaixo desta
+    [ObservableProperty] private bool _soltarAntes;
+    [ObservableProperty] private bool _soltarDepois;
 }
 
 /// <summary>Título de grupo, minimalista como no GTest: seta, ponto e nome na cor dele, e a contagem.</summary>
 public sealed partial class GrupoDaArvore : LinhaDaArvore
 {
     private readonly MainViewModel _main;
+    private string _corHex = "";
 
-    public GrupoDaArvore(MainViewModel main, string id, string titulo, string cor)
+    public GrupoDaArvore(MainViewModel main, string id)
     {
         _main = main;
         Id = id;
-        Titulo = titulo;
-        Cor = new SolidColorBrush(Color.Parse(cor));
     }
 
     public string Id { get; }
-    public string Titulo { get; }
-    public IBrush Cor { get; }
+
+    [ObservableProperty] private string _titulo = "";
+    [ObservableProperty] private IBrush _cor = Brushes.Gray;
+
+    /// <summary>Um grupo pode mudar de nome e de cor: o título é o mesmo a cada montagem.</summary>
+    public void Pintar(string hex)
+    {
+        if (hex == _corHex) return;
+        _corHex = hex;
+        Cor = new SolidColorBrush(Color.Parse(hex));
+    }
+
+    /// <summary>É o grupo que vai receber o que está sendo arrastado.</summary>
+    [ObservableProperty] private bool _alvoDeSoltar;
+
+    public override Thickness Recuo => new(Nivel * PassoDoRecuo, 0, 0, 0);
 
     [ObservableProperty] private int _contagem;
 
@@ -94,6 +129,8 @@ public sealed partial class LinhaDoProjeto : LinhaDaArvore
     public bool TemExtra => Extra.Length > 0;
 
     public override bool Selecionavel => true;
+
+    public override Thickness Recuo => new(16 + Nivel * PassoDoRecuo, 0, 0, 0);
 
     [RelayCommand] private void Subir() => _main.MoverFavorito(Projeto, -1);
     [RelayCommand] private void Descer() => _main.MoverFavorito(Projeto, 1);
@@ -309,8 +346,6 @@ public sealed partial class ProjetoViewModel : ObservableObject
     /// <summary>O clique na aba: traz o projeto para a frente.</summary>
     [RelayCommand] private void Mostrar() => _main.Ver(this);
 
-    /// <summary>A cor da aba, escolhida no menu dela.</summary>
-    [RelayCommand] private void EscolherCor(string hex) => _main.MudarCor(this, hex);
 }
 
 public sealed partial class MainViewModel : ObservableObject
@@ -318,6 +353,7 @@ public sealed partial class MainViewModel : ObservableObject
     public const string GrupoFavoritos = "favoritos";
     public const string GrupoRecentes = "recentes";
     public const string GrupoResultados = "resultados";
+    public const string GrupoOcultos = "ocultos";
 
     private readonly IDialogService _dialogos;
     private readonly Workspace _workspace;
@@ -553,81 +589,114 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>O título do grupo, o mesmo a cada montagem, com a contagem e se está recolhido.</summary>
-    private GrupoDaArvore TituloDoGrupo(string id, string titulo, string cor, int contagem, bool sempreAberto = false)
+    private GrupoDaArvore TituloDoGrupo(string id, string titulo, string cor, int contagem, bool sempreAberto = false,
+        int nivel = 0)
     {
         var g = (GrupoDaArvore)(_cache.TryGetValue("g|" + id, out var achado)
             ? achado
-            : _cache["g|" + id] = new GrupoDaArvore(this, id, titulo, cor));
+            : _cache["g|" + id] = new GrupoDaArvore(this, id));
+        g.Titulo = titulo;
+        g.Pintar(cor);
         g.Contagem = contagem;
+        g.Nivel = nivel;
         g.Recolhido = !sempreAberto && EstaRecolhido(id);
         return g;
     }
 
     /// <summary>
-    /// A árvore do dashboard do cia: Favoritos, Recentes e uma pasta por base. Os abertos não
-    /// entram: o lugar deles são as abas. Com filtro, só os que batem.
+    /// A árvore do dashboard do cia: Favoritos, Recentes, os grupos do usuário e uma pasta por
+    /// base, com o que não foi para um grupo. Ocultos ficam num grupo só deles, no fim. Com
+    /// filtro, só os que batem, ocultos também: procurar pelo nome é pedir para ver.
     /// </summary>
     private List<LinhaDaArvore> LinhasDosProjetos()
     {
         var novas = new List<LinhaDaArvore>();
         var agora = DateTime.Now;
 
-        void Grupo(string id, string titulo, string cor, IEnumerable<(ProjetoViewModel P, string Extra)> itens,
-            bool sempreAberto = false)
+        void Acrescentar(string id, IEnumerable<(ProjetoViewModel P, string Extra)> itens, int nivel)
         {
-            var lista = itens.ToList();
-            var g = TituloDoGrupo(id, titulo, cor, lista.Count, sempreAberto);
-            novas.Add(g);
-            if (g.Recolhido) return;
-
-            foreach (var (p, extra) in lista)
+            foreach (var (p, extra) in itens)
             {
                 var chave = "p|" + id + "|" + p.Pasta;
                 var l = (LinhaDoProjeto)(_cache.TryGetValue(chave, out var existente)
                     ? existente
                     : _cache[chave] = new LinhaDoProjeto(this, p, id));
                 l.Extra = extra;
+                l.Nivel = nivel;
                 novas.Add(l);
             }
         }
 
+        void Fixo(string id, string titulo, string cor, IEnumerable<(ProjetoViewModel P, string Extra)> itens,
+            bool sempreAberto = false)
+        {
+            var lista = itens.ToList();
+            var g = TituloDoGrupo(id, titulo, cor, lista.Count, sempreAberto);
+            novas.Add(g);
+            if (!g.Recolhido) Acrescentar(id, lista, 0);
+        }
+
+        static string NomeDaBase(ProjetoViewModel p) => Path.GetFileName(p.Info.Base);
+
         if (Filtro.Trim() is { Length: > 0 } termo)
         {
-            Grupo(GrupoResultados, "Resultados", "#2F7BE8", Projetos
+            Fixo(GrupoResultados, "Resultados", "#2F7BE8", Projetos
                     .Where(p => p.Nome.Contains(termo, StringComparison.CurrentCultureIgnoreCase))
                     .OrderBy(p => !p.Nome.StartsWith(termo, StringComparison.CurrentCultureIgnoreCase)) // estável: o resto fica na ordem das bases
-                    .Select(p => (p, Path.GetFileName(p.Info.Base))),
+                    .Select(p => (p, NomeDaBase(p))),
                 sempreAberto: true);
+            return novas;
         }
-        else
-        {
-            // todos numerados, como o [n] do cia; o Ctrl+número alcança só os nove primeiros
-            Grupo(GrupoFavoritos, "Favoritos", "#B08500",
-                _favoritos.Select((p, i) => (p, (i + 1).ToString())));
 
-            Grupo(GrupoRecentes, "Recentes", "#0E9384", _estado.Recentes
-                .Select(r => (P: Achar(r.Referencia), R: r))
-                .Where(x => x.P is not null)
-                .DistinctBy(x => x.P)
-                .Take(8)
-                .Select(x => (x.P!, string.Join(" ", new[]
-                {
-                    x.R.Quando is { } q ? Cia.Quando(q, agora) : "",
-                    x.R.Pedido.Length > 0 ? "#" + x.R.Pedido : "",
-                }.Where(t => t.Length > 0)))));
+        var ocultos = _workspace.Ocultos.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool Visivel(ProjetoViewModel p) => !ocultos.Contains(p.Pasta);
 
-            for (var i = 0; i < _workspace.Bases.Count; i++)
+        // todos numerados, como o [n] do cia; o Ctrl+número alcança só os nove primeiros, e o
+        // oculto guarda o número dele
+        Fixo(GrupoFavoritos, "Favoritos", "#B08500",
+            _favoritos.Select((p, i) => (p, (i + 1).ToString())).Where(x => Visivel(x.p)));
+
+        Fixo(GrupoRecentes, "Recentes", "#0E9384", _estado.Recentes
+            .Select(r => (P: Achar(r.Referencia), R: r))
+            .Where(x => x.P is not null && Visivel(x.P))
+            .DistinctBy(x => x.P)
+            .Take(8)
+            .Select(x => (x.P!, string.Join(" ", new[]
             {
-                var b = _workspace.Bases[i];
-                if (string.IsNullOrWhiteSpace(b)) continue;
-                Grupo(IdDaBase(b), Path.GetFileName(b.Trim().TrimEnd('\\', '/')), CoresDasBases[i % CoresDasBases.Length],
-                    Projetos.Where(p => Mesma(p.Info.Base, b)).Select(p => (p, "")));
-            }
+                x.R.Quando is { } q ? Cia.Quando(q, agora) : "",
+                x.R.Pedido.Length > 0 ? "#" + x.R.Pedido : "",
+            }.Where(t => t.Length > 0)))));
+
+        var todos = GruposDosProjetos();
+        var porGrupo = ProjetosPorGrupo(todos, Visivel);
+
+        // o grupo, os subgrupos e os projetos que estão direto nele, como no GRepos. A
+        // contagem é de tudo abaixo; recolhido, esconde tudo abaixo
+        void Desenhar(Grupo g, int nivel)
+        {
+            var total = GrupoArvore.ComDescendentes(todos, g.Id).Sum(id => porGrupo.GetValueOrDefault(id)?.Count ?? 0);
+            var titulo = TituloDoGrupo(g.Id, g.Nome, g.Cor, total, nivel: nivel);
+            novas.Add(titulo);
+            if (titulo.Recolhido) return;
+
+            foreach (var filho in GrupoArvore.Filhos(todos, g.Id)) Desenhar(filho, nivel + 1);
+            Acrescentar(g.Id, porGrupo[g.Id].Select(p => (p, "")), nivel);
         }
+
+        // os grupos do usuário são a parte arrumada: ficam acima das bases
+        foreach (var g in GrupoArvore.Filhos(todos, null).Where(g => !EhBase(g.Id))) Desenhar(g, 0);
+        foreach (var b in _workspace.Bases.Where(b => !string.IsNullOrWhiteSpace(b)).Select(IdDaBase).Distinct())
+            Desenhar(todos.First(g => g.Id == b), 0);
+
+        var escondidos = Projetos.Where(p => !Visivel(p)).Select(p => (p, NomeDaBase(p))).ToList();
+        if (escondidos.Count > 0) Fixo(GrupoOcultos, "Ocultos", "#6B7280", escondidos);
+
         return novas;
     }
 
     private static string IdDaBase(string b) => "base:" + b.Trim().TrimEnd('\\', '/');
+
+    private static bool EhBase(string id) => id.StartsWith("base:", StringComparison.Ordinal);
 
     private bool EstaRecolhido(string id) =>
         (_workspace.Recolhidos ?? RecolhidosPadrao()).Contains(id, StringComparer.OrdinalIgnoreCase);
@@ -653,10 +722,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     private void MarcarLinha()
     {
-        // no modo Sessões a marca é da conversa à vista
+        // no modo Sessões a marca é da conversa à vista, na primeira linha em que ela aparece
         if (ModoSessoes)
         {
-            LinhaSelecionada = SessaoAVista is { } s && Linhas.Contains(s) ? s : null;
+            LinhaSelecionada = SessaoAVista is not { } s ? null
+                : Linhas.Contains(s) ? s
+                : Linhas.OfType<LinhaDaSessao>().FirstOrDefault(l => l.Sessao.Id == s.Sessao.Id);
             return;
         }
 
@@ -680,6 +751,15 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var lista = _favoritos.ToList();
         if (!lista.Remove(p)) lista.Add(p);
+        GravarFavoritos(lista);
+    }
+
+    /// <summary>O projeto solto nos Favoritos: entra ao lado de <paramref name="vizinho"/>, ou no fim.</summary>
+    private void Favoritar(ProjetoViewModel p, ProjetoViewModel? vizinho, bool depois)
+    {
+        var lista = _favoritos.ToList();
+        var i = vizinho is null ? -1 : lista.IndexOf(vizinho);
+        lista.Insert(i < 0 ? lista.Count : depois ? i + 1 : i, p);
         GravarFavoritos(lista);
     }
 
@@ -719,6 +799,15 @@ public sealed partial class MainViewModel : ObservableObject
         if (!_arrastado) return;
         _arrastado = false;
         GravarFavoritos(_favoritos.ToList());
+    }
+
+    /// <summary>O favorito arrastado foi solto em outro lugar: a ordem volta a ser a gravada.</summary>
+    public void DesfazerFavorito()
+    {
+        if (!_arrastado) return;
+        _arrastado = false;
+        CarregarEstado();
+        Remontar();
     }
 
     private void GravarFavoritos(List<ProjetoViewModel> lista)
@@ -847,7 +936,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Titulo));
     }
 
-    /// <summary>A cor escolhida no menu da aba: vale na hora e fica gravada.</summary>
+    /// <summary>A cor escolhida na paleta da aba: vale na hora e fica gravada.</summary>
     public void MudarCor(ProjetoViewModel p, string hex)
     {
         if (GroupPalette.Normalizar(hex) is not { } cor) return;

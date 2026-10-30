@@ -91,11 +91,15 @@ jobs:
       # Skia e HarfBuzz nativos,
       # que sem isso ficariam como DLLs soltas ao lado do .exe — justamente o
       # que o arquivo único deveria evitar.
+      #
+      # PublishReadyToRun leva o código já compilado no .exe, que cresce um terço:
+      # sem isso a compilação na hora dobra o tempo de abrir o app e de montar a
+      # árvore (medido: 1,6 s contra 0,75 s para abrir).
       - name: Publicar (precisa do .NET 8 Desktop Runtime)
         run: >
           dotnet publish app/GTerm.csproj -c Release -r win-x64
           --self-contained false -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true
           "-p:VersionPrefix=$env:VERSION_PREFIX" "-p:VersionSuffix=$env:VERSION_SUFFIX"
           -o "$env:RUNNER_TEMP/publish/runtime"
 
@@ -103,7 +107,7 @@ jobs:
         run: >
           dotnet publish app/GTerm.csproj -c Release -r win-x64
           --self-contained true -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true
           "-p:VersionPrefix=$env:VERSION_PREFIX" "-p:VersionSuffix=$env:VERSION_SUFFIX"
           -o "$env:RUNNER_TEMP/publish/standalone"
 

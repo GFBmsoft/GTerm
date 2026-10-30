@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using GTerm.Controls;
 using GTerm.Services;
 using GTerm.ViewModels;
 
@@ -115,6 +116,105 @@ public sealed class PromptWindow : DialogWindow
 
         Compose(title, new Control[] { Field(label, input) }, new[] { cancel, ok });
         Opened += (_, _) => input.Focus();
+    }
+}
+
+// ------------------------------------------------------------------- grupo
+
+/// <summary>Nome, cor e onde o grupo fica, como no GRepos. Devolve null quando o usuário cancela.</summary>
+public sealed class GrupoWindow : DialogWindow
+{
+    /// <param name="pais">
+    /// Grupos que podem conter este, em ordem de árvore. Nulo é uma base do cia: o nome é o da
+    /// pasta e ela não muda de lugar, então só a cor aparece.
+    /// </param>
+    public GrupoWindow(string titulo, string nome, string cor, string? paiId, IReadOnlyList<GrupoNaArvore>? pais)
+        : base(titulo, 420)
+    {
+        var escolhida = GroupPalette.Normalizar(cor) ?? GroupPalette.Padrao;
+
+        var nomeBox = new TextBox { Text = nome, Watermark = "Ex.: Módulos fiscais" };
+        var hexBox = new TextBox { Text = escolhida, Width = 96 };
+
+        // a amostra abre o painel com a paleta inteira; as bolinhas acima são o atalho
+        // para as cores de grupo, que aparecem bem nos dois temas
+        var seletor = new SeletorDeCor { Cor = escolhida, Margin = new Thickness(8, 0, 0, 0) };
+
+        var swatches = new WrapPanel();
+        var botoes = new List<Button>();
+
+        void Selecionar(string valor, bool atualizaHex)
+        {
+            escolhida = valor;
+            if (seletor.Cor != valor) seletor.Cor = valor;
+            if (atualizaHex) hexBox.Text = valor;
+            foreach (var b in botoes)
+                b.BorderThickness = new Thickness(
+                    string.Equals(b.Tag as string, valor, StringComparison.OrdinalIgnoreCase) ? 3 : 0);
+        }
+
+        foreach (var c in GroupPalette.Cores)
+        {
+            var b = new Button
+            {
+                Width = 28,
+                Height = 28,
+                Margin = new Thickness(0, 0, 6, 6),
+                CornerRadius = new CornerRadius(14),
+                Background = new SolidColorBrush(Color.Parse(c)),
+                BorderBrush = Brushes.White,
+                BorderThickness = new Thickness(c == escolhida ? 3 : 0),
+                Padding = new Thickness(0),
+                Tag = c,
+            };
+            b.Click += (_, _) => Selecionar(c, true);
+            botoes.Add(b);
+            swatches.Children.Add(b);
+        }
+
+        seletor.Escolhida += valor => Selecionar(GroupPalette.Normalizar(valor) ?? escolhida, true);
+
+        // a cor acompanha o que se digita: assim que o código vira uma cor válida, a
+        // amostra e as bolinhas já mudam, sem precisar sair do campo
+        hexBox.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != TextBox.TextProperty) return;
+            if (GroupPalette.Normalizar(hexBox.Text) is { } v && v != escolhida) Selecionar(v, false);
+        };
+        hexBox.LostFocus += (_, _) => hexBox.Text = escolhida; // inválido volta ao que valia; válido fica por extenso
+
+        var linhaCor = new StackPanel { Orientation = Orientation.Horizontal };
+        linhaCor.Children.Add(hexBox);
+        linhaCor.Children.Add(seletor);
+
+        // "dentro de": é o que faz pasta e subpasta. O primeiro item é o nível principal
+        var opcoes = pais ?? Array.Empty<GrupoNaArvore>();
+        var dentroDe = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+        dentroDe.ItemsSource = new[] { "(nível principal)" }.Concat(opcoes.Select(p => p.Recuado)).ToList();
+        dentroDe.SelectedIndex = Math.Max(0, opcoes.ToList().FindIndex(p => p.Grupo.Id == paiId) + 1);
+
+        var cancelar = Btn("Cancelar");
+        var salvar = Btn("Salvar", true);
+        cancelar.Click += (_, _) => Close(null);
+        salvar.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(nomeBox.Text)) return;
+            var pai = dentroDe.SelectedIndex > 0 ? opcoes[dentroDe.SelectedIndex - 1].Grupo.Id : null;
+            Close(new GrupoEscolhido(nomeBox.Text!.Trim(), escolhida, pai));
+        };
+
+        var corpo = new List<Control>();
+        if (pais is not null)
+        {
+            corpo.Add(Field("Nome do grupo", nomeBox));
+            corpo.Add(Field("Dentro de", dentroDe));
+        }
+        corpo.Add(Field("Cor", swatches));
+        corpo.Add(Field("…ou escolha na paleta, ou informe o código", linhaCor));
+
+        Compose(titulo, corpo, new[] { cancelar, salvar });
+
+        Opened += (_, _) => nomeBox.Focus();
     }
 }
 

@@ -1,3 +1,11 @@
+## 1.0.0.15 — 30/10/2026
+- **Grupos e subgrupos** na barra lateral, como no GRepos: o botão de pasta ao lado da pesquisa cria um grupo, e o clique direito num grupo cria um subgrupo, edita o nome, a cor e onde ele fica, ou exclui. Excluir não apaga nada: o que estava dentro sobe um nível. DBISAM e Private também recebem subgrupos e podem mudar de cor.
+- **Arrastar**: leve um projeto para um grupo, ou para o meio de outros, e a ordem fica gravada. Um traço mostra onde ele vai cair. Arrastar para a pasta dele o devolve, e arrastar para Favoritos favorita. Um grupo arrastado para outro vira subgrupo. O clique direito tem o mesmo caminho em "Mover para".
+- **Ocultar**: o clique direito tira da barra lateral o projeto que você não usa. Ele fica no grupo Ocultos, no fim da lista, e a pesquisa continua achando. Mostrar de novo devolve ao lugar em que estava.
+- **Sessões** ganhou o mesmo: grupos e subgrupos de conversas, arrastar e ocultar. A conversa num grupo sai do dia dela, e os grupos das conversas são separados dos grupos dos projetos.
+- **Paleta de cores** do GRepos, com 63 cores, nos grupos e no botão Cor da barra das abas.
+- O GTerm abre em menos da metade do tempo, e abrir um grupo grande também ficou mais rápido. A primeira abertura depois de atualizar continua mais demorada. A lista de Sessões já vem lida quando você clica nela. O arquivo da atualização ficou cerca de um terço maior.
+
 ## 1.0.0.14 — 29/10/2026
 - Ao passar de Projetos para Sessões, a primeira favorita já aparece escolhida, com o quadro dela. Sem favoritas, aparece a primeira conversa da lista. Voltar para Projetos traz o projeto que estava à vista.
 - Todos os favoritos são numerados, como no cia: a numeração não para mais no 9. O Ctrl+1 a Ctrl+9 continua levando aos nove primeiros.

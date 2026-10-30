@@ -13,6 +13,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaTerminal;
+using GTerm.Controls;
 using GTerm.Models;
 using GTerm.Services;
 using GTerm.ViewModels;
@@ -897,7 +898,7 @@ public class JanelaTests : IDisposable
             List<Button> Pilulas() => janela.GetVisualDescendants().OfType<Button>()
                 .Where(b => b.IsEffectivelyVisible && (b.Classes.Contains("colorida") || b.Classes.Contains("pilula") || b.Classes.Contains("aba")))
                 .ToList();
-            Assert.Equal(6, Pilulas().Count(b => b.Classes.Contains("colorida")));
+            Assert.Equal(7, Pilulas().Count(b => b.Classes.Contains("colorida")));
             Assert.DoesNotContain("apagada", Pilulas().Single(b => b.Command == vm.VerProjetosCommand).Classes);
             Assert.Contains("apagada", Pilulas().Single(b => b.Command == vm.VerSessoesCommand).Classes);
             Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
@@ -1497,11 +1498,11 @@ public class JanelaTests : IDisposable
         Assert.Equal(herdada, ClaudeHooks.Herdada(nome));
 
     /// <summary>
-    /// A cor é do projeto, a da aba: sem escolha, tirada do nome como no GTest; escolhida no
-    /// menu da aba, vale na hora e fica gravada. A tela das preferências abre com as contas.
+    /// A cor é do projeto, a da aba: sem escolha, tirada do nome como no GTest; escolhida na
+    /// paleta da aba, vale na hora e fica gravada. A tela das preferências abre com as contas.
     /// </summary>
     [AvaloniaFact]
-    public void CorDaAbaVemDoNomeOuDoMenuEFicaGravada()
+    public void CorDaAbaVemDoNomeOuDaPaletaEFicaGravada()
     {
         var conta = Path.Combine(_raiz, ".claude-teste");
         Directory.CreateDirectory(conta);
@@ -1523,9 +1524,9 @@ public class JanelaTests : IDisposable
         Assert.Empty(WorkspaceStore.Load().Projetos); // cor automática não precisa ser lembrada
 
         var notas = Projeto(vm, "Notas");
-        notas.EscolherCorCommand.Execute("#db4c9b");
+        vm.MudarCor(notas, "#db4c9b");
         Assert.Equal("#DB4C9B", notas.CorHex);
-        notas.EscolherCorCommand.Execute("não é cor"); // ignorado
+        vm.MudarCor(notas, "não é cor"); // ignorado
         Assert.Equal("#DB4C9B", notas.CorHex);
 
         Assert.Equal("#DB4C9B", Assert.Single(WorkspaceStore.Load().Projetos).Cor);
@@ -1627,11 +1628,11 @@ public class JanelaTests : IDisposable
             var cor = janela.FindControl<Button>("CorDaAba")!;
             cor.Flyout!.ShowAt(cor);
             Dispatcher.UIThread.RunJobs();
-            var rosa = ((MenuFlyout)cor.Flyout).Items.OfType<MenuItem>().Single(m => m.Header as string == "Rosa");
-            Assert.NotNull(rosa.Command); // a paleta alcança o projeto, mesmo sendo um popup
+            var paleta = (PaletaDeCores)((Flyout)cor.Flyout).Content!;
+            Assert.Contains("#DB4C9B", PaletaDeCores.Cores);
+            Assert.Equal(PaletaDeCores.Cores.Count, paleta.GetVisualDescendants().OfType<Border>().Count(b => b.Child is Border));
             var corDoFinanceiro = financeiro.CorHex;
-            rosa.Command!.Execute(rosa.CommandParameter);
-            cor.Flyout.Hide();
+            paleta.Escolher("#DB4C9B");
             Assert.Equal("#DB4C9B", notas.CorHex);
             Assert.Equal(corDoFinanceiro, financeiro.CorHex); // só a da frente muda
 
@@ -1709,5 +1710,480 @@ public class JanelaTests : IDisposable
 
         public Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas) =>
             Task.FromResult(PreferenciasNovas);
+
+        public GrupoEscolhido? GrupoNovo;
+        public IReadOnlyList<GrupoNaArvore>? PaisOferecidos;
+        public string? CorSugerida;
+
+        public Task<GrupoEscolhido?> GrupoAsync(string titulo, string nome, string cor, string? paiId,
+            IReadOnlyList<GrupoNaArvore>? pais)
+        {
+            PaisOferecidos = pais;
+            CorSugerida = cor;
+            return Task.FromResult(GrupoNovo);
+        }
+    }
+
+    // ------------------------------------------------------------ organizar a árvore
+
+    private static GrupoDaArvore Titulo(MainViewModel vm, string nome) =>
+        vm.Linhas.OfType<GrupoDaArvore>().Single(g => g.Titulo == nome);
+
+    private static string[] Rotulos(MenuFlyout menu) =>
+        menu.Items.OfType<MenuItem>().Select(m => (string)m.Header!).ToArray();
+
+    /// <summary>
+    /// Grupos e subgrupos dos projetos: os do usuário ficam acima das bases, o subgrupo recua
+    /// e aparece antes dos projetos do pai, e a contagem é de tudo abaixo. O projeto sai da
+    /// base, continua nos Favoritos e volta ao lugar quando o grupo some. Tudo fica gravado.
+    /// </summary>
+    [AvaloniaFact]
+    public void GruposESubgruposDosProjetos()
+    {
+        Montar();
+        var dialogos = new Dialogos();
+        var vm = new MainViewModel(dialogos);
+        Titulo(vm, "DBISAM").AlternarCommand.Execute(null);
+        Titulo(vm, "Private").AlternarCommand.Execute(null);
+
+        var fiscal = vm.CriarGrupo("Fiscal", "#E07B00");
+        var nfe = vm.CriarGrupo("NFe", null, fiscal);
+        Assert.Equal(new[] { "Favoritos", "Recentes", "Fiscal", "NFe", "DBISAM", "Private" }, Titulos(vm));
+        Assert.Equal(0, Titulo(vm, "Fiscal").Nivel);
+        Assert.Equal(1, Titulo(vm, "NFe").Nivel);
+
+        var financeiro = Projeto(vm, "Financeiro");
+        var notas = Projeto(vm, "Notas");
+        vm.MoverProjeto(notas, nfe);
+        vm.MoverProjeto(financeiro, fiscal);
+        Assert.Equal(new[] { "Notas" }, Nomes(vm, nfe));
+        Assert.Equal(new[] { "Financeiro" }, Nomes(vm, fiscal));
+        Assert.Empty(Nomes(vm, "base:" + Bmsoft));
+        Assert.Equal(new[] { "Financeiro" }, Nomes(vm, MainViewModel.GrupoFavoritos)); // favorito continua favorito
+        Assert.Equal(2, Titulo(vm, "Fiscal").Contagem);
+        Assert.Equal(1, Titulo(vm, "NFe").Contagem);
+        Assert.Equal(0, Titulo(vm, "DBISAM").Contagem);
+        Assert.True(vm.Linhas.OfType<LinhaDoProjeto>().Single(l => l.Grupo == nfe).Recuo.Left >
+                    vm.Linhas.OfType<LinhaDoProjeto>().Single(l => l.Grupo == fiscal).Recuo.Left);
+
+        // subgrupo na base: DBISAM recebe grupo como um grupo qualquer, e o nome não muda
+        var ferramentas = vm.CriarGrupo("Ferramentas", null, "base:" + Bmsoft);
+        Assert.Equal(new[] { "Favoritos", "Recentes", "Fiscal", "NFe", "DBISAM", "Ferramentas", "Private" }, Titulos(vm));
+        Assert.Equal(1, Titulo(vm, "Ferramentas").Nivel);
+        vm.AtualizarGrupo("base:" + Bmsoft, "Outro nome", "#DB4C9B", null);
+        Assert.Equal("#DB4C9B", ((Avalonia.Media.ISolidColorBrush)Titulo(vm, "DBISAM").Cor).Color.ToString().ToUpperInvariant().Replace("#FF", "#"));
+
+        // recolher o grupo esconde o que está abaixo, e a escolha fica gravada
+        Titulo(vm, "Fiscal").AlternarCommand.Execute(null);
+        Assert.Equal(new[] { "Favoritos", "Recentes", "Fiscal", "DBISAM", "Ferramentas", "Private" }, Titulos(vm));
+        Assert.Equal(2, Titulo(vm, "Fiscal").Contagem);
+
+        // chegar num grupo recolhido abre ele
+        vm.MoverProjeto(Projeto(vm, "GTerm"), fiscal);
+        Assert.Equal(new[] { "Financeiro", "GTerm" }, Nomes(vm, fiscal));
+
+        // abrindo de novo: o workspace guardou tudo
+        var outra = new MainViewModel(new Dialogos());
+        Assert.Contains("Ferramentas", Titulos(outra));
+        Assert.Equal(new[] { "Financeiro", "GTerm" }, Nomes(outra, fiscal));
+        Assert.Equal(new[] { "Notas" }, Nomes(outra, nfe));
+
+        // um grupo não vai para dentro de um descendente
+        var ws = WorkspaceStore.Load();
+        Assert.False(GrupoArvore.PodeFicarDentro(ws.Grupos, fiscal, nfe));
+        vm.AtualizarGrupo(fiscal, "Fiscal", "#E07B00", nfe);
+        Assert.Null(WorkspaceStore.Load().Grupos.Single(g => g.Id == fiscal).PaiId);
+
+        // excluir sobe um nível: o subgrupo e os projetos vão para o pai
+        vm.RemoverGrupo(nfe);
+        Assert.Equal(new[] { "Financeiro", "GTerm", "Notas" }, Nomes(vm, fiscal));
+
+        // e sem pai voltam para a base
+        vm.RemoverGrupo(fiscal);
+        Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, "base:" + Bmsoft));
+        Assert.Equal(new[] { "GTerm" }, Nomes(vm, "base:" + Particular));
+        Assert.DoesNotContain("Fiscal", Titulos(vm));
+    }
+
+    /// <summary>O grupo novo nasce numa cor livre; o subgrupo, na cor do pai, e o diálogo oferece os pais.</summary>
+    [AvaloniaFact]
+    public async Task GrupoNovoEscolheACorPeloDialogo()
+    {
+        Montar();
+        var dialogos = new Dialogos { GrupoNovo = new GrupoEscolhido("Fiscal", "#D93F3F", null) };
+        var vm = new MainViewModel(dialogos);
+
+        var fiscal = await vm.NovoGrupoAsync(null);
+        Assert.NotNull(fiscal);
+        Assert.Equal("#1F9D55", dialogos.CorSugerida); // azul e roxo sÃ£o das bases
+        Assert.Contains(dialogos.PaisOferecidos!, g => g.Grupo.Nome == "DBISAM");
+
+        dialogos.GrupoNovo = new GrupoEscolhido("NFe", "#D93F3F", fiscal);
+        await vm.NovoGrupoAsync(fiscal);
+        Assert.Equal("#D93F3F", dialogos.CorSugerida);
+        Assert.Contains("NFe", Titulos(vm));
+
+        dialogos.GrupoNovo = null;
+        Assert.Null(await vm.NovoGrupoAsync(null)); // cancelou
+
+        // o diálogo de verdade abre com os pais e a paleta
+        var todos = WorkspaceStore.Load().Grupos;
+        var tela = new GrupoWindow("Editar grupo", "Fiscal", "#D93F3F", null, GrupoArvore.EmOrdem(todos));
+        tela.Show();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Contains(tela.GetVisualDescendants().OfType<SeletorDeCor>(), s => s.Cor == "#D93F3F");
+        Assert.Contains(tela.GetVisualDescendants().OfType<ComboBox>(), c => c.ItemCount == todos.Count + 1);
+        tela.Close();
+    }
+
+    /// <summary>
+    /// Arrastar com o mouse de verdade: para o título de um grupo, para ao lado de outro
+    /// projeto, para Ocultos e de volta. Soltar no mesmo lugar não muda nada, e o traço mostra
+    /// onde cai enquanto o botão está apertado. O título do grupo arrasta sem recolher.
+    /// </summary>
+    [AvaloniaFact]
+    public void ArrastarProjetosEGruposNaArvore()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            Titulo(vm, "DBISAM").AlternarCommand.Execute(null);
+            Titulo(vm, "Private").AlternarCommand.Execute(null);
+            var fiscal = vm.CriarGrupo("Fiscal", "#E07B00");
+            var soltos = vm.CriarGrupo("Soltos", "#1F9D55");
+            Dispatcher.UIThread.RunJobs();
+
+            Control Item(Func<LinhaDaArvore, bool> qual) => janela.GetVisualDescendants().OfType<ListBoxItem>()
+                .Single(i => i.DataContext is LinhaDaArvore l && qual(l));
+            Point Meio(Control c) => c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), janela)!.Value;
+            Point Cima(Control c) => c.TranslatePoint(new Point(c.Bounds.Width / 2, 4), janela)!.Value;
+            Control Linha(string grupo, string nome) =>
+                Item(l => l is LinhaDoProjeto p && p.Grupo == grupo && p.Projeto.Nome == nome);
+            Control Grupo(string nome) => Item(l => l is GrupoDaArvore g && g.Titulo == nome);
+
+            void Arrastar(Point de, Point para, Action? noCaminho = null)
+            {
+                janela.MouseDown(de, MouseButton.Left);
+                janela.MouseMove(new Point(de.X, de.Y + (para.Y > de.Y ? 8 : -8)), RawInputModifiers.LeftMouseButton);
+                janela.MouseMove(para, RawInputModifiers.LeftMouseButton);
+                Dispatcher.UIThread.RunJobs();
+                noCaminho?.Invoke();
+                janela.MouseUp(para, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            // para o título: o grupo acende enquanto o botão está apertado
+            Arrastar(Meio(Linha("base:" + Bmsoft, "Notas")), Meio(Grupo("Fiscal")),
+                () => Assert.True(Titulo(vm, "Fiscal").AlvoDeSoltar));
+            Assert.False(Titulo(vm, "Fiscal").AlvoDeSoltar);
+            Assert.Equal(new[] { "Notas" }, Nomes(vm, fiscal));
+            Assert.Equal(new[] { "Financeiro" }, Nomes(vm, "base:" + Bmsoft));
+
+            // ao lado de outro projeto: em cima dele, com o traço naquela linha
+            Arrastar(Meio(Linha("base:" + Bmsoft, "Financeiro")), Cima(Linha(fiscal, "Notas")), () =>
+            {
+                var alvo = vm.Linhas.OfType<LinhaDoProjeto>().Single(l => l.Grupo == fiscal);
+                Assert.True(alvo.SoltarAntes);
+                Assert.False(alvo.SoltarDepois);
+            });
+            Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, fiscal));
+            Assert.All(vm.Linhas.OfType<LinhaDoProjeto>(), l => Assert.False(l.SoltarAntes || l.SoltarDepois));
+
+            // dentro do grupo muda a ordem, e ela fica gravada
+            Arrastar(Meio(Linha(fiscal, "Notas")), Cima(Linha(fiscal, "Financeiro")));
+            Assert.Equal(new[] { "Notas", "Financeiro" }, Nomes(vm, fiscal));
+            Assert.Equal(new[] { Notas, Financeiro }, WorkspaceStore.Load().Grupos.Single(g => g.Id == fiscal).Itens);
+
+            // a base não aceita projeto de outra base; a dele, sim
+            Arrastar(Meio(Linha("base:" + Particular, "GTerm")), Meio(Grupo("DBISAM")));
+            Assert.Equal(new[] { "GTerm" }, Nomes(vm, "base:" + Particular));
+            Arrastar(Meio(Linha(fiscal, "Notas")), Meio(Grupo("DBISAM")));
+            Assert.Equal(new[] { "Notas" }, Nomes(vm, "base:" + Bmsoft));
+
+            // dentro da base a ordem também muda: fica gravada, e o que chegar depois vai para o fim
+            vm.MoverProjeto(Projeto(vm, "Financeiro"), "base:" + Bmsoft);
+            Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, "base:" + Bmsoft));
+            Dispatcher.UIThread.RunJobs();
+            Arrastar(Meio(Linha("base:" + Bmsoft, "Notas")), Cima(Linha("base:" + Bmsoft, "Financeiro")));
+            Assert.Equal(new[] { "Notas", "Financeiro" }, Nomes(vm, "base:" + Bmsoft));
+            Assert.Equal(new[] { "Notas", "Financeiro" }, Nomes(new MainViewModel(new Dialogos()), "base:" + Bmsoft));
+
+            // nos Favoritos: da base para o título ele vira favorito e fica na base também
+            Arrastar(Meio(Linha("base:" + Particular, "GTerm")), Meio(Grupo("Favoritos")));
+            Assert.Equal(new[] { "Financeiro", "GTerm" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+            Assert.Equal(new[] { "GTerm" }, Nomes(vm, "base:" + Particular));
+            Assert.Equal(new[] { Financeiro, PastaDoGTerm }, Cia.LerEstado(Estado)!.Favoritos);
+
+            // de dentro dos Favoritos para um grupo: vai para o grupo e a ordem deles não muda
+            Arrastar(Meio(Linha(MainViewModel.GrupoFavoritos, "Financeiro")), Meio(Grupo("Soltos")));
+            Assert.Equal(new[] { "Financeiro" }, Nomes(vm, soltos));
+            Assert.Equal(new[] { "Financeiro", "GTerm" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+
+            // o título do grupo arrasta: vira subgrupo do outro, sem recolher nem abrir nada
+            var aberto = Titulo(vm, "Soltos").Recolhido;
+            Arrastar(Meio(Grupo("Soltos")), Meio(Grupo("Fiscal")));
+            Assert.Equal(fiscal, WorkspaceStore.Load().Grupos.Single(g => g.Id == soltos).PaiId);
+            Assert.Equal(1, Titulo(vm, "Soltos").Nivel);
+            Assert.Equal(aberto, Titulo(vm, "Soltos").Recolhido);
+
+            // o título da base não arrasta
+            Arrastar(Meio(Grupo("Private")), Meio(Grupo("Fiscal")));
+            Assert.Equal(0, Titulo(vm, "Private").Nivel);
+
+            // clicar continua sendo clique: o título recolhe, a linha escolhe
+            var titulo = Meio(Grupo("Fiscal"));
+            janela.MouseDown(titulo, MouseButton.Left);
+            janela.MouseUp(titulo, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(Titulo(vm, "Fiscal").Recolhido);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Ocultar tira o projeto de todos os grupos (o favorito guarda o número do cia) e o manda
+    /// para Ocultos, no fim e fechado. A pesquisa ainda acha, e voltar devolve ao lugar dele.
+    /// </summary>
+    [AvaloniaFact]
+    public void OcultarProjetoDaArvore()
+    {
+        Montar();
+        var vm = new MainViewModel(new Dialogos());
+        var financeiro = Projeto(vm, "Financeiro");
+        var notas = Projeto(vm, "Notas");
+        var gterm = Projeto(vm, "GTerm");
+        vm.AlternarFavorito(notas);
+        Titulo(vm, "DBISAM").AlternarCommand.Execute(null);
+        Titulo(vm, "Recentes").AlternarCommand.Execute(null);
+        var fiscal = vm.CriarGrupo("Fiscal");
+        vm.MoverProjeto(gterm, fiscal);
+
+        vm.AlternarOculto(financeiro);
+        vm.AlternarOculto(gterm);
+        Assert.Equal(new[] { "Favoritos", "Recentes", "Fiscal", "DBISAM", "Private", "Ocultos" }, Titulos(vm));
+        Assert.True(Titulo(vm, "Ocultos").Recolhido);
+        Assert.Equal(2, Titulo(vm, "Ocultos").Contagem);
+        Assert.Equal(0, Titulo(vm, "Fiscal").Contagem);
+        Assert.DoesNotContain(vm.Linhas.OfType<LinhaDoProjeto>(), l => l.Projeto == financeiro || l.Projeto == gterm);
+
+        // Notas continua sendo o [2] do cia: o oculto guarda o número
+        Assert.Equal("2", vm.Linhas.OfType<LinhaDoProjeto>().Single(l => l.Grupo == MainViewModel.GrupoFavoritos).Extra);
+
+        // a pesquisa acha, porque procurar pelo nome é pedir para ver
+        vm.Filtro = "fin";
+        Assert.Equal(new[] { "Financeiro" }, Nomes(vm, MainViewModel.GrupoResultados));
+        vm.Filtro = "";
+
+        // abrindo o grupo Ocultos, e abrindo o app de novo, continuam lá
+        Titulo(vm, "Ocultos").AlternarCommand.Execute(null);
+        Assert.Equal(new[] { "Financeiro", "GTerm" }, Nomes(vm, MainViewModel.GrupoOcultos));
+        Assert.Equal(new[] { "Financeiro", "GTerm" }, Nomes(new MainViewModel(new Dialogos()), MainViewModel.GrupoOcultos));
+
+        // mostrar devolve ao grupo em que ele estava; sem nenhum oculto o grupo some
+        vm.AlternarOculto(gterm);
+        Assert.Equal(new[] { "GTerm" }, Nomes(vm, fiscal));
+        vm.MoverProjeto(financeiro, "base:" + Bmsoft); // arrastar para fora também mostra
+        Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, "base:" + Bmsoft));
+        Assert.DoesNotContain("Ocultos", Titulos(vm));
+    }
+
+    /// <summary>
+    /// O mesmo nas Sessões: grupos e subgrupos das conversas, separados dos grupos dos
+    /// projetos. A conversa do grupo sai do dia, fica nas Favoritas também, e o limite do cl
+    /// não vale para ela. Ocultas vão para o fim, e nenhuma vira a primeira ao entrar.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task GruposEOcultasNasSessoes()
+    {
+        Montar();
+        var boleto = ContaDeTeste.Conversa(ContaDoClaude, Notas, "Boleto do Sicoob", DateTime.Now.AddMinutes(-30));
+        var quadro = ContaDeTeste.Conversa(ContaDoClaude, PastaDoGTerm, "Quadro do cia", DateTime.Now.AddDays(-1));
+        var nota = ContaDeTeste.Conversa(ContaDoClaude, Financeiro, "Nota de ajuste", DateTime.Now.AddDays(-2));
+        File.WriteAllText(EstadoDoCl, $$"""{ "favoritas": [ "{{quadro}}" ] }""");
+
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            vm.VerSessoesCommand.Execute(null);
+            Assert.True(await Esperar(() => vm.SessoesLidas));
+            Dispatcher.UIThread.RunJobs();
+
+            LinhaDaSessao Linha(string grupo, string id) =>
+                vm.Linhas.OfType<LinhaDaSessao>().Single(l => l.Grupo == grupo && l.Sessao.Id == id);
+            LinhaDaSessao Qualquer(string id) => vm.Linhas.OfType<LinhaDaSessao>().First(l => l.Sessao.Id == id);
+            string[] Ids(string grupo) => vm.Linhas.OfType<LinhaDaSessao>().Where(l => l.Grupo == grupo).Select(l => l.Sessao.Id).ToArray();
+
+            // grupo vazio aparece, para receber conversas, e o subgrupo recua
+            var banco = vm.CriarGrupo("Banco", "#1F9D55");
+            var sicoob = vm.CriarGrupo("Sicoob", null, banco);
+            Assert.Equal(new[] { "Favoritas", "Banco", "Sicoob", "Hoje", "Esta semana" }, Titulos(vm));
+            Assert.Equal(1, Titulo(vm, "Sicoob").Nivel);
+
+            // os grupos das conversas não aparecem nos projetos
+            vm.VerProjetosCommand.Execute(null);
+            Assert.DoesNotContain("Banco", Titulos(vm));
+            vm.VerSessoesCommand.Execute(null);
+
+            // a conversa vai para o grupo e sai do dia dela
+            vm.MoverConversa(Qualquer(boleto), sicoob);
+            Assert.Equal(new[] { boleto }, Ids(sicoob));
+            Assert.DoesNotContain("Hoje", Titulos(vm));
+            Assert.Equal(1, Titulo(vm, "Banco").Contagem);
+
+            // a favorita fica nas Favoritas e no grupo, com uma linha em cada
+            vm.MoverConversa(Qualquer(quadro), banco);
+            Assert.Equal(new[] { quadro }, Ids(banco));
+            Assert.Equal(new[] { quadro }, Ids("s:favoritas"));
+
+            // ao lado de outra, pela regra do arraste
+            vm.MoverConversa(Qualquer(nota), banco);
+            var destino = vm.OndeCai(Qualquer(nota), Linha(banco, quadro), depois: false);
+            Assert.NotNull(destino);
+            vm.Soltar(Linha(banco, nota), destino!);
+            Assert.Equal(new[] { nota, quadro }, Ids(banco));
+
+            // soltar num dia é voltar para o dia dela; no mesmo lugar não há o que fazer
+            Assert.Null(vm.OndeCai(Linha(banco, nota), Titulo(vm, "Banco"), depois: false));
+            vm.MoverConversa(Linha(banco, nota), "s:Esta semana");
+            Assert.Contains("Esta semana", Titulos(vm));
+            Assert.Equal(new[] { quadro }, Ids(banco));
+
+            // o menu da conversa: mover, tirar do grupo e ocultar
+            var menu = janela.MenuDe(Linha(sicoob, boleto));
+            Assert.Contains("Mover para", Rotulos(menu));
+            Assert.Contains("Tirar do grupo", Rotulos(menu));
+            Assert.Contains("Ocultar da árvore", Rotulos(menu));
+            var mover = menu.Items.OfType<MenuItem>().Single(m => m.Header as string == "Mover para");
+            Assert.Contains("Banco", mover.Items.OfType<MenuItem>().Select(m => m.Header as string));
+
+            // com o mouse de verdade, para o título de outro grupo
+            Dispatcher.UIThread.RunJobs();
+            Point Meio(Func<LinhaDaArvore, bool> qual)
+            {
+                var c = janela.GetVisualDescendants().OfType<ListBoxItem>()
+                    .Single(i => i.DataContext is LinhaDaArvore l && qual(l));
+                return c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), janela)!.Value;
+            }
+            var de = Meio(l => ReferenceEquals(l, Linha(sicoob, boleto)));
+            var para = Meio(l => ReferenceEquals(l, Titulo(vm, "Banco")));
+            janela.MouseDown(de, MouseButton.Left);
+            janela.MouseMove(new Point(de.X, de.Y - 8), RawInputModifiers.LeftMouseButton);
+            janela.MouseMove(para, RawInputModifiers.LeftMouseButton);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(Titulo(vm, "Banco").AlvoDeSoltar);
+            janela.MouseUp(para, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { quadro, boleto }, Ids(banco));
+            vm.MoverConversa(Linha(banco, boleto), sicoob);
+
+            // oculta vai para o fim, fechada, e deixa de ser a primeira
+            vm.AlternarOculta(Linha("s:favoritas", quadro));
+            Assert.Equal("Ocultas", Titulos(vm)[^1]);
+            Assert.True(Titulo(vm, "Ocultas").Recolhido);
+            Assert.DoesNotContain("Favoritas", Titulos(vm));
+            vm.VerProjetosCommand.Execute(null);
+            vm.VerSessoesCommand.Execute(null);
+            Assert.Equal(boleto, vm.SessaoAVista!.Sessao.Id);
+            Assert.Same(vm.SessaoAVista, vm.LinhaSelecionada);
+
+            // a pesquisa abre os grupos e acha as ocultas
+            vm.Filtro = "quadro";
+            Assert.Equal(new[] { quadro }, vm.Linhas.OfType<LinhaDaSessao>().Select(l => l.Sessao.Id));
+            vm.Filtro = "";
+
+            // tudo gravado, e a escolha continua de pé depois de reabrir
+            var ws = WorkspaceStore.Load();
+            Assert.Equal(new[] { quadro }, ws.SessoesOcultas);
+            Assert.Equal(new[] { boleto }, ws.GruposDasSessoes.Single(g => g.Id == sicoob).Itens);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>O menu da linha é montado na hora, com os grupos e o que vale para ela.</summary>
+    [AvaloniaFact]
+    public void MenuDaArvoreMontadoNaHora()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var fiscal = vm.CriarGrupo("Fiscal");
+            Titulo(vm, "DBISAM").AlternarCommand.Execute(null);
+
+            // nenhuma linha carrega menu pronto: o "Mover para" muda com os grupos
+            Assert.DoesNotContain(janela.GetVisualDescendants().OfType<Border>(),
+                b => b.Classes.Contains("linha") && b.ContextMenu is not null);
+
+            var linha = vm.Linhas.OfType<LinhaDoProjeto>().First(l => l.Grupo == MainViewModel.GrupoFavoritos);
+            var menu = Rotulos(janela.MenuDe(linha));
+            Assert.Contains("Pedido do Mantis…", menu);
+            Assert.Contains("Mover para cima", menu);
+            Assert.Contains("Tirar dos favoritos", menu);
+            Assert.Contains("Ocultar da árvore", menu);
+            Assert.DoesNotContain("Encerrar o Claude", menu);
+
+            // o projeto da Private não tem pedido, e a base dos outros não é destino
+            var gterm = Projeto(vm, "GTerm");
+            vm.MoverProjeto(gterm, fiscal);
+            var noGrupo = vm.Linhas.OfType<LinhaDoProjeto>().Single(l => l.Projeto == gterm);
+            var dele = janela.MenuDe(noGrupo);
+            Assert.DoesNotContain("Pedido do Mantis…", Rotulos(dele));
+            var destinos = vm.DestinosDe(noGrupo).Select(d => d.Grupo.Nome).ToArray();
+            Assert.Equal(new[] { "Private" }, destinos); // Fiscal é onde ele já está
+
+            // o título: o do usuário edita e exclui, a base só cor, o fixo só cria grupo
+            Assert.Equal(new[] { "Novo subgrupo em Fiscal…", "Editar grupo… (nome, cor e onde fica)", "Excluir grupo…" },
+                Rotulos(janela.MenuDe(Titulo(vm, "Fiscal"))));
+            Assert.Equal(new[] { "Novo subgrupo em DBISAM…", "Cor…" }, Rotulos(janela.MenuDe(Titulo(vm, "DBISAM"))));
+            Assert.Equal(new[] { "Novo grupo…" }, Rotulos(janela.MenuDe(Titulo(vm, "Favoritos"))));
+            Assert.Equal(new[] { "Novo grupo…" }, Rotulos(janela.MenuDe(null)));
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    [Fact]
+    public void GruposEmArvoreComoNoGRepos()
+    {
+        Grupo G(string id, string nome, string? pai = null) => new() { Id = id, Nome = nome, PaiId = pai };
+        var todos = new List<Grupo> { G("b", "Banco"), G("a", "Arquivo", "z"), G("s", "Sicoob", "b"), G("i", "Itaú", "b"), G("x", "Solto", "sumiu") };
+
+        Assert.Equal(new[] { "Arquivo", "Banco", "Solto" }, GrupoArvore.Filhos(todos, null).Select(g => g.Nome)); // pai que sumiu volta à raiz
+        Assert.Equal(new[] { "Itaú", "Sicoob" }, GrupoArvore.Filhos(todos, "b").Select(g => g.Nome));
+        Assert.Equal(new[] { "Arquivo", "Banco", "   Itaú", "   Sicoob", "Solto" }, GrupoArvore.EmOrdem(todos).Select(g => g.Recuado));
+        Assert.Equal("Banco / Sicoob", GrupoArvore.EmOrdem(todos).Single(g => g.Grupo.Id == "s").Caminho);
+        Assert.Equal(new[] { "b", "s", "i" }.OrderBy(x => x), GrupoArvore.ComDescendentes(todos, "b").OrderBy(x => x));
+        Assert.Equal(new[] { "s", "b" }, GrupoArvore.Ancestrais(todos, "s").Select(g => g.Id));
+        Assert.False(GrupoArvore.PodeFicarDentro(todos, "b", "s"));
+        Assert.False(GrupoArvore.PodeFicarDentro(todos, "b", "b"));
+        Assert.True(GrupoArvore.PodeFicarDentro(todos, "s", "x"));
+
+        // um ciclo gravado à mão no JSON não some nem trava
+        var ciclo = new List<Grupo> { G("1", "Um", "2"), G("2", "Dois", "1") };
+        Assert.Equal(2, GrupoArvore.EmOrdem(ciclo).Count);
+
+        Assert.Equal(GroupPalette.Cores[1], GroupPalette.ProximaLivre(new[] { GroupPalette.Cores[0] }));
+        Assert.Equal(PaletaDeCores.Cores.Count, PaletaDeCores.Cores.Distinct().Count());
+        Assert.Equal(GroupPalette.Cores, PaletaDeCores.Cores.Take(GroupPalette.Cores.Length));
     }
 }

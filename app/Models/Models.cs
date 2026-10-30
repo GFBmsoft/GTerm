@@ -13,7 +13,7 @@ public sealed class Projeto
     public string Nome { get; set; } = "";
     public string Pasta { get; set; } = "";
 
-    /// <summary>A cor da aba, escolhida no menu dela; vazia, uma da paleta tirada do nome.</summary>
+    /// <summary>A cor da aba, escolhida na paleta dela; vazia, uma da paleta tirada do nome.</summary>
     public string Cor { get; set; } = "";
 
     /// <summary>Um dos ids de <see cref="Shells.Todos"/>.</summary>
@@ -38,10 +38,40 @@ public sealed class Projeto
     public bool Auxiliar { get; set; }
 }
 
+/// <summary>
+/// Um grupo da árvore, como os do GRepos: pasta e subpasta, com nome e cor. A lista é plana,
+/// cada grupo com o pai; quem a lê como árvore é <see cref="GrupoArvore"/>. Uma base do cia
+/// entra aqui, com o id dela, só quando ganha cor ou ordem próprias.
+/// </summary>
+public sealed class Grupo
+{
+    public string Id { get; set; } = "";
+    public string Nome { get; set; } = "";
+    public string Cor { get; set; } = GroupPalette.Padrao;
+
+    /// <summary>Grupo em que este fica dentro. Nulo é o nível principal.</summary>
+    public string? PaiId { get; set; }
+
+    /// <summary>O que está direto nele, na ordem da árvore: pastas de projeto ou ids de conversa.</summary>
+    public List<string> Itens { get; set; } = new();
+}
+
 public sealed class Workspace
 {
     /// <summary>Só os projetos que têm algo a lembrar (painel, segundo terminal).</summary>
     public List<Projeto> Projetos { get; set; } = new();
+
+    /// <summary>Grupos e subgrupos da árvore dos projetos.</summary>
+    public List<Grupo> Grupos { get; set; } = new();
+
+    /// <summary>Grupos e subgrupos da árvore das conversas, no modo Sessões.</summary>
+    public List<Grupo> GruposDasSessoes { get; set; } = new();
+
+    /// <summary>Pastas dos projetos ocultos: saem dos grupos e ficam só em Ocultos e na pesquisa.</summary>
+    public List<string> Ocultos { get; set; } = new();
+
+    /// <summary>Ids das conversas ocultas: ficam só em Ocultas.</summary>
+    public List<string> SessoesOcultas { get; set; } = new();
 
     /// <summary>A pasta do projeto que estava à vista ao fechar: é o que volta selecionado.</summary>
     public string? UltimaPasta { get; set; }

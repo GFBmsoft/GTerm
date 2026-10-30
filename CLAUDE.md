@@ -17,8 +17,9 @@ Windows Terminal. Por isso as abas não têm botão de fechar, e encerrar o Clau
 janela com terminal vivo **sempre confirma antes**.
 
 Nasceu do terminal embutido do GRepos (`D:\Projetos\Private\GRepos`): `ConPty`,
-`BarraDeTitulo`, `GroupPalette`, o tema e o `vendor/AvaloniaTerminal` são cópias de lá.
-Correção feita em um desses arquivos provavelmente vale para o outro projeto também.
+`BarraDeTitulo`, `GroupPalette`, `GrupoArvore`, `SeletorDeCor`, o tema e o
+`vendor/AvaloniaTerminal` são cópias de lá. Correção feita em um desses arquivos
+provavelmente vale para o outro projeto também.
 
 ## Comandos
 
@@ -44,7 +45,12 @@ Mesmo esquema do GRepos. O workflow `.github/workflows/build.yml` compila e test
 push na main (artefatos de 30 dias) e, num push de tag `1.0.0.N`, publica a Release com
 dois executáveis de arquivo único: `GTerm-<tag>.exe` (precisa do .NET 8 Desktop Runtime) e
 `GTerm-<tag>-standalone.exe`. A versão do executável vem da tag; build local não tem
-versão e mostra "build local" no rodapé.
+versão e mostra "build local" no rodapé. Os dois saem com `PublishReadyToRun`: sem ele o
+app leva o dobro para abrir e para montar a árvore, compilando na hora.
+
+Para medir a abertura, publique **sem** versão (`-p:Version` ou `VersionPrefix`): um
+executável com versão, ao abrir, aponta os hooks do Claude do usuário para ele
+(`MainViewModel.CorrigirHooks`), mesmo com `GTERM_HOME` em outra pasta.
 
 **Antes de criar a tag**, acrescente a versão no topo de `app/Assets/notas-da-versao.md`
 (`## 1.0.0.N — dd/mm/aaaa` e os itens), escrita para quem usa o app, não como assunto de
@@ -87,8 +93,22 @@ e por isso confirma antes.
   aparecem com o mouse em cima e na escolhida (escondidos, guardam o lugar): a estrela
   favorita ou tira. Cheia, nos favoritos, fica sempre à vista. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
   Os favoritos são todos numerados, como o `[n]` do cia; Ctrl+1..9 vão aos nove primeiros. A ordem deles muda arrastando a linha nos
-  Favoritos (`MainWindow.ArrastarFavoritos`: a linha acompanha o mouse e a ordem só é
-  gravada ao soltar), com Alt+↑/↓ ou pelo menu. Os abertos não entram na árvore.
+  Favoritos (a linha acompanha o mouse e a ordem só é gravada ao soltar), com Alt+↑/↓ ou
+  pelo menu. O menu do clique direito é montado na hora (`MainWindow.MenuDe`), porque o
+  "Mover para" depende dos grupos daquele momento: não há `ContextMenu` nos templates.
+- **Grupos** — grupos e subgrupos como os do GRepos, nos dois modos (`ViewModels/Grupos.cs`,
+  `GrupoArvore`): `Workspace.Grupos` e `GruposDasSessoes`, listas planas com o pai, e
+  `Grupo.Itens` com o conteúdo na ordem da árvore (pastas ou ids de conversa). Ficam no
+  workspace: o cia e o cl não sabem deles. Uma base é um grupo fixo (`GruposDosProjetos`):
+  recebe subgrupos, cor e ordem, mas não muda de nome nem de lugar, e só aceita os projetos
+  dela; entra em `Workspace.Grupos` só ao ganhar cor ou ordem. Projeto sem grupo fica na
+  base, conversa sem grupo fica no dia dela. Arrastar (`Views/ArrasteNaArvore.cs`, com
+  captura do ponteiro, não o drag do sistema) marca o destino com um traço e o título
+  aceso; quem decide o que cabe é `MainViewModel.OndeCai`. Soltar nos Favoritos favorita,
+  em Ocultos oculta. Grupo dentro de grupo também arrasta; para a raiz, só pela edição.
+  Ocultar (`Workspace.Ocultos`, `SessoesOcultas`) tira de todos os grupos sem esquecer
+  onde estava; o favorito oculto guarda o número, para continuar igual ao do cia. A
+  pesquisa acha os ocultos.
 - **Sessões** — o `cl` do perfil (`Modules\claude-sessoes.ps1`, as conversas do `/resume`)
   com tela: as pílulas Projetos/Sessões em cima da árvore trocam o que ela mostra
   (`MainViewModel.ModoSessoes`, em `ViewModels/Sessoes.cs`). As conversas de todas as
@@ -96,7 +116,8 @@ e por isso confirma antes.
   outras por dia, 30 sem pesquisa (o `-Max` do cl); a pesquisa filtra pelo título e pelo
   projeto. `SessoesDoClaude` lê como o cl: o título e o branch só pelo fim do .jsonl (há
   transcript de GB), a pasta de origem pelo começo, aberta pelo `sessions\<pid>.json` e
-  `bg` pelo `jobs\`. Escolher mostra o quadro da conversa no lugar do terminal
+  `bg` pelo `jobs\`, e a primeira leitura sai ao abrir a janela, fora da tela, para a
+  pílula não abrir vazia. Escolher mostra o quadro da conversa no lugar do terminal
   (`SessaoAVista`), e entrar nas Sessões já mostra a primeira favorita (sem favorita, a
   primeira conversa); voltar aos Projetos traz o projeto que estava à vista. Retomar abre a aba do projeto com `--resume <id>`
   (`Cia.ModoConversa`), e pasta fora das bases vira projeto avulso, com aba e sem linha na
