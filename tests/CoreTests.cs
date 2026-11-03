@@ -935,9 +935,9 @@ public class JanelaTests : IDisposable
             double Topo(Visual v) => v.TranslatePoint(default, janela)!.Value.Y;
             Assert.Equal(Topo(janela.FindControl<Border>("Cartao")!), Topo(janela.FindControl<TextBox>("CaixaDoFiltro")!));
             List<Button> Pilulas() => janela.GetVisualDescendants().OfType<Button>()
-                .Where(b => b.IsEffectivelyVisible && (b.Classes.Contains("colorida") || b.Classes.Contains("pilula") || b.Classes.Contains("aba")))
+                .Where(b => b.IsEffectivelyVisible && (b.Classes.Contains("pilula") || b.Classes.Contains("aba")))
                 .ToList();
-            Assert.Equal(7, Pilulas().Count(b => b.Classes.Contains("colorida")));
+            Assert.Equal(7, Pilulas().Count(b => b.Classes.Contains("pilula")));
             Assert.DoesNotContain("apagada", Pilulas().Single(b => b.Command == vm.VerProjetosCommand).Classes);
             Assert.Contains("apagada", Pilulas().Single(b => b.Command == vm.VerSessoesCommand).Classes);
             Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
@@ -997,7 +997,7 @@ public class JanelaTests : IDisposable
             Assert.Equal(Topo(barra), Topo(filtro));
             Assert.Equal(filtro.Bounds.Height, barra.Bounds.Height);
             Assert.All(barra.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible),
-                b => Assert.Contains("colorida", b.Classes));
+                b => Assert.Contains("pilula", b.Classes));
             Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
 
             // o Claude sobe direto, sem shell, com o que o cia escolheria (sem sessão: a skill),
@@ -1645,7 +1645,7 @@ public class JanelaTests : IDisposable
             Assert.True(vm.AuxiliarVisivel);
             Assert.True(Assert.Single(WorkspaceStore.Load().Projetos).Auxiliar);
             var pilula = janela.GetVisualDescendants().OfType<Button>().Single(b => b.Command == vm.AlternarAuxiliarCommand);
-            Assert.Contains("ligado", pilula.Classes); // a pílula do canto fica acesa
+            Assert.Contains("destacado", pilula.Classes); // a pílula do canto fica acesa
             var auxiliar = financeiro.AuxiliarSessao!;
             Assert.True(await Esperar(() => Tela(auxiliar).Contains(Path.GetFileName(Financeiro) + ">")), "o segundo terminal não subiu");
             Foto(janela, "auxiliar.png");
@@ -1662,7 +1662,7 @@ public class JanelaTests : IDisposable
             Assert.False(notas.PedeAtencao);
             Assert.Equal("GTerm", vm.Titulo);
             Assert.False(vm.AuxiliarVisivel);
-            Assert.DoesNotContain("ligado", pilula.Classes);
+            Assert.DoesNotContain("destacado", pilula.Classes);
 
             // a barra troca com a aba; a cor sai da paleta do botão dela
             Assert.Same(notas.EncerrarCommand, Botao("Encerrar o Claude").Command);
@@ -1858,7 +1858,7 @@ public class JanelaTests : IDisposable
 
         var fiscal = await vm.NovoGrupoAsync(null);
         Assert.NotNull(fiscal);
-        Assert.Equal("#1F9D55", dialogos.CorSugerida); // azul e roxo sÃ£o das bases
+        Assert.Equal("#1F9D55", dialogos.CorSugerida); // azul e roxo são das bases
         Assert.Contains(dialogos.PaisOferecidos!, g => g.Grupo.Nome == "DBISAM");
 
         dialogos.GrupoNovo = new GrupoEscolhido("NFe", "#D93F3F", fiscal);
@@ -2008,7 +2008,7 @@ public class JanelaTests : IDisposable
             var financeiro = vm.Selecionado!;
 
             var botao = janela.GetVisualDescendants().OfType<Button>()
-                .Single(b => b.Classes.Contains("primary") && b.IsEffectivelyVisible);
+                .Single(b => b.Classes.Contains("principal") && b.IsEffectivelyVisible);
             var meio = botao.TranslatePoint(new Point(botao.Bounds.Width / 2, botao.Bounds.Height / 2), janela)!.Value;
             janela.MouseDown(meio, MouseButton.Left);
             janela.MouseUp(meio, MouseButton.Left);
@@ -3376,5 +3376,139 @@ public class JanelaTests : IDisposable
         Assert.Equal(GroupPalette.Cores[1], GroupPalette.ProximaLivre(new[] { GroupPalette.Cores[0] }));
         Assert.Equal(PaletaDeCores.Cores.Count, PaletaDeCores.Cores.Distinct().Count());
         Assert.Equal(GroupPalette.Cores, PaletaDeCores.Cores.Take(GroupPalette.Cores.Length));
+    }
+
+    /// <summary>
+    /// Sem a fonte de ícones nada dá erro: o Windows acha a maioria dos glifos em outra fonte e
+    /// só alguns viram quadradinho (aconteceu no GRepos). Os da Nerd Font têm a classe nerd.
+    /// </summary>
+    [AvaloniaFact]
+    public void GlifosUsamAFonteDeIcones()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var glifos = janela.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Classes.Contains("glifo")).ToList();
+            Assert.True(glifos.Count >= 10, $"só {glifos.Count} glifos");
+            Assert.All(glifos, t => Assert.Contains("Segoe Fluent Icons", t.FontFamily.ToString()));
+            Assert.All(glifos, t => Assert.False(string.IsNullOrEmpty(t.Text)));
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// Arrastar um favorito não mexe na seleção da lista: a cada troca de lugar a linha escolhida
+    /// saía e voltava (o Move vira tirar e pôr), e a lista piscava. E o estado do cia relido no
+    /// meio do arraste (o vigia, depois de uma estrela ou de um recente gravado) espera soltar:
+    /// antes a ordem voltava à gravada e, no passo seguinte, pulava de novo para o mouse.
+    /// </summary>
+    [AvaloniaFact]
+    public void ArrastarFavoritoNaoPiscaALista()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Projeto(vm, "Notas").FavoritarCommand.Execute(null);
+            Projeto(vm, "GTerm").FavoritarCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            var lista = janela.FindControl<ListBox>("Lista")!;
+
+            Point Linha(string nome)
+            {
+                var item = janela.GetVisualDescendants().OfType<ListBoxItem>().Single(i =>
+                    i.IsVisible && i.DataContext is LinhaDoProjeto { NosFavoritos: true } l && l.Projeto.Nome == nome);
+                return item.TranslatePoint(new Point(60, item.Bounds.Height / 2), janela)!.Value;
+            }
+
+            var de = Linha("GTerm");
+            janela.MouseDown(de, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("GTerm", vm.Selecionado?.Nome);
+            var selecionada = lista.SelectedItem;
+            var trocas = 0;
+            lista.SelectionChanged += (_, _) => trocas++;
+
+            // sobe devagar, como a mão; no meio, o vigia do estado do cia relê o arquivo
+            var ordens = new List<string>();
+            void Anotar()
+            {
+                var ordem = string.Join(",", Nomes(vm, MainViewModel.GrupoFavoritos));
+                if (ordens.Count == 0 || ordens[^1] != ordem) ordens.Add(ordem);
+            }
+            for (var y = de.Y - 2; y >= de.Y - 60; y -= 2)
+            {
+                janela.MouseMove(new Point(de.X, y), RawInputModifiers.LeftMouseButton);
+                Dispatcher.UIThread.RunJobs();
+                Anotar();
+                if (y >= de.Y - 40) continue;
+                vm.Reler();
+                Dispatcher.UIThread.RunJobs();
+                Anotar();
+            }
+            // subiu uma linha de cada vez, sem nunca voltar à ordem gravada no caminho
+            Assert.Equal(new[] { "Financeiro,GTerm,Notas", "GTerm,Financeiro,Notas" }, ordens.Where(o => o != "Financeiro,Notas,GTerm"));
+            Assert.Equal(0, trocas);
+            Assert.Same(selecionada, lista.SelectedItem);
+
+            // ao soltar, a ordem nova é gravada e a releitura que esperou não a desfaz
+            janela.MouseUp(new Point(de.X, de.Y - 60), MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.Arrastando);
+            Assert.Equal(new[] { PastaDoGTerm, Financeiro, Notas }, Cia.LerEstado(Estado)!.Favoritos);
+            Assert.Equal(new[] { "GTerm", "Financeiro", "Notas" }, Nomes(vm, MainViewModel.GrupoFavoritos));
+            Assert.Equal("GTerm", vm.Selecionado?.Nome);
+            Assert.Same(selecionada, lista.SelectedItem);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// A cor vem da classe, como no GRepos, e desligado é cinza, qualquer que seja a cor: só
+    /// baixar a opacidade deixava a pílula com cara de clicável (o Commit do GRepos).
+    /// </summary>
+    [AvaloniaFact]
+    public void PilulaTemACorDaClasseEDesligadaFicaCinza()
+    {
+        var glifo = new TextBlock { Text = Glifos.Compactar, Classes = { "glifo" } };
+        var texto = new TextBlock { Text = "Compactar" };
+        var botao = new Button
+        {
+            Classes = { "pilula", "verdeAgua" },
+            Content = new StackPanel { Classes = { "comIcone" }, Children = { glifo, texto } },
+        };
+        var janela = new Window { Width = 300, Height = 120, Content = botao };
+        janela.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Avalonia.Media.Color Cor(string recurso) =>
+            Avalonia.Controls.ResourceNodeExtensions.TryFindResource(botao, recurso, botao.ActualThemeVariant, out var pincel)
+                ? ((Avalonia.Media.ISolidColorBrush)pincel!).Color
+                : throw new InvalidOperationException($"sem o recurso {recurso}");
+        static Avalonia.Media.Color? CorDe(TextBlock t) => (t.Foreground as Avalonia.Media.ISolidColorBrush)?.Color;
+
+        Assert.Equal(24, botao.Bounds.Height);
+        Assert.Equal(Cor("Teal"), CorDe(texto));
+        Assert.Equal(Cor("Teal"), CorDe(glifo));
+        Assert.Equal(Avalonia.Media.Color.Parse("#240E9384"), ((Avalonia.Media.ISolidColorBrush)botao.Background!).Color);
+        botao.IsEnabled = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(Cor("TextFaint"), CorDe(texto));
+        Assert.Equal(Cor("TextFaint"), CorDe(glifo));
+        janela.Close();
     }
 }

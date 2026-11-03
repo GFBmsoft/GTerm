@@ -45,6 +45,8 @@ public static class ArrasteNaArvore
                 if (!soltou) vm.DesfazerFavorito();
                 else if (destino is not null) vm.Soltar(pega!, destino);
                 else vm.SoltarFavorito();
+                // por último: a releitura que esperou o arraste vem depois da ordem nova gravada
+                vm.Arrastando = false;
             }
             pega = null;
             destino = null;
@@ -72,6 +74,7 @@ public static class ArrasteNaArvore
             {
                 if (Math.Abs(aqui.Y - inicio.Y) < Folga) return;
                 arrastando = true;
+                vm.Arrastando = true;
                 e.Pointer.Capture(lista);
                 lista.Cursor = new Cursor(StandardCursorType.DragMove);
             }
@@ -89,7 +92,7 @@ public static class ArrasteNaArvore
 
         lista.AddHandler(InputElement.PointerReleasedEvent, (_, e) =>
         {
-            // num clique a captura Ã© do botÃ£o: tirÃ¡-la aqui cancelaria o clique
+            // num clique a captura é do botão: tirá-la aqui cancelaria o clique
             var arrastou = arrastando;
             Terminar(soltou: true);
             if (!arrastou) return;

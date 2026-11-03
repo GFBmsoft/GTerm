@@ -1,8 +1,9 @@
 namespace GTerm.Controls;
 
 /// <summary>
-/// O ícone de cada ação nos menus, da Segoe Fluent Icons, nos códigos do GRepos e do GRemote.
-/// Ação que também é pílula usa o glifo e a cor da pílula. A estrela fica nos view models.
+/// O ícone de cada ação, da Segoe Fluent Icons, nos códigos do GRepos, do GRemote, do GTest e do GConv: a
+/// mesma ação usa o mesmo glifo nas pílulas, nos menus e na árvore. Os glifos do cia (o tipo do projeto, o git
+/// do quadro) são da Nerd Font e não moram aqui.
 /// </summary>
 public static class Glifos
 {
@@ -13,6 +14,21 @@ public static class Glifos
     public const string PullRequest = "";
     public const string SemSkill = "";
     public const string Encerrar = "";
+
+    // a aba aberta
+    public const string Compactar = "";
+    public const string Revisar = "";
+    public const string Painel = "";
+    public const string Terminal = "";
+
+    // a árvore: modos, estrela, setas e marcas
+    public const string Projetos = "";
+    public const string Sessoes = "";
+    public const string Estrela = "";
+    public const string EstrelaCheia = "";
+    public const string SetaAberta = "";
+    public const string SetaFechada = "";
+    public const string SegundoPlano = "";
 
     // organizar a árvore
     public const string NovaPasta = "";
@@ -25,4 +41,13 @@ public static class Glifos
     public const string Ver = "";
     public const string Ocultar = "";
     public const string Lista = "";
+
+    // diálogos e preferências
+    public const string Confirmar = "";
+    public const string Fechar = "";
+    public const string Salvar = "";
+    public const string Documento = "";
+    public const string Ajustes = "";
+    public const string Instalar = "";
+    public const string Corrigir = "";
 }

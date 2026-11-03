@@ -41,9 +41,50 @@ public abstract class DialogWindow : Window
 
     protected static Button Btn(string text, bool primary = false)
     {
-        var b = new Button { Content = text, MinWidth = 88, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var b = new Button { MinWidth = 88, HorizontalContentAlignment = HorizontalAlignment.Center };
         if (primary) b.Classes.Add("primary");
+        Rotular(b, text);
         return b;
+    }
+
+    /// <summary>O glifo e a cor de cada ação dos diálogos, como no GRepos: a mesma ação sai igual em todos.</summary>
+    private static readonly Dictionary<string, (string Glifo, string Cor)> Acoes = new()
+    {
+        ["Cancelar"] = (Glifos.Fechar, "cinza"),
+        ["Fechar"] = (Glifos.Fechar, "cinza"),
+        ["Confirmar"] = (Glifos.Confirmar, "azul"),
+        ["Salvar"] = (Glifos.Salvar, "azul"),
+        ["Notas da versão"] = (Glifos.Documento, "azul"),
+        ["Instalar"] = (Glifos.Instalar, "verde"),
+        ["Remover"] = (Glifos.Excluir, "vermelho"),
+        ["Corrigir"] = (Glifos.Corrigir, "laranja"),
+    };
+
+    private static readonly string[] Cores = { "azul", "verde", "verdeAgua", "roxo", "laranja", "amarelo", "vermelho", "cinza" };
+
+    /// <summary>
+    /// Põe o texto no botão, com o glifo e a cor da ação; texto fora da tabela vai sozinho. Pode ser chamado de
+    /// novo no mesmo botão (o das contas troca entre Instalar, Remover e Corrigir): a cor anterior sai.
+    /// </summary>
+    protected static void Rotular(Button b, string texto)
+    {
+        foreach (var cor in Cores) b.Classes.Remove(cor);
+        if (!Acoes.TryGetValue(texto, out var acao))
+        {
+            b.Content = texto;
+            return;
+        }
+
+        b.Classes.Add(acao.Cor);
+        b.Content = new StackPanel
+        {
+            Classes = { "comIcone" },
+            Children =
+            {
+                new TextBlock { Classes = { "glifo" }, Text = acao.Glifo },
+                new TextBlock { Text = texto },
+            },
+        };
     }
 
     protected void Compose(string heading, IEnumerable<Control> body, IEnumerable<Control> footer,
@@ -157,6 +198,7 @@ public sealed class GrupoWindow : DialogWindow
         {
             var b = new Button
             {
+                Classes = { "amostra" },
                 Width = 28,
                 Height = 28,
                 Margin = new Thickness(0, 0, 6, 6),
@@ -305,7 +347,7 @@ public sealed class PreferenciasWindow : DialogWindow
             // instalados por outro GTerm (outra pasta, um build de teste): o Claude chama o
             // executável errado, e o que resolve é instalar de novo a partir deste
             var deOutro = instalado && ClaudeHooks.Desatualizado(conta, exe);
-            botao.Content = deOutro ? "Corrigir" : instalado ? "Remover" : "Instalar";
+            Rotular(botao, deOutro ? "Corrigir" : instalado ? "Remover" : "Instalar");
             situacao.Text = erro ?? (deOutro ? "aponta para outro GTerm" : instalado ? "instalado" : "não instalado");
             situacao.Classes.Set("faint", erro is null);
         }

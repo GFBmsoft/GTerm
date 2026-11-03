@@ -1,3 +1,11 @@
+## 1.0.0.22 — 03/11/2026
+- **Visual igual ao das outras ferramentas**: os botões seguem o mesmo padrão do GRepos, do GRemote, do GTest e do GConv, com pílulas, ícones e as mesmas cores para cada tipo de ação. O Abrir o Claude do projeto parado e o Retomar a conversa deixaram de ser o único botão cheio e viraram a pílula verde do Retomar, em negrito.
+- Na barra lateral, o ▶ de cada linha virou uma bolinha verde, e a engrenagem das Preferências, uma bolinha azul. Painel e Terminal ficam acesos em azul enquanto estão abertos.
+- Botão desligado fica cinza, como o Compactar com o Claude ocupado. Antes ele só ficava mais apagado e continuava parecendo clicável. O Code review rodando continua laranja, porque o texto dele mostra o andamento.
+- Os botões das Preferências e das confirmações ganharam ícone e cor: Confirmar, Cancelar, Salvar, Notas da versão e o Instalar, Remover ou Corrigir de cada conta.
+- **Arrastar os favoritos sem a lista piscar**: ao mudar a ordem dos Favoritos arrastando, a lista piscava a cada troca de lugar, e a linha arrastada podia voltar para onde estava e pular de novo, o que acontecia logo depois de marcar uma estrela ou quando o cia gravava um recente. Agora a linha acompanha o mouse sem piscar, e a ordem nova é gravada quando você solta.
+- Na janela de grupo, a amostra de cor continua na cor dela com o mouse em cima. Antes ela ficava cinza.
+
 ## 1.0.0.21 — 30/10/2026
 - **Menus com ícones**: o clique direito na barra lateral ganhou o visual do GRepos e do GRemote, com um ícone colorido em cada opção, nas mesmas cores dos botões. Em "Mover para", cada grupo aparece com a bolinha da cor dele.
 - **Excluir conversa**: nas Sessões, o clique direito e o quadro da conversa agora têm "Excluir conversa…". Depois de confirmar, ela vai para a Lixeira do Windows, junto com o que o Claude guardava dela, e some da lista, do /resume e do cl. Conversa aberta só pode ser excluída depois de fechada.

@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GTerm.Controls;
 using GTerm.Models;
 using GTerm.Services;
 
@@ -96,7 +97,7 @@ public sealed partial class GrupoDaArvore : LinhaDaArvore
     private bool _recolhido;
 
     /// <summary>Seta do Segoe Fluent: para a direita recolhido, para baixo aberto.</summary>
-    public string Seta => Recolhido ? "" : "";
+    public string Seta => Recolhido ? Glifos.SetaFechada : Glifos.SetaAberta;
 
     public override bool Selecionavel => false;
 
@@ -178,7 +179,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public string RotuloDoFavorito => Favorito ? "Tirar dos favoritos" : "Favoritar";
 
     /// <summary>A estrela da linha na árvore, do Segoe Fluent: cheia nos favoritos, vazada nos outros.</summary>
-    public string GlifoDoFavorito => Favorito ? "" : "";
+    public string GlifoDoFavorito => Favorito ? Glifos.EstrelaCheia : Glifos.Estrela;
 
     /// <summary>
     /// A cor do projeto, a da aba dele. Sem escolha, uma da paleta tirada do nome, pela
@@ -689,7 +690,14 @@ public sealed partial class MainViewModel : ObservableObject
         {
             if (i < Linhas.Count && ReferenceEquals(Linhas[i], novas[i])) continue;
             var j = Linhas.IndexOf(novas[i]);
-            if (j > i) Linhas.Move(j, i);
+            if (j > i && ReferenceEquals(novas[i], LinhaSelecionada))
+            {
+                // a linha escolhida não sai do lugar: o Move vira tirar e pôr para a lista, que
+                // solta a seleção e recria a linha. No arraste dos favoritos era a cada troca de
+                // lugar, e a lista piscava. As que estão no caminho é que descem
+                for (var k = i; k < j; k++) Linhas.Move(i, j);
+            }
+            else if (j > i) Linhas.Move(j, i);
             else Linhas.Insert(i, novas[i]);
         }
         while (Linhas.Count > novas.Count) Linhas.RemoveAt(Linhas.Count - 1);
@@ -990,9 +998,31 @@ public sealed partial class MainViewModel : ObservableObject
         _releitura.Start();
     }
 
+    // arrastando na árvore: a releitura espera soltar. Relida no meio, a ordem dos favoritos
+    // voltava à gravada e, no passo seguinte do arraste, ia de novo para onde estava o mouse
+    private bool _arrastando, _relerAoSoltar;
+
+    /// <summary>Um arraste na árvore está em curso (quem diz é a <c>ArrasteNaArvore</c>).</summary>
+    public bool Arrastando
+    {
+        get => _arrastando;
+        set
+        {
+            _arrastando = value;
+            if (value || !_relerAoSoltar) return;
+            _relerAoSoltar = false;
+            Reler();
+        }
+    }
+
     internal void Reler()
     {
         _releitura.Stop();
+        if (_arrastando)
+        {
+            _relerAoSoltar = true;
+            return;
+        }
         if (_relerProjetos) CarregarProjetos();
         _relerProjetos = false;
         CarregarEstado();

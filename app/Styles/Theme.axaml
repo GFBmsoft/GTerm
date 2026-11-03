@@ -24,6 +24,7 @@
           <SolidColorBrush x:Key="Orange" Color="#F0883E" />
           <SolidColorBrush x:Key="Yellow" Color="#E3B341" />
           <SolidColorBrush x:Key="Purple" Color="#D2A8FF" />
+          <SolidColorBrush x:Key="Teal" Color="#2DB3A3" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
@@ -45,6 +46,7 @@
           <SolidColorBrush x:Key="Orange" Color="#B44B00" />
           <SolidColorBrush x:Key="Yellow" Color="#8A6100" />
           <SolidColorBrush x:Key="Purple" Color="#6A35B8" />
+          <SolidColorBrush x:Key="Teal" Color="#0E7C6B" />
         </ResourceDictionary>
 
       </ResourceDictionary.ThemeDictionaries>
@@ -85,37 +87,43 @@
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
 
-  <!-- botões -->
-
+  <!-- botões: tudo em pílula, no padrão do GRepos, do GRemote, do GTest e do GConv. O glifo e o texto na cor
+       cheia, o fundo com a cor diluída (#24) e o contorno meio diluído (#66); com o mouse em cima, o fundo fica no
+       tom do contorno. A cor é uma classe, uma por tipo de ação, e o mesmo botão tem a mesma cor em todo lugar:
+         azul       sessão nova, Claude sem conversa, editar, preferências
+         verde      retomar, abrir o Claude, instalar
+         verdeAgua  compactar
+         roxo       Sessões, pull request
+         laranja    Projetos, code review, corrigir
+         amarelo    pedido, grupos, favoritar
+         vermelho   encerrar o Claude, excluir, remover
+         cinza      sem skill, cor, Painel, Terminal, cancelar, fechar (é o botão sem classe)
+       Tamanhos: o comum (28), "pilula" (24: a do GTerm desde sempre, e a barra da aba, com ela, fica com os 28
+       da pesquisa) e "pequena" (22); "redonda" é só o ícone, numa bolinha. As classes antigas continuam
+       valendo: tiny = pequena, primary = azul (em negrito), danger = vermelho -->
   <Style Selector="Button">
-    <Setter Property="Background" Value="{DynamicResource BgRaised}" />
+    <Setter Property="Background" Value="#246B7280" />
     <Setter Property="Foreground" Value="{DynamicResource Text}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+    <Setter Property="BorderBrush" Value="#666B7280" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="6" />
-    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Padding" Value="12,0" />
     <Setter Property="Height" Value="28" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="Cursor" Value="Hand" />
   </Style>
 
-  <Style Selector="Button:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource BgHover}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
-    <Setter Property="TextBlock.Foreground" Value="{DynamicResource Text}" />
+  <Style Selector="Button:pointerover /template/ ContentPresenter, Button:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{Binding $parent[Button].BorderBrush}" />
+    <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+    <Setter Property="TextBlock.Foreground" Value="{Binding $parent[Button].Foreground}" />
   </Style>
 
-  <Style Selector="Button.primary">
-    <Setter Property="Background" Value="{DynamicResource Accent}" />
-    <Setter Property="Foreground" Value="{DynamicResource OnAccent}" />
-    <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="FontWeight" Value="SemiBold" />
-  </Style>
-
-  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource Accent}" />
-    <Setter Property="TextBlock.Foreground" Value="{DynamicResource OnAccent}" />
+  <!-- Só o conteúdo DIRETO do botão (o ">"): o menu e a paleta que o botão abre são descendentes lógicos dele,
+       e com o seletor de descendente o que estava dentro deles pegava a cor do botão (EV03 do GRemote) -->
+  <Style Selector="Button > TextBlock, Button > StackPanel.comIcone > TextBlock">
+    <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
   </Style>
 
   <Style Selector="Button.ghost">
@@ -123,16 +131,131 @@
     <Setter Property="BorderThickness" Value="0" />
   </Style>
 
-  <Style Selector="Button.tiny">
-    <Setter Property="Height" Value="20" />
-    <Setter Property="Padding" Value="6,0" />
-    <Setter Property="FontSize" Value="11" />
-    <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderThickness" Value="0" />
+  <Style Selector="Button.pilula">
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="10,0,11,0" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="FontSize" Value="12" />
   </Style>
 
-  <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
-    <Setter Property="TextBlock.Foreground" Value="{DynamicResource Red}" />
+  <Style Selector="Button.pequena, Button.tiny">
+    <Setter Property="Height" Value="22" />
+    <Setter Property="Padding" Value="9,0" />
+    <Setter Property="CornerRadius" Value="11" />
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="Button.pequena > StackPanel.comIcone, Button.tiny > StackPanel.comIcone">
+    <Setter Property="Spacing" Value="5" />
+  </Style>
+
+  <!-- só o ícone, numa bolinha do tamanho da altura -->
+  <Style Selector="Button.redonda">
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="12" />
+  </Style>
+  <Style Selector="Button.redonda.pequena, Button.redonda.tiny">
+    <Setter Property="Width" Value="22" />
+    <Setter Property="Height" Value="22" />
+    <Setter Property="CornerRadius" Value="11" />
+  </Style>
+  <Style Selector="Button.redonda > TextBlock.glifo">
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <!-- o glifo é do mesmo tamanho em todas as pílulas e no botão principal; menor na pequena -->
+  <Style Selector="Button > TextBlock.glifo, Button > StackPanel.comIcone > TextBlock.glifo">
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="Button.pequena > TextBlock.glifo, Button.pequena > StackPanel.comIcone > TextBlock.glifo">
+    <Setter Property="FontSize" Value="10.5" />
+  </Style>
+
+  <!-- as cores: Foreground do tema, fundo #24 e contorno #66 da paleta do GTerm -->
+  <Style Selector="Button.azul, Button.primary">
+    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+    <Setter Property="Background" Value="#242F7BE8" />
+    <Setter Property="BorderBrush" Value="#662F7BE8" />
+  </Style>
+  <Style Selector="Button.verde">
+    <Setter Property="Foreground" Value="{DynamicResource Green}" />
+    <Setter Property="Background" Value="#241F9D55" />
+    <Setter Property="BorderBrush" Value="#661F9D55" />
+  </Style>
+  <Style Selector="Button.verdeAgua">
+    <Setter Property="Foreground" Value="{DynamicResource Teal}" />
+    <Setter Property="Background" Value="#240E9384" />
+    <Setter Property="BorderBrush" Value="#660E9384" />
+  </Style>
+  <Style Selector="Button.roxo">
+    <Setter Property="Foreground" Value="{DynamicResource Purple}" />
+    <Setter Property="Background" Value="#248B5CF6" />
+    <Setter Property="BorderBrush" Value="#668B5CF6" />
+  </Style>
+  <Style Selector="Button.laranja">
+    <Setter Property="Foreground" Value="{DynamicResource Orange}" />
+    <Setter Property="Background" Value="#24E07B00" />
+    <Setter Property="BorderBrush" Value="#66E07B00" />
+  </Style>
+  <Style Selector="Button.amarelo">
+    <Setter Property="Foreground" Value="{DynamicResource Yellow}" />
+    <Setter Property="Background" Value="#24B08500" />
+    <Setter Property="BorderBrush" Value="#66B08500" />
+  </Style>
+  <Style Selector="Button.vermelho, Button.danger">
+    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+    <Setter Property="Background" Value="#24D93F3F" />
+    <Setter Property="BorderBrush" Value="#66D93F3F" />
+  </Style>
+  <Style Selector="Button.cinza">
+    <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    <Setter Property="Background" Value="#246B7280" />
+    <Setter Property="BorderBrush" Value="#666B7280" />
+  </Style>
+  <Style Selector="Button.primary">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- a pílula ligada (o Painel e o Terminal abertos): contorno e texto na cor de destaque -->
+  <Style Selector="Button.destacado">
+    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+    <Setter Property="Background" Value="#662F7BE8" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+  </Style>
+
+  <!-- botão só com um símbolo, sem pílula: a estrela da linha da árvore, que marca e desmarca -->
+  <Style Selector="Button.simbolo">
+    <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
+    <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="Button.simbolo:pointerover /template/ ContentPresenter, Button.simbolo:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgHover}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- amostra de cor (a paleta dos grupos): o fundo é a cor dela, também com o mouse em cima -->
+  <Style Selector="Button.amostra:pointerover /template/ ContentPresenter, Button.amostra:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+    <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+  </Style>
+
+  <!-- desligado (sem o que fazer): pílula cinza e texto apagado, qualquer que seja a cor. Fica depois das cores,
+       senão elas vencem; só baixar a opacidade deixava a pílula com cara de clicável (o Commit do GRepos) -->
+  <Style Selector="Button:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="#146B7280" />
+    <Setter Property="BorderBrush" Value="#406B7280" />
+    <Setter Property="TextBlock.Foreground" Value="{DynamicResource TextFaint}" />
+  </Style>
+  <Style Selector="Button:disabled > TextBlock, Button:disabled > StackPanel.comIcone > TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextFaint}" />
+  </Style>
+  <Style Selector="Button:disabled">
+    <Setter Property="Opacity" Value="0.8" />
   </Style>
 
   <!-- entradas -->
@@ -235,25 +358,28 @@
     <Setter Property="Padding" Value="5,0" />
   </Style>
 
-  <!-- botão "tiny" só com um símbolo da fonte de ícones do Windows -->
-  <Style Selector="Button.simbolo">
-    <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
-    <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
-    <Setter Property="Width" Value="24" />
-    <Setter Property="Padding" Value="0" />
-  </Style>
 
-  <!-- glifo solto, nos botões e nos menus; as classes de cor servem para ele nos menus -->
+  <!-- glifo do Segoe Fluent Icons, nos botões, na árvore e nos menus; as classes de cor servem para ele também -->
   <Style Selector="TextBlock.glifo">
     <Setter Property="FontFamily" Value="Segoe Fluent Icons,Segoe MDL2 Assets" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="None" />
   </Style>
   <Style Selector="TextBlock.azul"><Setter Property="Foreground" Value="{DynamicResource Accent}" /></Style>
   <Style Selector="TextBlock.verde"><Setter Property="Foreground" Value="{DynamicResource Green}" /></Style>
+  <Style Selector="TextBlock.verdeAgua"><Setter Property="Foreground" Value="{DynamicResource Teal}" /></Style>
   <Style Selector="TextBlock.roxo"><Setter Property="Foreground" Value="{DynamicResource Purple}" /></Style>
   <Style Selector="TextBlock.laranja"><Setter Property="Foreground" Value="{DynamicResource Orange}" /></Style>
   <Style Selector="TextBlock.amarelo"><Setter Property="Foreground" Value="{DynamicResource Yellow}" /></Style>
   <Style Selector="TextBlock.vermelho"><Setter Property="Foreground" Value="{DynamicResource Red}" /></Style>
   <Style Selector="TextBlock.cinza"><Setter Property="Foreground" Value="{DynamicResource TextDim}" /></Style>
+  <Style Selector="StackPanel.comIcone">
+    <Setter Property="Orientation" Value="Horizontal" />
+    <Setter Property="Spacing" Value="6" />
+  </Style>
+  <Style Selector="StackPanel.comIcone > TextBlock">
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
 
   <!-- menus, como os do GRepos: cartão arredondado, item em pílula e o glifo na cor da ação (ItemDeMenu) -->
   <Style Selector="MenuFlyoutPresenter, ContextMenu">

@@ -6,7 +6,7 @@ namespace GTerm.Views;
 
 /// <summary>
 /// Item de menu com o glifo na cor da ação, como as pílulas (retomar verde, encerrar
-/// vermelho). <paramref name="cor"/> é uma das classes de cor do tema: azul, verde, roxo,
+/// vermelho). <paramref name="cor"/> é uma das classes de cor do tema: azul, verde, verdeAgua, roxo,
 /// laranja, amarelo, vermelho ou cinza.
 /// </summary>
 public static class ItemDeMenu

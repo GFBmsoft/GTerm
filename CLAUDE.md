@@ -166,12 +166,14 @@ e por isso confirma antes.
   e ao fim de uma revisão. A marca fica amarela com commit depois dela, contado pelo reflog
   (`Cia.CommitsDepois`), para não subir o git em dezenas de projetos; os arquivos alterados
   só o quadro vê. O resultado é texto livre: não há como contar os achados com segurança.
-- **Botões** — uma medida só: pílula de 24 (`Button.colorida`, a do GTest: fundo diluído,
-  contorno e texto na cor de cada um, com ícone), na barra das abas, no projeto parado, na
-  conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`, só com o
-  ícone na cor, como as abas). O mesmo botão tem a mesma cor e o mesmo ícone em qualquer
-  lugar. O principal (retomar) é a pílula cheia de 28; a barra das abas tem os 28 da
-  pesquisa ao lado.
+- **Botões** — uma medida só: pílula de 24 (`Button.pilula` com a classe da cor: fundo
+  diluído, contorno e texto na cor de cada um, com ícone), na barra das abas, no projeto
+  parado, na conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`,
+  só com o ícone na cor, como as abas). O mesmo botão tem a mesma cor e o mesmo ícone em
+  qualquer lugar. O principal (retomar) é a pílula verde de 28 em negrito (`principal`); a
+  barra das abas tem os 28 da pesquisa ao lado. Painel e Terminal, no canto, ficam
+  `destacado` enquanto abertos. Na linha da árvore, o ▶ é a bolinha verde do Retomar e a
+  estrela é só o símbolo (`simbolo`), sem pílula.
 - **Encerrar o Claude** — encerrar, ou abrir de novo de outro jeito, manda o `/exit` antes
   de fechar o terminal (`TerminalSessao.SairAsync`: Ctrl+C para largar o que estiver
   digitado ou rodando, o comando, e o Enter depois de uma pausa). Não saindo em
@@ -237,6 +239,22 @@ e por isso confirma antes.
   não alcança o `DataContext` da janela por `$parent`.
 - Tela nova ganha teste com as listas **populadas**: erro de binding só aparece quando o
   `ItemTemplate` é construído.
+- **Botão é pílula, como no GRepos, no GRemote, no GTest e no GConv** (pedido do usuário:
+  "padronizar todas as ferramentas com o mesmo estilo de ícones, formatos tipo pílula e a
+  paleta de cores"). A cor é uma classe (`azul`, `verde`, `verdeAgua`, `roxo`, `laranja`,
+  `amarelo`, `vermelho`, `cinza`; a tabela de qual ação leva qual cor está no Theme.axaml),
+  nunca Foreground/Background/BorderBrush fixos no botão. Tamanho `pilula` (24, a medida do
+  GTerm) ou `pequena` (= `tiny`); só ícone, `redonda`; botão sem classe já é a pílula cinza;
+  `primary` = azul em negrito. Desligado fica cinza, e o estilo vem depois das cores (senão
+  a cor vence); o Code review rodando (`revisando`) e a versão do rodapé ficam legíveis de
+  propósito. **Glifo sai de `Controls\Glifos`** (no XAML `{x:Static c:Glifos.Nome}`), nunca
+  escrito direto; os da Nerd Font (tipo do projeto, git do quadro, classe `nerd`) são de
+  outra fonte e ficam onde estão. Diálogos: o rótulo passa por `DialogWindow.Rotular` (a
+  tabela `Acoes`). Estilo do conteúdo do botão com `>` (o menu e a paleta da Cor são
+  descendentes lógicos do botão: com o seletor de descendente, o que estava dentro deles
+  pegava a cor dele). Botão que não é pílula (título de grupo, aba, versão do rodapé,
+  amostra de cor) precisa do próprio `:pointerover`: o da pílula pinta o fundo com o
+  contorno.
 - Comentário XML/XAML não pode conter dois hifens seguidos (quebra o build do Avalonia).
 - Teste que grava o workspace fica na classe `JanelaTests`: o xunit roda classes em
   paralelo e todas dividem a mesma pasta temporária.

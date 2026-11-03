@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GTerm.Controls;
 using GTerm.Models;
 using GTerm.Services;
 
@@ -78,7 +79,7 @@ public sealed partial class LinhaDaSessao : LinhaDaArvore
     public string RotuloDeRetomar => AbertaAqui ? "Ir para a aba" : "Retomar a conversa";
 
     /// <summary>A estrela da linha, do Segoe Fluent: cheia nas favoritas, vazada nas outras.</summary>
-    public string GlifoDaEstrela => Favorita ? "" : "";
+    public string GlifoDaEstrela => Favorita ? Glifos.EstrelaCheia : Glifos.Estrela;
     public string RotuloDaEstrela => Favorita ? "Tirar das favoritas" : "Favoritar";
 
     public string RotuloDeExcluir => Aberta ? "Excluir conversa (está aberta)" : "Excluir conversa…";
