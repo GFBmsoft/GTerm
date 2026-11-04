@@ -95,6 +95,10 @@ e por isso confirma antes.
   por grupo e pasta para a lista não perder a seleção). A estrela e o ▶ da linha só
   aparecem com o mouse em cima e na escolhida (escondidos, guardam o lugar): a estrela
   favorita ou tira. Cheia, nos favoritos, fica sempre à vista. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
+  A lista não rola sozinha até ela (`AutoScrollToSelectedItem` desligado): o Avalonia agenda
+  uma rolagem a cada vez que a linha muda de lugar, com o lugar daquele instante, e soltar
+  um projeto num subgrupo levava a lista até o fim e de volta. Quem rola é a janela, uma
+  vez, quando a escolha muda.
   Os favoritos são todos numerados, como o `[n]` do cia; Ctrl+1..9 vão aos nove primeiros, e o grupo só aparece com algum à vista. A ordem deles muda arrastando a linha nos
   Favoritos (a linha acompanha o mouse e a ordem só é gravada ao soltar), com Alt+↑/↓ ou
   pelo menu. O menu do clique direito é montado na hora (`MainWindow.MenuDe`), porque o
@@ -252,9 +256,8 @@ e por isso confirma antes.
   outra fonte e ficam onde estão. Diálogos: o rótulo passa por `DialogWindow.Rotular` (a
   tabela `Acoes`). Estilo do conteúdo do botão com `>` (o menu e a paleta da Cor são
   descendentes lógicos do botão: com o seletor de descendente, o que estava dentro deles
-  pegava a cor dele). Botão que não é pílula (título de grupo, aba, versão do rodapé,
-  amostra de cor) precisa do próprio `:pointerover`: o da pílula pinta o fundo com o
-  contorno.
+  pegava a cor dele). Botão que não é pílula (título de grupo, aba, amostra de cor) precisa
+  do próprio `:pointerover`: o da pílula pinta o fundo com o contorno.
 - Comentário XML/XAML não pode conter dois hifens seguidos (quebra o build do Avalonia).
 - Teste que grava o workspace fica na classe `JanelaTests`: o xunit roda classes em
   paralelo e todas dividem a mesma pasta temporária.

@@ -48,6 +48,7 @@ public static class Glifos
     public const string Salvar = "";
     public const string Documento = "";
     public const string Ajustes = "";
+    public const string Atualizar = "";
     public const string Instalar = "";
     public const string Corrigir = "";
 }

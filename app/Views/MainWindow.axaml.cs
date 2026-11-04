@@ -95,6 +95,23 @@ public partial class MainWindow : Window, IDialogService
             }
         }, RoutingStrategies.Tunnel);
         ArrasteNaArvore.Habilitar(lista, _vm);
+
+        // a rolagem até a linha escolhida é daqui, não da lista: a do Avalonia agenda uma a cada
+        // vez que a linha muda de lugar, com o lugar daquele instante, e soltar um projeto num
+        // subgrupo remonta a árvore e muda o lugar dela dezenas de vezes. As rolagens velhas
+        // rodavam depois, uma atrás da outra, e a lista descia até o fim e voltava. Aqui é uma
+        // só, quando a escolha muda, para onde a linha está quando ela roda
+        var rolagemPedida = false;
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(MainViewModel.LinhaSelecionada) || rolagemPedida) return;
+            rolagemPedida = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                rolagemPedida = false;
+                if (lista.SelectedItem is { } linha) lista.ScrollIntoView(linha);
+            });
+        };
         lista.ContextRequested += AbrirMenuDaArvore;
         lista.AddHandler(KeyUpEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);
         lista.AddHandler(PointerPressedEvent, (_, _) => _pelasSetas = false, RoutingStrategies.Tunnel);

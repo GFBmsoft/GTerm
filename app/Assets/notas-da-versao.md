@@ -1,3 +1,7 @@
+## 1.0.0.23 — 04/11/2026
+- **A barra lateral não rola mais sozinha ao soltar um projeto num subgrupo**: antes ela descia até o fim e voltava, e o subgrupo saía da vista. Agora fica onde estava, com o projeto à vista no grupo novo.
+- O botão da versão, no rodapé, virou pílula como os outros, com o ícone de atualizar: azul no dia a dia e verde quando há versão nova. Um clique continua procurando e, havendo versão nova, já pergunta.
+
 ## 1.0.0.22 — 03/11/2026
 - **Visual igual ao das outras ferramentas**: os botões seguem o mesmo padrão do GRepos, do GRemote, do GTest e do GConv, com pílulas, ícones e as mesmas cores para cada tipo de ação. O Abrir o Claude do projeto parado e o Retomar a conversa deixaram de ser o único botão cheio e viraram a pílula verde do Retomar, em negrito.
 - Na barra lateral, o ▶ de cada linha virou uma bolinha verde, e a engrenagem das Preferências, uma bolinha azul. Painel e Terminal ficam acesos em azul enquanto estão abertos.

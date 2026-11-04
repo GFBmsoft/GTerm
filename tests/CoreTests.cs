@@ -931,13 +931,14 @@ public class JanelaTests : IDisposable
             Assert.False(financeiro.TemAbertura);
 
             // a pesquisa começa na altura do cartão do terminal; os outros jeitos de abrir são
-            // pílulas, como Projetos e Sessões em cima, e a escolhida é a acesa. Todas da mesma altura
+            // pílulas, como Projetos e Sessões em cima, e a escolhida é a acesa. Todas da mesma altura,
+            // inclusive a versão no rodapé
             double Topo(Visual v) => v.TranslatePoint(default, janela)!.Value.Y;
             Assert.Equal(Topo(janela.FindControl<Border>("Cartao")!), Topo(janela.FindControl<TextBox>("CaixaDoFiltro")!));
             List<Button> Pilulas() => janela.GetVisualDescendants().OfType<Button>()
                 .Where(b => b.IsEffectivelyVisible && (b.Classes.Contains("pilula") || b.Classes.Contains("aba")))
                 .ToList();
-            Assert.Equal(7, Pilulas().Count(b => b.Classes.Contains("pilula")));
+            Assert.Equal(8, Pilulas().Count(b => b.Classes.Contains("pilula")));
             Assert.DoesNotContain("apagada", Pilulas().Single(b => b.Command == vm.VerProjetosCommand).Classes);
             Assert.Contains("apagada", Pilulas().Single(b => b.Command == vm.VerSessoesCommand).Classes);
             Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
@@ -1880,6 +1881,88 @@ public class JanelaTests : IDisposable
     }
 
     /// <summary>
+    /// Soltar um projeto num subgrupo remonta a árvore, e a linha escolhida muda de lugar a cada
+    /// passo: a lista não pode rolar atrás desses lugares velhos. Ela fica onde estava, com o
+    /// projeto à vista no subgrupo. A escolha pelas setas ou pela aba continua trazendo a linha.
+    /// </summary>
+    [AvaloniaFact]
+    public void SoltarNumSubgrupoNaoRolaALista()
+    {
+        Montar();
+        for (var i = 1; i <= 30; i++)
+        {
+            var pasta = Path.Combine(Bmsoft, $"Modulo{i:00}");
+            Directory.CreateDirectory(pasta);
+            File.WriteAllText(Path.Combine(pasta, "Modulo.dpr"), "");
+        }
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            if (Titulo(vm, "DBISAM").Recolhido) Titulo(vm, "DBISAM").AlternarCommand.Execute(null);
+            var sub = vm.CriarGrupo("Sub", "#1F9D55", vm.CriarGrupo("Fiscal", "#E07B00"));
+            vm.MoverProjeto(Projeto(vm, "Modulo01"), sub);
+            Dispatcher.UIThread.RunJobs();
+            var lista = janela.FindControl<ListBox>("Lista")!;
+            var rolagem = lista.GetVisualDescendants().OfType<ScrollViewer>().First();
+            Assert.True(rolagem.Extent.Height > rolagem.Viewport.Height * 1.5); // a lista rola
+
+            Control Item(Func<LinhaDaArvore, bool> qual) => janela.GetVisualDescendants().OfType<ListBoxItem>()
+                .First(i => i.IsVisible && i.DataContext is LinhaDaArvore l && qual(l));
+            Control Linha(string nome) => Item(l => l is LinhaDoProjeto p && p.Projeto.Nome == nome);
+            Point Em(Control c, double y) => c.TranslatePoint(new Point(80, y), janela)!.Value;
+            bool AVista(Control c) => c.TranslatePoint(default, lista) is { } p &&
+                                      p.Y >= 0 && p.Y + c.Bounds.Height <= rolagem.Viewport.Height + 0.5;
+
+            void Arrastar(Point de, Point para)
+            {
+                janela.MouseDown(de, MouseButton.Left);
+                for (var y = de.Y - 4; y > para.Y; y -= 4)
+                {
+                    janela.MouseMove(new Point(de.X, y), RawInputModifiers.LeftMouseButton);
+                    Dispatcher.UIThread.RunJobs();
+                }
+                janela.MouseMove(para, RawInputModifiers.LeftMouseButton);
+                janela.MouseUp(para, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            // no título do subgrupo; antes, a lista descia até o fim e voltava, e o Sub saía da vista
+            Arrastar(Em(Linha("Modulo10"), 13), Em(Item(l => l is GrupoDaArvore { Titulo: "Sub" }), 13));
+            Assert.Equal(new[] { "Modulo01", "Modulo10" }, Nomes(vm, sub));
+            Assert.Equal(0, rolagem.Offset.Y);
+            Assert.True(AVista(lista.ContainerFromItem(lista.SelectedItem!)!));
+
+            // entre os projetos dele
+            Arrastar(Em(Linha("Modulo12"), 13), Em(Linha("Modulo01"), 4));
+            Assert.Equal(new[] { "Modulo12", "Modulo01", "Modulo10" }, Nomes(vm, sub));
+            Assert.Equal(0, rolagem.Offset.Y);
+
+            // a escolha pela aba traz a linha lá de baixo, e as setas não a deixam sair da vista
+            vm.Ver(Projeto(vm, "Modulo29"));
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(rolagem.Offset.Y > 0);
+            Assert.True(AVista(Linha("Modulo29")));
+            lista.ContainerFromItem(lista.SelectedItem!)!.Focus();
+            for (var k = 0; k < 4; k++)
+            {
+                janela.KeyPress(Key.Up, RawInputModifiers.None, PhysicalKey.ArrowUp, null);
+                janela.KeyRelease(Key.Up, RawInputModifiers.None, PhysicalKey.ArrowUp, null);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.Equal("Modulo25", vm.Selecionado?.Nome);
+            Assert.True(AVista(lista.ContainerFromItem(lista.SelectedItem!)!));
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
     /// Arrastar com o mouse de verdade: para o título de um grupo, para ao lado de outro
     /// projeto, para Ocultos e de volta. Soltar no mesmo lugar não muda nada, e o traço mostra
     /// onde cai enquanto o botão está apertado. O título do grupo arrasta sem recolher.
@@ -2631,7 +2714,10 @@ public class JanelaTests : IDisposable
         Assert.Equal(0, consultas);
     }
 
-    /// <summary>O botão do rodapé com o tamanho das pílulas, e com cara de botão quando há versão nova.</summary>
+    /// <summary>
+    /// O botão do rodapé é pílula como as outras, com ícone e cor: azul com a versão em uso e
+    /// verde (instalar) quando há uma nova. Procurando, não aceita clique, mas continua na cor.
+    /// </summary>
     [AvaloniaFact]
     public void BotaoDoRodapeNaJanela()
     {
@@ -2643,15 +2729,30 @@ public class JanelaTests : IDisposable
             janela.Show();
             Dispatcher.UIThread.RunJobs();
             var botao = janela.FindControl<Button>("BotaoDoRodape")!;
+            var fundo = botao.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First();
+            string Texto() => Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(botao).OfType<TextBlock>().Last().Text!;
+            Avalonia.Media.Color Cor(Avalonia.Media.IBrush? b) => ((Avalonia.Media.ISolidColorBrush)b!).Color;
+            static Avalonia.Media.Color Hex(string h) => Avalonia.Media.Color.Parse(h);
+
             Assert.Equal(24, botao.Bounds.Height);
-            Assert.DoesNotContain("destaque", botao.Classes);
+            Assert.Contains("pilula", botao.Classes);
+            Assert.Equal(Hex("#242F7BE8"), Cor(fundo.Background));
+            Assert.Equal(Glifos.Atualizar, Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(botao).OfType<TextBlock>().First().Text);
+            Assert.StartsWith("GTerm", Texto());
+            Foto(janela, "rodape.png");
 
             vm.AtualizacaoTag = "1.0.0.18";
             Dispatcher.UIThread.RunJobs();
-            Assert.Contains("destaque", botao.Classes);
-            Assert.Equal("Atualizar para 1.0.0.18", botao.Content);
+            Assert.Equal(Hex("#241F9D55"), Cor(fundo.Background));
+            Assert.Equal("Atualizar para 1.0.0.18", Texto());
             Assert.Equal(24, botao.Bounds.Height);
-            Foto(janela, "rodape.png");
+            Foto(janela, "rodape-versao-nova.png");
+
+            // procurando: desligado, mas na cor e com o andamento legível
+            botao.IsEnabled = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Hex("#241F9D55"), Cor(fundo.Background));
+            Assert.Equal(1, botao.Opacity);
         }
         finally
         {
