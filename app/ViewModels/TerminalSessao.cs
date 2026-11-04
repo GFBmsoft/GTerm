@@ -219,10 +219,12 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         EsperaComando = false;
         _relogio.Start();
         var aoSair = arranque.AoSair ?? "processo encerrado — Enter abre outro";
+        var fila = new FilaDeSaida();
 
         pty.Encerrou += () => _ui.Post(() =>
         {
             if (_pty != pty) return; // já foi trocado por um novo
+            Escoar(pty, fila, int.MaxValue); // o que ele escreveu antes de sair vem antes do aviso
             Encerrada = true;
             _relogio.Stop();
             _atividade.Reiniciar();
@@ -231,7 +233,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
             Modelo.Feed("\r\n\x1b[2m[" + aoSair + "]\x1b[0m\r\n");
         });
 
-        Task.Run(() => LerSaida(pty));
+        Task.Run(() => LerSaida(pty, fila));
     }
 
     private void Reabrir(Func<Arranque> arranque)
@@ -250,7 +252,17 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         }
     }
 
-    private void LerSaida(ConPty pty)
+    // o que a tela interpreta de uma vez: uns 30 ms. Entre uma vez e outra a janela desenha
+    // e atende o teclado
+    internal const int SaidaPorVez = 64 * 1024;
+
+    /// <summary>
+    /// Junta o que o processo escreve, e a tela escoa na prioridade de fundo. Antes ia um
+    /// pedaço por vez para a fila na prioridade normal, acima do desenho e do teclado: ao
+    /// retomar uma conversa longa, o Claude despeja a conversa inteira, e a janela parava
+    /// até o fim, com o foco (também de fundo) esperando atrás de tudo.
+    /// </summary>
+    private void LerSaida(ConPty pty, FilaDeSaida fila)
     {
         var buffer = new byte[16 * 1024];
         try
@@ -260,16 +272,8 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
                 var lidos = pty.Saida.Read(buffer, 0, buffer.Length);
                 if (lidos <= 0) break;
 
-                var copia = new byte[lidos];
-                Buffer.BlockCopy(buffer, 0, copia, 0, lidos);
-                _ui.Post(() =>
-                {
-                    if (_pty != pty) return; // resto de um shell já trocado
-                    _atividade.Saida(copia, DateTime.UtcNow);
-                    Estado = _atividade.Estado;
-                    Modelo.Feed(copia, copia.Length);
-                    EnviarComandoDeAbertura();
-                });
+                if (fila.Juntar(buffer, lidos))
+                    _ui.Post(() => Escoar(pty, fila, SaidaPorVez), DispatcherPriority.Background);
             }
         }
         catch (IOException)
@@ -279,6 +283,20 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         catch (ObjectDisposedException)
         {
         }
+    }
+
+    private void Escoar(ConPty pty, FilaDeSaida fila, int maximo)
+    {
+        if (_pty != pty) return; // resto de um shell já trocado
+
+        var (dados, falta) = fila.Tirar(maximo);
+        if (falta) _ui.Post(() => Escoar(pty, fila, SaidaPorVez), DispatcherPriority.Background);
+        if (dados.Length == 0) return;
+
+        _atividade.Saida(dados, DateTime.UtcNow);
+        Estado = _atividade.Estado;
+        Modelo.Feed(dados, dados.Length);
+        EnviarComandoDeAbertura();
     }
 
     // atalho: espera a marca do primeiro prompt; num shell que não a emite (bash com
@@ -383,4 +401,73 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         pty?.Dispose();
         try { File.Delete(_arquivoDeEstado); } catch (IOException) { }
     }
+}
+
+/// <summary>
+/// A saída lida do processo, à espera da tela. A leitura junta e a tela tira, as duas por
+/// aqui, de threads diferentes. Só uma tirada fica agendada por vez, e ela tira sempre em
+/// caractere inteiro: o terminal decodifica cada vez por conta própria, e um UTF-8 cortado
+/// na divisa (a leitura para onde o pipe quiser) virava dois "�".
+/// </summary>
+internal sealed class FilaDeSaida
+{
+    private readonly object _trava = new();
+    private byte[] _dados = new byte[16 * 1024];
+    private int _tamanho;
+    private bool _agendada;
+
+    /// <returns>Se quem chamou deve agendar a tirada: não havia uma agendada.</returns>
+    public bool Juntar(byte[] origem, int quantos)
+    {
+        lock (_trava)
+        {
+            if (_tamanho + quantos > _dados.Length)
+                Array.Resize(ref _dados, Math.Max(_dados.Length * 2, _tamanho + quantos));
+            Buffer.BlockCopy(origem, 0, _dados, _tamanho, quantos);
+            _tamanho += quantos;
+            if (_agendada) return false;
+            _agendada = true;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Até <paramref name="maximo"/> bytes do começo. <c>Falta</c> diz que sobrou o que
+    /// tirar, e quem tirou agenda a próxima; um caractere pela metade no fim espera a
+    /// leitura seguinte, que agenda.
+    /// </summary>
+    public (byte[] Dados, bool Falta) Tirar(int maximo)
+    {
+        lock (_trava)
+        {
+            var n = Inteiros(_dados, Math.Min(_tamanho, maximo));
+            // no máximo não cabe nem um caractere: vai o primeiro, inteiro
+            if (n == 0 && _tamanho > 0 && Tamanho(_dados[0]) <= _tamanho) n = Tamanho(_dados[0]);
+            var dados = _dados.AsSpan(0, n).ToArray();
+            Buffer.BlockCopy(_dados, n, _dados, 0, _tamanho - n);
+            _tamanho -= n;
+            _agendada = Inteiros(_dados, _tamanho) > 0;
+            return (dados, _agendada);
+        }
+    }
+
+    /// <summary>
+    /// Quantos dos primeiros <paramref name="n"/> bytes dá para mandar sem cortar um
+    /// caractere: o último que começa nos três bytes finais, se não estiver completo, fica.
+    /// Byte inválido passa como está, e o decodificador mostra "�" como antes.
+    /// </summary>
+    internal static int Inteiros(byte[] dados, int n)
+    {
+        for (var i = n - 1; i >= Math.Max(n - 3, 0); i--)
+        {
+            var b = dados[i];
+            if ((b & 0xC0) == 0x80) continue; // continuação: o começo está antes
+            return i + Tamanho(b) > n ? i : n;
+        }
+        return n;
+    }
+
+    // quantos bytes tem o caractere que começa com este; continuação ou inválido, um
+    private static int Tamanho(byte b) =>
+        b < 0x80 ? 1 : (b & 0xE0) == 0xC0 ? 2 : (b & 0xF0) == 0xE0 ? 3 : (b & 0xF8) == 0xF0 ? 4 : 1;
 }

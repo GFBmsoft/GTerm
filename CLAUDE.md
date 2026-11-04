@@ -225,6 +225,13 @@ e por isso confirma antes.
   Claude, por padrão, esconde o cursor do terminal e desenha um bloco invertido dele, que
   nada aqui alcança: por isso `Arranque.DoClaude` sobe com `CLAUDE_CODE_NATIVE_CURSOR=1`,
   e ele passa a usar o do terminal.
+- A saída do processo chega à tela pela `FilaDeSaida` (`TerminalSessao`): a leitura junta,
+  e a tela escoa na prioridade de fundo, 64 KB por vez, sem cortar caractere UTF-8. Antes
+  ia um pedaço por vez na prioridade normal, acima do desenho e do teclado: ao retomar uma
+  conversa longa o Claude despeja a conversa inteira, e a janela parava até o fim, com o
+  foco (também de fundo) esperando atrás. O XTerm.NET fica na 1.0.16 ou mais (o porquê
+  está no csproj do vendor): a 1.0.12 do AvaloniaTerminal original não passava de
+  500 KB/s. Despejo de 2 MB pelo pseudoconsole: 8,9 s antes, 1,5 s depois.
 - Terminal que não está à vista não se mede, e o shell espera a medida para subir: por
   isso as sessões dos projetos emprestam a medida umas às outras (`TerminalSessao.Medir`).
   Painel e segundo terminal têm outro tamanho e ficam de fora.

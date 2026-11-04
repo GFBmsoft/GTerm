@@ -1,3 +1,8 @@
+## 1.0.0.25 — 04/11/2026
+- **Abrir e retomar sem a janela travar**: ao retomar uma conversa longa, o Claude mostra a conversa inteira de novo, e o GTerm ficava parado até terminar de exibir tudo, sem atender clique nem teclado, com o cursor demorando a chegar na entrada do Claude. Agora o terminal exibe essa saída umas seis vezes mais rápido, a janela continua respondendo enquanto isso e o teclado já vai para o terminal logo ao abrir.
+- Letras acentuadas e símbolos não viram mais "�" de vez em quando no meio da saída do Claude.
+- Quando o Claude limpa e redesenha a tela, o histórico acima também é apagado, como no Windows Terminal. Antes a conversa podia aparecer repetida ao rolar para cima.
+
 ## 1.0.0.24 — 04/11/2026
 - **Grupos em ordem alfabética**: os projetos dentro dos grupos, dos subgrupos e das pastas ficam sempre por nome, como no GRepos. Arrastar um projeto para um grupo, soltando no título ou em cima de outro projeto, leva-o para o lugar dele pelo nome. Antes ele ia para o fim do grupo ou para onde caía. Grupos que já estavam fora de ordem se arrumam sozinhos.
 - Os Favoritos continuam na ordem que você escolhe, arrastando ou com Alt+↑/↓, porque são os números do cia.

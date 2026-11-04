@@ -5,6 +5,13 @@
     para dentro do repositório para corrigir o que o pacote não deixa mudar: teclas eram
     enviadas ao soltar (atraso ao digitar, acento morto quebrado), cursor só em bloco e
     fundo preso à cor 0 da paleta. Alterações marcadas com "GRepos:".
+
+    XTerm.NET 1.0.16 e não a 1.0.12 do original: a 1.0.12 perguntava ao Unicode.net se
+    cada caractere impresso era emoji, a 2,5 µs cada, e o interpretador não passava de
+    500 KB/s. O Claude, ao retomar uma conversa longa, despeja a conversa inteira: eram
+    segundos com a janela parada. A 1.0.16 faz uns 2 MB/s e corrige as regiões de rolagem
+    (o renderizador do Claude usa) e o ESC[3J, que apagava a tela em vez do histórico.
+    A 2.0 em diante pede o .NET 10.
   -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -18,7 +25,7 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.22" />
-    <PackageReference Include="XTerm.NET" Version="1.0.12" />
+    <PackageReference Include="XTerm.NET" Version="1.0.16" />
   </ItemGroup>
 
 </Project>

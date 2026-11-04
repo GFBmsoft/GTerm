@@ -302,6 +302,85 @@ public class ConPtyTests
     }
 }
 
+/// <summary>O caminho da saída do processo até a tela: a fila entre as duas threads e o interpretador.</summary>
+public class SaidaDoTerminalTests
+{
+    /// <summary>
+    /// A leitura para onde o pipe quiser, e a tela tira um tanto por vez: em qualquer corte,
+    /// o caractere pela metade espera o resto, e nada vira "�".
+    /// </summary>
+    [Fact]
+    public void FilaNaoCortaCaractere()
+    {
+        var bytes = Encoding.UTF8.GetBytes("ação ● ⎿ 😀 fim");
+        foreach (var maximo in new[] { 1, 2, 3, 5, 1024 })
+            for (var corte = 0; corte <= bytes.Length; corte++)
+            {
+                var fila = new FilaDeSaida();
+                var pedacos = new List<string>();
+                void TirarTudo()
+                {
+                    bool falta;
+                    var voltas = 0;
+                    do
+                    {
+                        Assert.True(++voltas <= bytes.Length + 1, "a fila diz que falta e não tira nada");
+                        (var dados, falta) = fila.Tirar(maximo);
+                        // com o máximo menor que o caractere, ele passa inteiro
+                        if (dados.Length > 0) pedacos.Add(Encoding.UTF8.GetString(dados));
+                    } while (falta);
+                }
+
+                fila.Juntar(bytes[..corte], corte);
+                TirarTudo();
+                fila.Juntar(bytes[corte..], bytes.Length - corte);
+                TirarTudo();
+
+                Assert.Equal("ação ● ⎿ 😀 fim", string.Concat(pedacos));
+                Assert.DoesNotContain(pedacos, p => p.Contains('�'));
+            }
+    }
+
+    /// <summary>Só uma tirada agendada por vez: o que chega enquanto ela espera vai junto.</summary>
+    [Fact]
+    public void FilaAgendaUmaVez()
+    {
+        var fila = new FilaDeSaida();
+        var abc = Encoding.UTF8.GetBytes("abc");
+
+        Assert.True(fila.Juntar(abc, 3));
+        Assert.False(fila.Juntar(abc, 3));
+
+        var (dados, falta) = fila.Tirar(4);
+        Assert.Equal("abca", Encoding.UTF8.GetString(dados));
+        Assert.True(falta); // sobrou "bc": quem tirou agenda a próxima
+        Assert.False(fila.Juntar(abc, 3));
+
+        (dados, falta) = fila.Tirar(100);
+        Assert.Equal("bcabc", Encoding.UTF8.GetString(dados));
+        Assert.False(falta);
+        Assert.True(fila.Juntar(abc, 3)); // vazia: a próxima leitura agenda de novo
+    }
+
+    /// <summary>
+    /// O ESC[3J apaga o histórico e deixa a tela, como no Windows Terminal. O Claude manda ao
+    /// redesenhar a conversa; a 1.0.12 do XTerm.NET apagava a tela e guardava o histórico.
+    /// </summary>
+    [AvaloniaFact]
+    public void ApagarOHistoricoDeixaATela()
+    {
+        var modelo = new TerminalControlModel(new TerminalOptions { Cols = 40, Rows = 5, Scrollback = 100 });
+        modelo.Feed(string.Join("\r\n", Enumerable.Range(1, 20).Select(i => "linha " + i)));
+        Assert.True(modelo.MaxScrollback > 0);
+
+        modelo.Feed("\x1b[3J");
+
+        Assert.Equal(0, modelo.MaxScrollback);
+        var tela = string.Join("\n", Enumerable.Range(0, modelo.Terminal.Rows).Select(i => modelo.Terminal.Engine.GetLine(i)));
+        Assert.Contains("linha 20", tela);
+    }
+}
+
 /// <summary>
 /// O que o GTerm lê do cia: as bases, o estado dele (favoritos e recentes) e a sessão que
 /// ele retoma. Tudo em pastas temporárias.
