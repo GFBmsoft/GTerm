@@ -1935,9 +1935,9 @@ public class JanelaTests : IDisposable
             Assert.Equal(0, rolagem.Offset.Y);
             Assert.True(AVista(lista.ContainerFromItem(lista.SelectedItem!)!));
 
-            // entre os projetos dele
+            // em cima de um projeto dele: entra no subgrupo pelo nome, não onde caiu
             Arrastar(Em(Linha("Modulo12"), 13), Em(Linha("Modulo01"), 4));
-            Assert.Equal(new[] { "Modulo12", "Modulo01", "Modulo10" }, Nomes(vm, sub));
+            Assert.Equal(new[] { "Modulo01", "Modulo10", "Modulo12" }, Nomes(vm, sub));
             Assert.Equal(0, rolagem.Offset.Y);
 
             // a escolha pela aba traz a linha lá de baixo, e as setas não a deixam sair da vista
@@ -1963,9 +1963,10 @@ public class JanelaTests : IDisposable
     }
 
     /// <summary>
-    /// Arrastar com o mouse de verdade: para o título de um grupo, para ao lado de outro
-    /// projeto, para Ocultos e de volta. Soltar no mesmo lugar não muda nada, e o traço mostra
-    /// onde cai enquanto o botão está apertado. O título do grupo arrasta sem recolher.
+    /// Arrastar com o mouse de verdade: para o título de um grupo, para em cima de um projeto
+    /// dele, para Ocultos e de volta. No grupo e na base o projeto fica pelo nome, como no
+    /// GRepos, e o grupo que recebe acende enquanto o botão está apertado. Soltar no mesmo
+    /// lugar não muda nada. O título do grupo arrasta sem recolher.
     /// </summary>
     [AvaloniaFact]
     public void ArrastarProjetosEGruposNaArvore()
@@ -1987,6 +1988,7 @@ public class JanelaTests : IDisposable
                 .Single(i => i.DataContext is LinhaDaArvore l && qual(l));
             Point Meio(Control c) => c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), janela)!.Value;
             Point Cima(Control c) => c.TranslatePoint(new Point(c.Bounds.Width / 2, 4), janela)!.Value;
+            Point Baixo(Control c) => c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height - 4), janela)!.Value;
             Control Linha(string grupo, string nome) =>
                 Item(l => l is LinhaDoProjeto p && p.Grupo == grupo && p.Projeto.Nome == nome);
             Control Grupo(string nome) => Item(l => l is GrupoDaArvore g && g.Titulo == nome);
@@ -2009,20 +2011,19 @@ public class JanelaTests : IDisposable
             Assert.Equal(new[] { "Notas" }, Nomes(vm, fiscal));
             Assert.Equal(new[] { "Financeiro" }, Nomes(vm, "base:" + Bmsoft));
 
-            // ao lado de outro projeto: em cima dele, com o traço naquela linha
-            Arrastar(Meio(Linha("base:" + Bmsoft, "Financeiro")), Cima(Linha(fiscal, "Notas")), () =>
+            // na metade de baixo de outro projeto: entra no grupo, que acende, e fica pelo nome,
+            // antes dele. O traço entre as linhas é dos Favoritos: aqui não há lugar a escolher
+            Arrastar(Meio(Linha("base:" + Bmsoft, "Financeiro")), Baixo(Linha(fiscal, "Notas")), () =>
             {
-                var alvo = vm.Linhas.OfType<LinhaDoProjeto>().Single(l => l.Grupo == fiscal);
-                Assert.True(alvo.SoltarAntes);
-                Assert.False(alvo.SoltarDepois);
+                Assert.True(Titulo(vm, "Fiscal").AlvoDeSoltar);
+                Assert.All(vm.Linhas.OfType<LinhaDoProjeto>(), l => Assert.False(l.SoltarAntes || l.SoltarDepois));
             });
             Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, fiscal));
-            Assert.All(vm.Linhas.OfType<LinhaDoProjeto>(), l => Assert.False(l.SoltarAntes || l.SoltarDepois));
+            Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(new MainViewModel(new Dialogos()), fiscal));
 
-            // dentro do grupo muda a ordem, e ela fica gravada
+            // dentro do grupo não há o que mudar
             Arrastar(Meio(Linha(fiscal, "Notas")), Cima(Linha(fiscal, "Financeiro")));
-            Assert.Equal(new[] { "Notas", "Financeiro" }, Nomes(vm, fiscal));
-            Assert.Equal(new[] { Notas, Financeiro }, WorkspaceStore.Load().Grupos.Single(g => g.Id == fiscal).Itens);
+            Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, fiscal));
 
             // a base não aceita projeto de outra base; a dele, sim
             Arrastar(Meio(Linha("base:" + Particular, "GTerm")), Meio(Grupo("DBISAM")));
@@ -2030,13 +2031,13 @@ public class JanelaTests : IDisposable
             Arrastar(Meio(Linha(fiscal, "Notas")), Meio(Grupo("DBISAM")));
             Assert.Equal(new[] { "Notas" }, Nomes(vm, "base:" + Bmsoft));
 
-            // dentro da base a ordem também muda: fica gravada, e o que chegar depois vai para o fim
+            // na base também é pelo nome: quem volta para ela volta para o lugar dele, e arrastar
+            // dentro dela não muda nada
             vm.MoverProjeto(Projeto(vm, "Financeiro"), "base:" + Bmsoft);
             Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, "base:" + Bmsoft));
             Dispatcher.UIThread.RunJobs();
             Arrastar(Meio(Linha("base:" + Bmsoft, "Notas")), Cima(Linha("base:" + Bmsoft, "Financeiro")));
-            Assert.Equal(new[] { "Notas", "Financeiro" }, Nomes(vm, "base:" + Bmsoft));
-            Assert.Equal(new[] { "Notas", "Financeiro" }, Nomes(new MainViewModel(new Dialogos()), "base:" + Bmsoft));
+            Assert.Equal(new[] { "Financeiro", "Notas" }, Nomes(vm, "base:" + Bmsoft));
 
             // nos Favoritos: da base para o título ele vira favorito e fica na base também
             Arrastar(Meio(Linha("base:" + Particular, "GTerm")), Meio(Grupo("Favoritos")));

@@ -1,3 +1,7 @@
+## 1.0.0.24 — 04/11/2026
+- **Grupos em ordem alfabética**: os projetos dentro dos grupos, dos subgrupos e das pastas ficam sempre por nome, como no GRepos. Arrastar um projeto para um grupo, soltando no título ou em cima de outro projeto, leva-o para o lugar dele pelo nome. Antes ele ia para o fim do grupo ou para onde caía. Grupos que já estavam fora de ordem se arrumam sozinhos.
+- Os Favoritos continuam na ordem que você escolhe, arrastando ou com Alt+↑/↓, porque são os números do cia.
+
 ## 1.0.0.23 — 04/11/2026
 - **A barra lateral não rola mais sozinha ao soltar um projeto num subgrupo**: antes ela descia até o fim e voltava, e o subgrupo saía da vista. Agora fica onde estava, com o projeto à vista no grupo novo.
 - O botão da versão, no rodapé, virou pílula como os outros, com o ícone de atualizar: azul no dia a dia e verde quando há versão nova. Um clique continua procurando e, havendo versão nova, já pergunta.

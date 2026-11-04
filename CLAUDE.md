@@ -107,13 +107,16 @@ e por isso confirma antes.
   ação que é pílula tem o glifo e a cor da pílula, e o grupo, a bolinha da cor dele.
 - **Grupos** — grupos e subgrupos como os do GRepos, nos dois modos (`ViewModels/Grupos.cs`,
   `GrupoArvore`): `Workspace.Grupos` e `GruposDasSessoes`, listas planas com o pai, e
-  `Grupo.Itens` com o conteúdo na ordem da árvore (pastas ou ids de conversa). Ficam no
-  workspace: o cia e o cl não sabem deles. Uma base é um grupo fixo (`GruposDosProjetos`):
-  recebe subgrupos, cor e ordem, mas não muda de nome nem de lugar, e só aceita os projetos
-  dela; entra em `Workspace.Grupos` só ao ganhar cor ou ordem. Projeto sem grupo fica na
-  base, conversa sem grupo fica no dia dela. Arrastar (`Views/ArrasteNaArvore.cs`, com
-  captura do ponteiro, não o drag do sistema) marca o destino com um traço e o título
-  aceso; quem decide o que cabe é `MainViewModel.OndeCai`. Soltar nos Favoritos favorita,
+  `Grupo.Itens` com o conteúdo (pastas ou ids de conversa). Ficam no workspace: o cia e o cl
+  não sabem deles. O projeto fica sempre pelo nome, no grupo e na base, como no GRepos
+  (pedido do usuário: soltar no fim do grupo desfazia a ordem alfabética); a ordem é do
+  usuário só nos Favoritos (os números do cia) e nas conversas dos grupos, na ordem de
+  `Itens`. Uma base é um grupo fixo (`GruposDosProjetos`): recebe subgrupos e cor, mas não
+  muda de nome nem de lugar, e só aceita os projetos dela; entra em `Workspace.Grupos` só ao
+  ganhar cor. Projeto sem grupo fica na base, conversa sem grupo fica no dia dela. Arrastar
+  (`Views/ArrasteNaArvore.cs`, com captura do ponteiro, não o drag do sistema) acende o
+  título do grupo que recebe e, onde a ordem é do usuário, um traço marca o lugar; quem
+  decide o que cabe é `MainViewModel.OndeCai`. Soltar nos Favoritos favorita,
   em Ocultos oculta. Grupo dentro de grupo também arrasta; para a raiz, só pela edição.
   Ocultar (`Workspace.Ocultos`, `SessoesOcultas`) tira de todos os grupos sem esquecer
   onde estava; o favorito oculto guarda o número, para continuar igual ao do cia. A

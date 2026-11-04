@@ -55,8 +55,9 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Os projetos à vista de cada grupo, na ordem da árvore. Num grupo do usuário a ordem é a
-    /// dele; na base, a ordem gravada e, depois, os que ainda não têm lugar, por nome.
+    /// Os projetos à vista de cada grupo, por nome, como no GRepos e na pasta do cia: o grupo
+    /// guarda só quem está nele. A ordem do usuário fica para os Favoritos, que são os números
+    /// do cia e não passam por aqui.
     /// </summary>
     private Dictionary<string, List<ProjetoViewModel>> ProjetosPorGrupo(List<Grupo> todos, Func<ProjetoViewModel, bool> visivel)
     {
@@ -73,13 +74,11 @@ public sealed partial class MainViewModel
                     porGrupo[g.Id].Add(p);
 
         foreach (var g in todos.Where(g => EhBase(g.Id)))
-        {
-            var ordem = new Dictionary<string, int>(Chaves);
-            foreach (var pasta in g.Itens) ordem.TryAdd(pasta, ordem.Count);
-            porGrupo[g.Id].AddRange(Projetos
-                .Where(p => IdDaBase(p.Info.Base) == g.Id && visivel(p) && !colocados.Contains(p))
-                .OrderBy(p => ordem.GetValueOrDefault(p.Pasta, int.MaxValue))); // estável: o resto fica por nome
-        }
+            porGrupo[g.Id].AddRange(Projetos.Where(p => IdDaBase(p.Info.Base) == g.Id && visivel(p) && !colocados.Contains(p)));
+
+        // a mesma comparação da pasta do cia (Cia.Projetos), para o grupo e a base concordarem
+        foreach (var lista in porGrupo.Values)
+            lista.Sort((a, b) => string.Compare(a.Nome, b.Nome, StringComparison.CurrentCultureIgnoreCase));
         return porGrupo;
     }
 
@@ -297,9 +296,10 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// Onde cai o que foi arrastado com o ponteiro sobre <paramref name="alvo"/>, se couber.
-    /// Título é o fim do grupo; linha é ao lado dela, onde a ordem é do usuário. Null quando
-    /// não há o que fazer: o destino é onde ele já está, a base não é a do projeto, ou um grupo
-    /// iria para dentro de si mesmo.
+    /// Título é o grupo; linha é ao lado dela, onde a ordem é do usuário: nos Favoritos e nos
+    /// grupos das conversas. Projeto nos outros grupos fica por nome. Null quando não há o que
+    /// fazer: o destino é onde ele já está, a base não é a do projeto, ou um grupo iria para
+    /// dentro de si mesmo.
     /// </summary>
     /// <param name="depois">O ponteiro está na metade de baixo da linha.</param>
     public DestinoDoArraste? OndeCai(LinhaDaArvore origem, LinhaDaArvore? alvo, bool depois)
@@ -312,7 +312,7 @@ public sealed partial class MainViewModel
         if (origem is LinhaDoProjeto { Projeto: var a } && alvo is LinhaDoProjeto { Projeto: var b } && a == b) return null;
         if (origem is LinhaDaSessao { Sessao.Id: var c } && alvo is LinhaDaSessao { Sessao.Id: var d } && c == d) return null;
 
-        var ordemDoUsuario = id == GrupoFavoritos || EhEditavel(id);
+        var ordemDoUsuario = id == GrupoFavoritos || origem is LinhaDaSessao && EhEditavel(id);
         var vizinha = alvo is GrupoDaArvore || origem is GrupoDaArvore || !ordemDoUsuario ? null : alvo;
 
         var cabe = origem switch
@@ -411,8 +411,9 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Leva o projeto para o grupo, ao lado do vizinho ou no fim. Na base ele sai dos grupos e
-    /// volta para o lugar dele. Nos Favoritos fica também onde está; em Ocultos, some.
+    /// Leva o projeto para o grupo, onde ele fica pelo nome. Na base ele sai dos grupos e volta
+    /// para a pasta dele. Nos Favoritos fica também onde está, ao lado do vizinho ou no fim; em
+    /// Ocultos, some.
     /// </summary>
     public void MoverProjeto(ProjetoViewModel p, string destino, ProjetoViewModel? vizinho = null, bool depois = false)
     {
@@ -427,19 +428,12 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var ordem = ProjetosPorGrupo(GruposDosProjetos(), _ => true).GetValueOrDefault(destino);
+        if (!EhBase(destino) && GrupoGravado(destino) is null) return;
         _workspace.Ocultos.RemoveAll(o => Chaves.Equals(o, p.Pasta));
         foreach (var g in _workspace.Grupos) g.Itens.RemoveAll(i => Chaves.Equals(i, p.Pasta));
 
-        // na base só há o que gravar quando ele ganha um lugar: a ordem de quem está lá
-        // passa a ser explícita. Sem lugar, ele volta para a ordem que ela já tinha
-        if (!EhBase(destino) || vizinho is not null)
-        {
-            var grupo = GrupoGravado(destino);
-            if (grupo is null) return;
-            if (EhBase(destino)) grupo.Itens = ordem!.Where(x => x != p).Select(x => x.Pasta).ToList();
-            Inserir(grupo.Itens, p.Pasta, vizinho?.Pasta, depois);
-        }
+        // o lugar é pelo nome: o grupo guarda só quem está nele, e a base, nem isso
+        if (!EhBase(destino)) GrupoGravado(destino)!.Itens.Add(p.Pasta);
 
         AbrirGrupos(destino);
         Salvar();
@@ -496,7 +490,7 @@ public sealed partial class MainViewModel
             .ToList();
     }
 
-    /// <summary>A escolha no menu "Mover para": vai para o fim do grupo.</summary>
+    /// <summary>A escolha no menu "Mover para": o projeto fica pelo nome, a conversa vai para o fim.</summary>
     public void MoverPara(LinhaDaArvore linha, string destino)
     {
         if (linha is LinhaDoProjeto p) MoverProjeto(p.Projeto, destino);
