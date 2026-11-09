@@ -207,10 +207,10 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public IBrush FundoDaAba => AVista ? Fundo : Brushes.Transparent;
     public IBrush BordaDaAba => AVista ? Cor : Brushes.Transparent;
 
-    /// <summary>A sessão que o cia retoma; null sem sessão com conversa.</summary>
+    /// <summary>A última sessão com conversa do projeto; null sem nenhuma.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RotuloDeAbrir), nameof(TextoDaSessao), nameof(TemTextoDaSessao),
-        nameof(TemSessao), nameof(QuandoDaSessao), nameof(TamanhoDaSessao))]
+        nameof(TemSessao), nameof(QuandoDaSessao), nameof(TamanhoDaSessao), nameof(Retomavel), nameof(PodeContinuar))]
     private UltimaSessao? _ultimaSessao;
 
     /// <summary>A sessão já foi procurada: até lá, o texto embaixo do botão fica vazio.</summary>
@@ -218,15 +218,37 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(TextoDaSessao), nameof(TemTextoDaSessao))]
     private bool _sessaoLida;
 
-    public string RotuloDeAbrir => UltimaSessao is null ? "Abrir o Claude" : "Retomar a sessão";
+    /// <summary>O botão de abrir retoma a última sessão: ela é de hoje e pequena (<see cref="Cia.Retomavel"/>).</summary>
+    public bool Retomavel => UltimaSessao is { } s && Cia.Retomavel(s, DateTime.Now);
+
+    /// <summary>Há uma sessão que o abrir não retoma: o Continuar retoma mesmo assim.</summary>
+    public bool PodeContinuar => UltimaSessao is not null && !Retomavel;
+
+    public string RotuloDeAbrir => Retomavel ? "Retomar a sessão" : "Abrir o Claude";
+
+    private string Skill => EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto";
 
     /// <summary>
-    /// Embaixo do botão de abrir, o que o cia vai fazer de diferente: sem sessão, a skill. A
-    /// sessão em si está no quadro.
+    /// Embaixo do botão de abrir, o que o cia vai fazer de diferente: sem sessão, ou com uma
+    /// antiga ou grande, a skill numa sessão nova. A sessão em si está no quadro.
     /// </summary>
-    public string TextoDaSessao => !SessaoLida || UltimaSessao is not null ? ""
-        : "Nenhuma sessão com conversa: abre " +
-          (EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto");
+    public string TextoDaSessao => !SessaoLida || Retomavel ? ""
+        : UltimaSessao is not { } s ? "Nenhuma sessão com conversa: abre " + Skill
+        : $"A última sessão {PorQueNaoRetoma(s)}: abre uma sessão nova {Skill}. Ela fica guardada.";
+
+    private static string PorQueNaoRetoma(UltimaSessao s)
+    {
+        var antiga = s.Quando.Date != DateTime.Today;
+        var tamanho = s.Contexto is { } c
+            ? (c >= Cia.LimiteParaRetomar ? "tem " + Cia.Tokens(c) + " de contexto" : "")
+            : "não teve o contexto medido";
+        return (antiga, tamanho.Length > 0) switch
+        {
+            (true, true) => "não é de hoje e " + tamanho,
+            (true, false) => "não é de hoje",
+            _ => tamanho,
+        };
+    }
 
     public bool TemTextoDaSessao => TextoDaSessao.Length > 0;
 
@@ -305,7 +327,10 @@ public sealed partial class ProjetoViewModel : ObservableObject
 
     public bool TemSessao => UltimaSessao is not null;
     public string QuandoDaSessao => UltimaSessao is { } s ? "sessão " + Cia.Quando(s.Quando, DateTime.Now) : "";
-    public string TamanhoDaSessao => UltimaSessao is { } s ? Cia.Tamanho(s.KB) : "";
+    // o contexto é o que pesa a cada turno; sem ele medido, o tamanho do .jsonl
+    public string TamanhoDaSessao => UltimaSessao is { } s
+        ? s.Contexto is { } c ? Cia.Tokens(c) : Cia.Tamanho(s.KB)
+        : "";
 
     /// <summary>A última vez que o cia (ou o GTerm) abriu o projeto: o recente dele.</summary>
     [ObservableProperty]
@@ -381,6 +406,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [RelayCommand] private Task Iniciar() => _main.IniciarAsync(this);
     [RelayCommand] private Task AbrirClaude() => _main.AbrirAsync(this);
     [RelayCommand] private Task SessaoNova() => _main.AbrirAsync(this, "-Novo");
+    [RelayCommand] private Task Continuar() => _main.AbrirAsync(this, Cia.ModoContinuar);
     [RelayCommand] private Task SemSkill() => _main.AbrirAsync(this, "-Limpo");
     [RelayCommand] private Task PullRequest() => _main.AbrirAsync(this, "-Pr");
     [RelayCommand] private Task Pedido() => _main.AbrirPedidoAsync(this);
@@ -1195,17 +1221,18 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Abre o Claude no terminal do projeto se ainda não houver um.</summary>
-    /// <param name="modo">-Novo, -Limpo, -Pr ou o número do pedido; null retoma a última sessão.</param>
+    /// <param name="modo">-Novo, -Limpo, -Pr, -Continuar ou o número do pedido; null abre como o cia.</param>
     private void Abrir(ProjetoViewModel p, string? modo = null)
     {
         if (p.Sessao is null)
         {
-            // o Enter depois de sair do Claude retoma a sessão: o modo pedido aqui vale uma vez
+            // o modo pedido aqui vale uma vez. O Enter depois de sair do Claude continua a sessão
+            // que estava ali, grande ou não: é o que o aviso do terminal promete
             var daVez = modo;
             var sessao = new TerminalSessao(() =>
             {
                 var arranque = ArranqueDoClaude(p, daVez);
-                daVez = null;
+                daVez = Cia.ModoContinuar;
                 return arranque;
             });
             try
@@ -1477,7 +1504,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     private static string Descrever(string? modo) => modo switch
     {
-        null => ", retomando a última sessão",
+        null => " como o cia abriria",
+        Cia.ModoContinuar => ", continuando a última sessão",
         "-Novo" => " numa sessão nova",
         "-Limpo" => " sem skill",
         "-Pr" => " no pull request",

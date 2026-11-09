@@ -436,8 +436,8 @@
                 Background="{Binding FundoDaBarra}" BorderBrush="{Binding BordaDaBarra}">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="4">
-              <Button Classes="pilula verde" Command="{Binding AbrirClaudeCommand}"
-                      ToolTip.Tip="Abre de novo retomando a última sessão, como o cia">
+              <Button Classes="pilula verde" Command="{Binding ContinuarCommand}"
+                      ToolTip.Tip="Abre de novo continuando a última sessão, mesmo grande ou de outro dia">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Retomar}" />
                   <TextBlock Text="Retomar" />
@@ -692,7 +692,7 @@
 
             <Button Classes="verde principal" HorizontalAlignment="Center"
                     Command="{Binding Selecionado.IniciarCommand}"
-                    ToolTip.Tip="Retoma a última sessão do projeto, como o cia">
+                    ToolTip.Tip="Abre como o cia: retoma a última sessão só se ela for de hoje e tiver menos de 150 mil tokens de contexto">
               <StackPanel Classes="comIcone" Spacing="8">
                 <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Retomar}" />
                 <TextBlock Text="{Binding Selecionado.RotuloDeAbrir}" />
@@ -704,6 +704,14 @@
             <!-- os outros jeitos de abrir, em pílula colorida como as do GTest: fundo diluído
                  e contorno na cor de cada um -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+              <Button Classes="pilula verde" Command="{Binding Selecionado.ContinuarCommand}"
+                      IsVisible="{Binding Selecionado.PodeContinuar}"
+                      ToolTip.Tip="Retoma a última sessão mesmo assim, como o cia -Continuar">
+                <StackPanel Classes="comIcone">
+                  <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Retomar}" />
+                  <TextBlock Text="Continuar a última" />
+                </StackPanel>
+              </Button>
               <Button Classes="pilula azul" Command="{Binding Selecionado.SessaoNovaCommand}"
                       ToolTip.Tip="Começa do zero, sem retomar a última sessão">
                 <StackPanel Classes="comIcone">

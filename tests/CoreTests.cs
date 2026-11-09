@@ -524,26 +524,88 @@ public class CiaTests : IDisposable
         Assert.Equal("Ajuste no boleto", s.Titulo);
         Assert.Equal(hoje.AddHours(-2), s.Quando);
         Assert.Equal(2, s.KB);
+        Assert.Equal(0, s.Contexto); // lida inteira, sem resposta do Claude
+    }
+
+    // uma resposta do Claude no .jsonl, com o uso que ele grava
+    private static string Resposta(long cache, bool subagente = false) =>
+        $$$"""{"parentUuid":"x","isSidechain":{{{(subagente ? "true" : "false")}}},"message":{"model":"claude-opus-5-5","id":"m{{{cache}}}","type":"message","usage":{"input_tokens":5,"cache_creation_input_tokens":{{{cache}}},"cache_read_input_tokens":{{{cache}}},"output_tokens":10}},"type":"assistant"}""";
+
+    /// <summary>
+    /// O contexto que a sessão relê a cada turno, como o Get-ContextoDaSessao do cia-dash: o uso
+    /// da última resposta, o postTokens de um /compact ainda sem resposta, sem os subagentes, e
+    /// null quando o fim do arquivo não tem nenhum dos dois.
+    /// </summary>
+    [Fact]
+    public void ContextoDaSessaoVemDaUltimaResposta()
+    {
+        Directory.CreateDirectory(_raiz);
+        long? Contexto(params string[] linhas)
+        {
+            var arquivo = Path.Combine(_raiz, Guid.NewGuid() + ".jsonl");
+            File.WriteAllLines(arquivo, linhas);
+            return Cia.ContextoDaSessao(arquivo);
+        }
+        const string titulo = """{"type":"ai-title","aiTitle":"Teste"}""";
+
+        Assert.Equal(40_005, Contexto(titulo, Resposta(90_000), Resposta(20_000)));
+        Assert.Equal(7_862, Contexto(titulo, Resposta(150_000),
+            """{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":300010,"postTokens":7862}}"""));
+        Assert.Equal(50_005, Contexto(titulo, Resposta(25_000), Resposta(499, subagente: true)));
+        Assert.Equal(0, Contexto(titulo, """{"type":"user","message":{"role":"user","content":"oi"}}"""));
+
+        // uma resposta lá atrás e 5 MB de saída de ferramenta depois: não dá para medir
+        Assert.Null(Contexto(titulo, Resposta(20_000), new string('x', 5 * 1024 * 1024)));
+        // a resposta cortada no começo do trecho lido não quebra a leitura: vale a do trecho maior
+        var longa = $$$"""{"isSidechain":false,"message":{"content":"{{{new string('x', 600 * 1024)}}}","usage":{"input_tokens":5,"cache_creation_input_tokens":20000,"cache_read_input_tokens":20000}},"type":"assistant"}""";
+        Assert.Equal(40_005, Contexto(longa));
     }
 
     /// <summary>As decisões do Open-CIA, uma por linha: é o que o Claude recebe na linha de comando.</summary>
     [Fact]
     public void AberturaDecididaComoOCia()
     {
-        var pequena = new UltimaSessao("abc", DateTime.Now, 120, "Boleto");
-        var grande = pequena with { KB = 500_000 };
+        var agora = new DateTime(2026, 11, 9, 15, 0, 0);
+        var pequena = new UltimaSessao("abc", agora.AddHours(-1), 120, "Boleto", 40_000);
+        var grande = pequena with { KB = 500_000, Contexto = 300_000 };
+        var deOntem = pequena with { Quando = agora.AddDays(-1) };
+        var semMedida = pequena with { Contexto = null };
         UltimaSessao? NaoProcura() => throw new InvalidOperationException("a sessão não devia ser procurada");
 
-        Assert.Equal(new Abertura("--resume abc", "retomada", ""), Cia.Decidir(null, true, () => pequena));
+        Assert.Equal(new Abertura("--resume abc", "retomada", ""), Cia.Decidir(null, true, () => pequena, agora));
 
-        // de propósito, diferente do cia: sessão grande não compacta ao abrir. É o botão da aba
-        Assert.Equal(new Abertura("--resume abc", "retomada", ""), Cia.Decidir(null, false, () => grande));
+        // de ontem, grande ou sem medida: sessão nova na skill, como o cia. A antiga fica guardada
+        Assert.Equal(new Abertura("/retomar", "memória", ""), Cia.Decidir(null, false, () => grande, agora));
+        Assert.Equal(new Abertura("/delphi-writer", "writer", ""), Cia.Decidir(null, true, () => deOntem, agora));
+        Assert.Equal(new Abertura("/delphi-writer", "writer", ""), Cia.Decidir(null, true, () => semMedida, agora));
+
+        // o -Continuar retoma mesmo assim. De propósito, diferente do cia: não compacta ao abrir,
+        // é o botão da aba
+        Assert.Equal(new Abertura("--resume abc", "retomada", ""), Cia.Decidir(Cia.ModoContinuar, false, () => grande, agora));
+        Assert.Equal(new Abertura("--resume abc", "retomada", ""), Cia.Decidir(Cia.ModoContinuar, true, () => deOntem, agora));
+        Assert.Equal(new Abertura("/retomar", "memória", ""), Cia.Decidir(Cia.ModoContinuar, false, () => null, agora));
+
         Assert.Equal(new Abertura("/delphi-writer", "writer", ""), Cia.Decidir(null, true, () => null));
         Assert.Equal(new Abertura("/retomar", "memória", ""), Cia.Decidir(null, false, () => null));
         Assert.Equal(new Abertura("/delphi-writer", "writer", ""), Cia.Decidir("-Novo", true, NaoProcura));
         Assert.Equal(new Abertura("\"/pedido 6529\"", "writer", "6529"), Cia.Decidir("6529", true, NaoProcura));
         Assert.Equal(new Abertura("/delphi-pr", "pr", ""), Cia.Decidir("-Pr", true, NaoProcura));
         Assert.Equal(new Abertura("", "limpo", ""), Cia.Decidir("-Limpo", false, NaoProcura));
+    }
+
+    [Fact]
+    public void RegraDeRetomarETokens()
+    {
+        var agora = new DateTime(2026, 11, 9, 0, 30, 0);
+        var s = new UltimaSessao("abc", agora.AddMinutes(-10), 10, "x", Cia.LimiteParaRetomar - 1);
+        Assert.True(Cia.Retomavel(s, agora));
+        Assert.False(Cia.Retomavel(s with { Contexto = Cia.LimiteParaRetomar }, agora));
+        Assert.False(Cia.Retomavel(s with { Quando = agora.AddHours(-1) }, agora)); // 23:30 de ontem
+        Assert.False(Cia.Retomavel(s with { Contexto = null }, agora));
+
+        Assert.Equal("contexto ?", Cia.Tokens(null));
+        Assert.Equal("850 tokens", Cia.Tokens(850));
+        Assert.Equal("150 mil tokens", Cia.Tokens(149_600));
     }
 
     [Fact]
@@ -1139,9 +1201,29 @@ public class JanelaTests : IDisposable
             Assert.Contains(quadro, t => t?.StartsWith("aberto há 2") == true); // os 20 min do Montar, e o que o teste levou
             Assert.DoesNotContain("limpo", quadro);
             Assert.DoesNotContain("sem git", quadro);
+            // a sessão de ontem, sem o contexto medido, não é retomada: o botão abre uma nova, o
+            // texto diz por quê, e o Continuar aparece
+            Assert.Equal("Abrir o Claude", notas.RotuloDeAbrir);
+            Assert.Equal("A última sessão não é de hoje e não teve o contexto medido: abre uma sessão nova " +
+                         "na /delphi-writer. Ela fica guardada.", notas.TextoDaSessao);
+            Assert.True(notas.PodeContinuar);
+
+            // a de hoje, pequena, é: nada a avisar, e o contexto no lugar do tamanho
+            notas.UltimaSessao = notas.UltimaSessao! with { Quando = DateTime.Now, Contexto = 40_000 };
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains("40 mil tokens", Quadro(janela));
             Assert.Equal("Retomar a sessão", notas.RotuloDeAbrir);
-            Assert.Equal("", notas.TextoDaSessao); // com sessão, nada a avisar
+            Assert.Equal("", notas.TextoDaSessao);
             Assert.False(notas.TemTextoDaSessao);
+            Assert.False(notas.PodeContinuar);
+
+            // grande, de hoje: o motivo é o tamanho
+            notas.UltimaSessao = notas.UltimaSessao! with { Contexto = 480_000 };
+            Assert.Equal("A última sessão tem 480 mil tokens de contexto: abre uma sessão nova na /delphi-writer. " +
+                         "Ela fica guardada.", notas.TextoDaSessao);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains("Continuar a última", janela.GetVisualDescendants().OfType<TextBlock>()
+                .Where(t => t.IsEffectivelyVisible).Select(t => t.Text));
             Foto(janela, "quadro.png");
         }
         finally

@@ -257,6 +257,7 @@ public partial class MainWindow : Window, IDialogService
 
             case LinhaDoProjeto { Projeto: var p } l:
                 Comando("Abrir o Claude", Glifos.Retomar, "verde", p.AbrirClaudeCommand);
+                Comando("Continuar a última sessão", Glifos.Retomar, "verde", p.ContinuarCommand);
                 Comando("Sessão nova", Glifos.SessaoNova, "azul", p.SessaoNovaCommand);
                 if (p.EhDaBmsoft)
                 {

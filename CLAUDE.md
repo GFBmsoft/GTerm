@@ -80,11 +80,17 @@ e por isso confirma antes.
   pseudoconsole, sem shell** (`Arranque.DoClaude`, `claude.exe` do PATH ou de
   `~\.local\bin`): `Cia.Decidir` repete o `Open-CIA` do perfil (`Modules\aliases.ps1`) —
   retomar a última sessão com conversa (`UltimaSessao`, o `Get-UltimaSessao` do cia-dash)
-  ou abrir na skill do modo (`/delphi-writer` na primeira base, `/retomar` nas outras,
-  `/pedido N`, `/delphi-pr`, nenhuma). **Mudou lá, muda aqui.** A exceção de propósito é o
-  `/compact` que o cia manda a partir de 300 KB: o .jsonl nunca diminui, então toda
-  retomada compactava de novo, com mediana de 49 s até o Claude responder. Aqui ele é o
-  botão Compactar da barra da aba. Com um Claude já aberto, outro modo só depois de confirmar. Ao sair do
+  **só se ela for de hoje e tiver contexto abaixo de 150 mil tokens** (`Cia.Retomavel`,
+  `$global:CiaRetomarTokens` no cia, desde 09/11/2026), senão abrir na skill do modo
+  (`/delphi-writer` na primeira base, `/retomar` nas outras, `/pedido N`, `/delphi-pr`,
+  nenhuma). O contexto é o uso da última resposta, lido do fim do .jsonl
+  (`Cia.ContextoDaSessao`, o `Get-ContextoDaSessao` do cia-dash); o tamanho do arquivo não
+  serve, porque nunca diminui. O `-Continuar` (botão Continuar a última, o Retomar da barra
+  da aba e o Enter depois de sair do Claude) retoma mesmo antiga ou grande. Motivo: cada
+  turno relê o contexto inteiro, e as sessões retomadas dia após dia chegavam perto de 1M.
+  **Mudou lá, muda aqui.** A exceção de propósito é o `/compact` que o cia manda ao
+  continuar uma sessão grande (mediana de 49 s até o Claude responder): aqui ele é o botão
+  Compactar da barra da aba. Com um Claude já aberto, outro modo só depois de confirmar. Ao sair do
   Claude o terminal fica com o aviso, e o Enter sobe outro retomando a sessão. O segundo
   terminal continua sendo um shell. Vigias de pasta (`FileSystemWatcher`) relêem o estado
   quando o cia grava um recente e a base quando aparece pasta nova.

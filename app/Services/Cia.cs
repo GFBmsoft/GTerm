@@ -26,8 +26,12 @@ public sealed record EstadoDoCia(IReadOnlyList<string> Favoritos, IReadOnlyList<
     public static readonly EstadoDoCia Vazio = new(Array.Empty<string>(), Array.Empty<Recente>());
 }
 
-/// <summary>A sessão do Claude que o cia retoma no projeto.</summary>
-public sealed record UltimaSessao(string Id, DateTime Quando, long KB, string Titulo);
+/// <summary>A última sessão do Claude com conversa no projeto.</summary>
+/// <param name="Contexto">
+/// Os tokens que ela relê a cada turno (<see cref="Cia.ContextoDaSessao"/>); null quando não deu
+/// para medir, e aí conta como grande.
+/// </param>
+public sealed record UltimaSessao(string Id, DateTime Quando, long KB, string Titulo, long? Contexto = null);
 
 /// <summary>O git do projeto, como o quadro do dashboard do cia mostra (o Get-GitInfo dele).</summary>
 /// <param name="Repositorio">A pasta tem .git.</param>
@@ -288,10 +292,89 @@ public static class Cia
 
             if (titulo is { Length: > 0 })
                 return new UltimaSessao(Path.GetFileNameWithoutExtension(f.Name), f.LastWriteTime,
-                    (long)Math.Round(f.Length / 1024d), titulo);
+                    (long)Math.Round(f.Length / 1024d), titulo, ContextoDaSessao(f.FullName));
         }
         return null;
     }
+
+    /// <summary>
+    /// O limite do <c>$global:CiaRetomarTokens</c> do cia: acima dele, a última sessão não é
+    /// retomada sozinha. Cada turno relê o contexto inteiro, e as sessões retomadas dia após dia
+    /// chegavam perto de 1 milhão de tokens.
+    /// </summary>
+    public const long LimiteParaRetomar = 150_000;
+
+    /// <summary>
+    /// A regra do cia (Test-SessaoRetomavel do cia-dash): só retoma sozinho a sessão de hoje com
+    /// contexto abaixo de <see cref="LimiteParaRetomar"/>. Fora disso abre uma nova, e a antiga
+    /// continua nas Sessões e no Continuar.
+    /// </summary>
+    public static bool Retomavel(UltimaSessao s, DateTime agora) =>
+        s.Quando.Date == agora.Date && s.Contexto is { } c && c < LimiteParaRetomar;
+
+    /// <summary>
+    /// O contexto atual da sessão, em tokens: entrada e cache da última resposta do Claude, lida do
+    /// fim do .jsonl, como o Get-ContextoDaSessao do cia-dash. O arquivo nunca diminui; o contexto
+    /// sim, a cada /compact, e logo depois de um, sem resposta ainda, vale o postTokens dele. Null
+    /// quando o trecho lido não tem nenhum dos dois (a última saída de ferramenta é enorme).
+    /// </summary>
+    public static long? ContextoDaSessao(string arquivo)
+    {
+        foreach (var maximo in new long[] { 512 * 1024, 4 * 1024 * 1024 })
+        {
+            string trecho;
+            bool inteiro;
+            try
+            {
+                inteiro = new FileInfo(arquivo).Length <= maximo;
+                trecho = SessoesDoClaude.Trecho(arquivo, maximo, inicio: false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+
+            var linhas = trecho.Split('\n');
+            for (var i = linhas.Length - 1; i >= 0; i--)
+            {
+                var l = linhas[i];
+                if (l.Contains("\"subtype\":\"compact_boundary\"", StringComparison.Ordinal) &&
+                    PosCompactacao.Match(l) is { Success: true } pos)
+                    return long.Parse(pos.Groups[1].Value, CultureInfo.InvariantCulture);
+
+                if (!l.Contains("\"type\":\"assistant\"", StringComparison.Ordinal) ||
+                    !l.Contains("\"usage\"", StringComparison.Ordinal) ||
+                    l.Contains("\"isSidechain\":true", StringComparison.Ordinal))
+                    continue;
+
+                long total;
+                try
+                {
+                    // a primeira linha do trecho vem cortada
+                    if (JsonNode.Parse(l)?["message"]?["usage"] is not JsonObject uso) continue;
+                    long Valor(string nome) => uso[nome] is JsonValue v && v.TryGetValue<long>(out var n) ? n : 0;
+                    total = Valor("input_tokens") + Valor("cache_read_input_tokens") + Valor("cache_creation_input_tokens");
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+                if (total > 0) return total;
+            }
+            if (inteiro) return 0; // o arquivo todo, nenhuma resposta: não há contexto
+        }
+        return null;
+    }
+
+    private static readonly Regex PosCompactacao = new("\"postTokens\":([0-9]+)", RegexOptions.Compiled);
+
+    /// <summary>"40 mil tokens", "850 tokens" ou "contexto ?": o Format-Tokens do cia.</summary>
+    public static string Tokens(long? t) => t switch
+    {
+        null => "contexto ?",
+        < 1000 => t + " tokens",
+        _ => Math.Round(t.Value / 1000d).ToString(CultureInfo.InvariantCulture) + " mil tokens",
+    };
 
     /// <summary>
     /// O branch, as alterações e o último commit do projeto, pelo git status e pelo git log,
@@ -389,20 +472,22 @@ public static class Cia
 
     /// <summary>
     /// O que o Open-CIA (Modules\aliases.ps1) decide ao abrir o projeto, para o GTerm chamar
-    /// o Claude direto, sem shell no meio. Sem modo, retoma a última sessão com conversa. Sem
-    /// sessão, ou nos outros modos, abre na skill: /delphi-writer na base da BMSoft, /retomar
-    /// nas outras, /pedido, /delphi-pr, ou nenhuma. Mudou lá, muda aqui.
+    /// o Claude direto, sem shell no meio. Sem modo, retoma a última sessão com conversa só se
+    /// ela for <see cref="Retomavel"/> (de hoje e pequena); <see cref="ModoContinuar"/> retoma
+    /// mesmo antiga ou grande. Sem sessão a retomar, ou nos outros modos, abre na skill:
+    /// /delphi-writer na base da BMSoft, /retomar nas outras, /pedido, /delphi-pr, ou nenhuma.
+    /// Mudou lá, muda aqui.
     ///
-    /// A exceção de propósito é o /compact que o cia manda acima de $global:CiaCompactKB:
-    /// o .jsonl nunca diminui, então passados os 300 KB toda retomada compactava de novo, e
-    /// levava perto de um minuto para o Claude responder. Aqui é o botão Compactar da aba.
+    /// A exceção de propósito é o /compact que o cia manda ao continuar uma sessão grande: leva
+    /// perto de um minuto para o Claude responder. Aqui é o botão Compactar da aba.
     /// </summary>
     /// <param name="modo">
-    /// -Novo, -Limpo, -Pr, o número de um pedido, <see cref="ModoConversa"/> com o id de uma
-    /// conversa, ou null.
+    /// -Novo, -Limpo, -Pr, -Continuar, o número de um pedido, <see cref="ModoConversa"/> com o
+    /// id de uma conversa, ou null.
     /// </param>
     /// <param name="ultimaSessao">Só é chamada quando o modo retoma: os .jsonl são grandes.</param>
-    public static Abertura Decidir(string? modo, bool daBmsoft, Func<UltimaSessao?> ultimaSessao)
+    /// <param name="agora">O "hoje" da regra; null é o relógio. Só os testes trocam.</param>
+    public static Abertura Decidir(string? modo, bool daBmsoft, Func<UltimaSessao?> ultimaSessao, DateTime? agora = null)
     {
         // a conversa escolhida no modo Sessões, como o cl <n>: o --resume dela
         if (modo is not null && modo.StartsWith(ModoConversa, StringComparison.Ordinal) &&
@@ -412,7 +497,12 @@ public static class Cia
         var limpo = modo == "-Limpo";
         var pr = modo == "-Pr";
         var pedido = modo is { Length: > 0 } m && m.All(char.IsAsciiDigit) ? m : "";
-        var sessao = modo is null ? ultimaSessao() : null;
+        var sessao = modo switch
+        {
+            null => ultimaSessao() is { } s && Retomavel(s, agora ?? DateTime.Now) ? s : null,
+            ModoContinuar => ultimaSessao(),
+            _ => null,
+        };
 
         var prompt = limpo ? null
             : pr ? "/delphi-pr"
@@ -430,6 +520,9 @@ public static class Cia
 
     /// <summary>O começo do modo que abre uma conversa escolhida; o resto é o id dela.</summary>
     public const string ModoConversa = "conversa:";
+
+    /// <summary>O cia -Continuar: retoma a última sessão mesmo antiga ou grande.</summary>
+    public const string ModoContinuar = "-Continuar";
 
     /// <summary>
     /// O claude.exe: o do PATH, senão o do instalador nativo (%USERPROFILE%\.local\bin).

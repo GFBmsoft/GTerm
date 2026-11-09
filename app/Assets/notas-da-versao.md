@@ -1,3 +1,7 @@
+## 1.0.0.26 — 09/11/2026
+- **Sessão nova quando a última é grande ou de outro dia**: abrir o projeto só retoma a última sessão se ela for de hoje e tiver menos de 150 mil tokens de contexto, como o cia agora faz. Fora disso, o Claude abre numa sessão nova, na /delphi-writer ou no /retomar, e o quadro diz por quê. Sessões longas releem o contexto inteiro a cada pergunta e gastavam bem mais do limite do plano. A sessão antiga continua guardada: o botão Continuar a última, o Retomar da barra da aba e o Enter depois de sair do Claude abrem ela mesmo assim.
+- O quadro do projeto mostra o contexto da sessão em tokens, no lugar do tamanho do arquivo.
+
 ## 1.0.0.25 — 04/11/2026
 - **Abrir e retomar sem a janela travar**: ao retomar uma conversa longa, o Claude mostra a conversa inteira de novo, e o GTerm ficava parado até terminar de exibir tudo, sem atender clique nem teclado, com o cursor demorando a chegar na entrada do Claude. Agora o terminal exibe essa saída umas seis vezes mais rápido, a janela continua respondendo enquanto isso e o teclado já vai para o terminal logo ao abrir.
 - Letras acentuadas e símbolos não viram mais "�" de vez em quando no meio da saída do Claude.
