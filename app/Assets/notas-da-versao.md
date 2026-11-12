@@ -1,3 +1,10 @@
+## 1.0.0.27 — 12/11/2026
+- **O Enter depois de sair do Claude volta à conversa que estava no terminal**: antes ele retomava a última conversa do projeto, que podia ser uma antiga e enorme se você tivesse aberto sem skill, ou retomado uma conversa pelas Sessões, e saído sem digitar nada. Agora volta à que estava ali, grande ou não. Se não havia nenhuma, abre como o botão Abrir o Claude.
+- **O botão do projeto parado diz o que o clique vai fazer**: com o GTerm aberto de um dia para o outro, ele seguia mostrando "Retomar a sessão" e o clique abria uma sessão nova. O quadro agora relê a sessão a cada minuto: acompanha a virada do dia e a sessão que cresceu pelo cia no terminal.
+- "Continuar a última sessão", no clique direito do projeto, só aparece quando há uma sessão que o Abrir o Claude não retoma, como o botão do quadro. Com o Claude aberto continua lá, como o Retomar da barra da aba.
+- O Retomar da barra da aba, num projeto que ainda não tem conversa nenhuma, pergunta se abre "como o cia abriria", em vez de prometer continuar uma sessão que não existe.
+- Uma sessão grande não é mais lida como vazia quando o Claude grava nela no instante da leitura, e o Retomar e o Enter abrem mais rápido: não medem mais o contexto quando não vão usá-lo.
+
 ## 1.0.0.26 — 09/11/2026
 - **Sessão nova quando a última é grande ou de outro dia**: abrir o projeto só retoma a última sessão se ela for de hoje e tiver menos de 150 mil tokens de contexto, como o cia agora faz. Fora disso, o Claude abre numa sessão nova, na /delphi-writer ou no /retomar, e o quadro diz por quê. Sessões longas releem o contexto inteiro a cada pergunta e gastavam bem mais do limite do plano. A sessão antiga continua guardada: o botão Continuar a última, o Retomar da barra da aba e o Enter depois de sair do Claude abrem ela mesmo assim.
 - O quadro do projeto mostra o contexto da sessão em tokens, no lugar do tamanho do arquivo.

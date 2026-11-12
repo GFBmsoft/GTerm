@@ -525,6 +525,9 @@ public class CiaTests : IDisposable
         Assert.Equal(hoje.AddHours(-2), s.Quando);
         Assert.Equal(2, s.KB);
         Assert.Equal(0, s.Contexto); // lida inteira, sem resposta do Claude
+
+        // quem só quer saber qual é a sessão (o Continuar, o Enter) não paga a medida
+        Assert.Equal(s with { Contexto = null }, Cia.UltimaSessao(pasta, conta, medirContexto: false));
     }
 
     // uma resposta do Claude no .jsonl, com o uso que ele grava
@@ -553,9 +556,17 @@ public class CiaTests : IDisposable
             """{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":300010,"postTokens":7862}}"""));
         Assert.Equal(50_005, Contexto(titulo, Resposta(25_000), Resposta(499, subagente: true)));
         Assert.Equal(0, Contexto(titulo, """{"type":"user","message":{"role":"user","content":"oi"}}"""));
+        // a compactação automática também traz o postTokens, só que depois do que ela preservou
+        Assert.Equal(14_803, Contexto(titulo, Resposta(380_000),
+            """{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":771781,"durationMs":85861,"preservedSegment":{"headUuid":"d9e1","tailUuid":"862b"},"preservedMessages":{"uuids":["d9e1","862b"]},"postTokens":14803,"cumulativeDroppedTokens":1724228}}""",
+            """{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"resumo"}}"""));
 
         // uma resposta lá atrás e 5 MB de saída de ferramenta depois: não dá para medir
         Assert.Null(Contexto(titulo, Resposta(20_000), new string('x', 5 * 1024 * 1024)));
+        // com 600 KB depois dela, a resposta está no trecho maior, que só lê o que faltava: a
+        // linha cortada no começo do primeiro e o que vem antes
+        Assert.Equal(40_005, Contexto(titulo, Resposta(20_000), new string('x', 600 * 1024)));
+        Assert.Equal(40_005, Contexto(titulo, Resposta(20_000), new string('x', 300 * 1024), new string('y', 300 * 1024)));
         // a resposta cortada no começo do trecho lido não quebra a leitura: vale a do trecho maior
         var longa = $$$"""{"isSidechain":false,"message":{"content":"{{{new string('x', 600 * 1024)}}}","usage":{"input_tokens":5,"cache_creation_input_tokens":20000,"cache_read_input_tokens":20000}},"type":"assistant"}""";
         Assert.Equal(40_005, Contexto(longa));
@@ -603,9 +614,39 @@ public class CiaTests : IDisposable
         Assert.False(Cia.Retomavel(s with { Quando = agora.AddHours(-1) }, agora)); // 23:30 de ontem
         Assert.False(Cia.Retomavel(s with { Contexto = null }, agora));
 
-        Assert.Equal("contexto ?", Cia.Tokens(null));
         Assert.Equal("850 tokens", Cia.Tokens(850));
         Assert.Equal("150 mil tokens", Cia.Tokens(149_600));
+        // a dica do botão de abrir diz o limite da regra, não um número escrito à mão
+        Assert.Contains("menos de " + Cia.Tokens(Cia.LimiteParaRetomar) + " de contexto", ProjetoViewModel.DicaDeAbrir);
+    }
+
+    /// <summary>
+    /// O Enter depois de sair do Claude volta à sessão que estava no terminal: a gravada depois de
+    /// ele subir, ou a que ele subiu retomando. Sem nenhuma, abre como o cia, e não a última do
+    /// projeto, que pode ser antiga e enorme.
+    /// </summary>
+    [Fact]
+    public void EnterVoltaASessaoQueEstavaNoTerminal()
+    {
+        var subida = new DateTime(2026, 11, 12, 10, 0, 0);
+        var usada = new UltimaSessao("aaaa-1111", subida.AddMinutes(5), 300, "Boleto");
+        var antiga = new UltimaSessao("bbbb-2222", subida.AddDays(-3), 90_000, "Remessa");
+
+        // conversou nela: é a última, e foi gravada depois da subida
+        Assert.Equal("conversa:aaaa-1111", Cia.ModoDoEnter(usada, subida, null));
+        Assert.Equal("conversa:aaaa-1111", Cia.ModoDoEnter(usada, subida, "cccc-3333")); // trocou de conversa lá dentro
+        // retomou uma conversa e saiu sem digitar: ela mesma, e não a última do projeto
+        Assert.Equal("conversa:cccc-3333", Cia.ModoDoEnter(antiga, subida, "cccc-3333"));
+        // abriu sem skill e saiu: nada estava ali
+        Assert.Null(Cia.ModoDoEnter(antiga, subida, null));
+        Assert.Null(Cia.ModoDoEnter(null, subida, null));
+
+        // e o modo que sai daqui é o --resume dela, de qualquer tamanho
+        Assert.Equal(new Abertura("--resume aaaa-1111", "retomada", ""),
+            Cia.Decidir(Cia.ModoDoEnter(usada, subida, null), true, () => throw new InvalidOperationException()));
+        Assert.Equal("aaaa-1111", new Abertura("--resume aaaa-1111", "retomada", "").Retomada);
+        Assert.Null(new Abertura("/retomar", "memória", "").Retomada);
+        Assert.Null(new Abertura("", "limpo", "").Retomada);
     }
 
     [Fact]
@@ -1187,8 +1228,11 @@ public class JanelaTests : IDisposable
             vm.Selecionado = notas;
             Assert.True(await Esperar(() => notas.GitLido && notas.SessaoLida));
             Assert.True(notas.TemClaudeMd);
-            notas.Git = new InfoDoGit(true, false, "develop", 3, 1, 0, DateTime.Now.AddDays(-1), "Merge pull request #1 from bmsoft");
-            notas.UltimaSessao = new UltimaSessao("abc", DateTime.Now.AddDays(-1), 748, "Contagem de MensagemInicial.ini por grupo");
+            // o relógio fica parado: "ontem" e "de hoje" não mudam se o teste cruzar a meia-noite
+            var agora = DateTime.Now;
+            vm.Relogio = () => agora;
+            notas.Git = new InfoDoGit(true, false, "develop", 3, 1, 0, agora.AddDays(-1), "Merge pull request #1 from bmsoft");
+            notas.UltimaSessao = new UltimaSessao("abc", agora.AddDays(-1), 748, "Contagem de MensagemInicial.ini por grupo");
             Dispatcher.UIThread.RunJobs();
             quadro = Quadro(janela);
             foreach (var texto in new[]
@@ -1208,14 +1252,41 @@ public class JanelaTests : IDisposable
                          "na /delphi-writer. Ela fica guardada.", notas.TextoDaSessao);
             Assert.True(notas.PodeContinuar);
 
+            // o menu da linha acompanha o quadro: o Continuar só com uma sessão que o Abrir não retoma
+            var linhaDeNotas = new LinhaDoProjeto(vm, notas, MainViewModel.GrupoRecentes);
+            MenuItem Continuar() => janela.MenuDe(linhaDeNotas).Items.OfType<MenuItem>()
+                .Single(m => m.Header as string == "Continuar a última sessão");
+            Assert.True(Continuar().IsVisible);
+
             // a de hoje, pequena, é: nada a avisar, e o contexto no lugar do tamanho
-            notas.UltimaSessao = notas.UltimaSessao! with { Quando = DateTime.Now, Contexto = 40_000 };
+            notas.UltimaSessao = notas.UltimaSessao! with { Quando = agora, Contexto = 40_000 };
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("40 mil tokens", Quadro(janela));
             Assert.Equal("Retomar a sessão", notas.RotuloDeAbrir);
             Assert.Equal("", notas.TextoDaSessao);
             Assert.False(notas.TemTextoDaSessao);
             Assert.False(notas.PodeContinuar);
+            // o item some, e volta sozinho se a sessão chegar com o menu já montado
+            var noMenu = Continuar();
+            Assert.False(noMenu.IsVisible);
+
+            // o app ficou aberto e o dia virou: relida, a sessão é a mesma, mas não é mais de hoje.
+            // O botão, o texto e o Continuar mudam sem ninguém trocar a sessão
+            var hoje = agora;
+            agora = hoje.AddDays(1);
+            var avisados = new List<string?>();
+            notas.PropertyChanged += (_, e) => avisados.Add(e.PropertyName);
+            notas.MostrarSessao(notas.UltimaSessao);
+            Assert.Contains(nameof(ProjetoViewModel.RotuloDeAbrir), avisados);
+            Assert.Contains(nameof(ProjetoViewModel.PodeContinuar), avisados);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Abrir o Claude", notas.RotuloDeAbrir);
+            Assert.StartsWith("A última sessão não é de hoje:", notas.TextoDaSessao);
+            Assert.Contains("sessão ontem", Quadro(janela));
+            Assert.True(noMenu.IsVisible);
+            agora = hoje;
+            notas.MostrarSessao(notas.UltimaSessao);
+            Assert.Equal("Retomar a sessão", notas.RotuloDeAbrir);
 
             // grande, de hoje: o motivo é o tamanho
             notas.UltimaSessao = notas.UltimaSessao! with { Contexto = 480_000 };
@@ -1587,6 +1658,61 @@ public class JanelaTests : IDisposable
             Assert.True(await Esperar(() => !pedido.Encerrada && Tela(pedido).Contains("/delphi-writer")), Tela(pedido));
             Assert.Same(pedido, p.Sessao);
             Assert.Equal("", Cia.LerEstado(Estado)!.Recentes[0].Pedido);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+        }
+    }
+
+    /// <summary>
+    /// O Enter depois de sair do Claude volta à sessão que estava no terminal, e só a ela. Aberto
+    /// sem skill e fechado sem conversa, não retoma a última do projeto, que é de outro dia: abre
+    /// como o cia. Depois de uma conversa, volta a ela, mesmo grande, e de novo se sair sem digitar.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task EnterSoRetomaASessaoQueEstavaNoTerminal()
+    {
+        Montar();
+        var vm = new MainViewModel(new Dialogos());
+        try
+        {
+            var p = Projeto(vm, "Notas");
+            p.Projeto.Conta = ContaDoClaude; // as conversas do teste, não as do Claude de verdade
+            var antiga = ContaDeTeste.Conversa(ContaDoClaude, Notas, "Remessa antiga", DateTime.Now.AddDays(-2));
+
+            await p.SemSkillCommand.ExecuteAsync(null);
+            var sessao = p.Sessao!;
+            sessao.Medir(160, 50);
+            Assert.True(await Esperar(() => p.Vivo));
+
+            async Task SairEDarEnter()
+            {
+                sessao.Modelo.Send("exit\r");
+                Assert.True(await Esperar(() => sessao.Encerrada), "o processo não terminou");
+                sessao.Modelo.Send("\r");
+            }
+
+            await SairEDarEnter();
+            Assert.True(await Esperar(() => !sessao.Encerrada && Tela(sessao).Contains("/delphi-writer")), Tela(sessao));
+            Assert.DoesNotContain("--resume", Tela(sessao));
+
+            // a conversa feita neste terminal, já com 300 mil tokens: o cia não a retomaria
+            // sozinho, mas é a que estava ali
+            var nova = ContaDeTeste.Conversa(ContaDoClaude, Notas, null, DateTime.Now, null,
+                """{"isSidechain":false,"message":{"usage":{"input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":300000}},"type":"assistant"}""",
+                """{"type":"ai-title","aiTitle":"Conversa de agora"}""");
+            // cada subida limpa a tela: sem o aviso da saída, o que está nela é do Claude novo
+            bool Retomou() => !sessao.Encerrada && !Tela(sessao).Contains("Claude encerrado") &&
+                              Tela(sessao).Contains("--resume " + nova);
+
+            await SairEDarEnter();
+            Assert.True(await Esperar(Retomou), Tela(sessao));
+
+            // saiu sem digitar nada: o arquivo não mudou depois da subida, e é ela de novo
+            await SairEDarEnter();
+            Assert.True(await Esperar(Retomou), Tela(sessao));
+            Assert.DoesNotContain(antiga, Tela(sessao));
         }
         finally
         {

@@ -49,7 +49,14 @@ public sealed record InfoDoGit(bool Repositorio, bool Erro, string Branch, int A
 /// <param name="Argumentos">Da linha de comando do claude: --resume ou a skill.</param>
 /// <param name="Modo">O que vai para o recente (retomada, writer, memória, pr, limpo).</param>
 /// <param name="Pedido">O número do pedido do Mantis, ou vazio.</param>
-public sealed record Abertura(string Argumentos, string Modo, string Pedido);
+public sealed record Abertura(string Argumentos, string Modo, string Pedido)
+{
+    private const string Resume = "--resume ";
+
+    /// <summary>O id da sessão que ela retoma; null quando abre uma nova.</summary>
+    public string? Retomada =>
+        Argumentos.StartsWith(Resume, StringComparison.Ordinal) ? Argumentos[Resume.Length..] : null;
+}
 
 /// <summary>
 /// O que o GTerm sabe do cia (o atalho do perfil, em Modules\aliases.ps1, e o dashboard
@@ -261,7 +268,11 @@ public static class Cia
     /// O título vem do fim do arquivo, como o cl lê, e só sem ele ali o arquivo é lido inteiro.
     /// </summary>
     /// <param name="pastaDaConta">A pasta de configuração do Claude (~\.claude).</param>
-    public static UltimaSessao? UltimaSessao(string pasta, string pastaDaConta)
+    /// <param name="medirContexto">
+    /// Falso para quem só quer saber qual é a sessão (o Continuar, o Enter depois de sair): medir
+    /// é ler até 4 MB do .jsonl, e essas chamadas são feitas na thread da tela.
+    /// </param>
+    public static UltimaSessao? UltimaSessao(string pasta, string pastaDaConta, bool medirContexto = true)
     {
         var dir = Path.Combine(pastaDaConta, "projects", Regex.Replace(pasta, "[^A-Za-z0-9]", "-"));
         List<FileInfo> arquivos;
@@ -292,7 +303,7 @@ public static class Cia
 
             if (titulo is { Length: > 0 })
                 return new UltimaSessao(Path.GetFileNameWithoutExtension(f.Name), f.LastWriteTime,
-                    (long)Math.Round(f.Length / 1024d), titulo, ContextoDaSessao(f.FullName));
+                    (long)Math.Round(f.Length / 1024d), titulo, medirContexto ? ContextoDaSessao(f.FullName) : null);
         }
         return null;
     }
@@ -320,61 +331,86 @@ public static class Cia
     /// </summary>
     public static long? ContextoDaSessao(string arquivo)
     {
-        foreach (var maximo in new long[] { 512 * 1024, 4 * 1024 * 1024 })
+        try
         {
-            string trecho;
-            bool inteiro;
+            using var fluxo = new FileStream(arquivo, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+            // o tamanho é o deste instante, no mesmo arquivo aberto, como no cia-dash: o Claude
+            // pode estar gravando, e com o tamanho medido à parte da leitura um trecho passava
+            // por arquivo inteiro sem ser (e a sessão, por vazia)
+            var tamanho = fluxo.Length;
+            var fim = tamanho;
+            foreach (var maximo in new long[] { 512 * 1024, 4 * 1024 * 1024 })
+            {
+                var inicio = Math.Max(0, tamanho - maximo);
+                var bytes = new byte[fim - inicio];
+                fluxo.Seek(inicio, SeekOrigin.Begin);
+                var lidos = 0;
+                while (lidos < bytes.Length && fluxo.Read(bytes, lidos, bytes.Length - lidos) is > 0 and var r) lidos += r;
+
+                // sem ser o arquivo todo, a primeira linha vem cortada: fica para a janela maior,
+                // que só lê até o fim dela. O que vem depois já foi visto aqui
+                var corte = 0;
+                if (inicio > 0)
+                {
+                    var quebra = Array.IndexOf(bytes, (byte)'\n', 0, lidos);
+                    corte = quebra < 0 ? lidos : quebra + 1;
+                    fim = inicio + corte;
+                }
+
+                if (ContextoNoTrecho(Encoding.UTF8.GetString(bytes, corte, lidos - corte)) is { } contexto) return contexto;
+                if (inicio == 0) return 0; // o arquivo todo, nenhuma resposta: não há contexto
+            }
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    // do fim para o começo: o que vier primeiro, o /compact ou a resposta do Claude
+    private static long? ContextoNoTrecho(string trecho)
+    {
+        var linhas = trecho.Split('\n');
+        for (var i = linhas.Length - 1; i >= 0; i--)
+        {
+            var l = linhas[i];
+            if (l.Contains("\"subtype\":\"compact_boundary\"", StringComparison.Ordinal) &&
+                PosCompactacao.Match(l) is { Success: true } pos)
+                return long.Parse(pos.Groups[1].Value, CultureInfo.InvariantCulture);
+
+            if (!l.Contains("\"type\":\"assistant\"", StringComparison.Ordinal) ||
+                !l.Contains("\"usage\"", StringComparison.Ordinal) ||
+                l.Contains("\"isSidechain\":true", StringComparison.Ordinal))
+                continue;
+
+            long total;
             try
             {
-                inteiro = new FileInfo(arquivo).Length <= maximo;
-                trecho = SessoesDoClaude.Trecho(arquivo, maximo, inicio: false);
+                // a última linha pode estar pela metade, com o Claude gravando
+                if (JsonNode.Parse(l)?["message"]?["usage"] is not JsonObject uso) continue;
+                long Valor(string nome) => uso[nome] is JsonValue v && v.TryGetValue<long>(out var n) ? n : 0;
+                total = Valor("input_tokens") + Valor("cache_read_input_tokens") + Valor("cache_creation_input_tokens");
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (JsonException)
             {
-                return null;
+                continue;
             }
-
-            var linhas = trecho.Split('\n');
-            for (var i = linhas.Length - 1; i >= 0; i--)
-            {
-                var l = linhas[i];
-                if (l.Contains("\"subtype\":\"compact_boundary\"", StringComparison.Ordinal) &&
-                    PosCompactacao.Match(l) is { Success: true } pos)
-                    return long.Parse(pos.Groups[1].Value, CultureInfo.InvariantCulture);
-
-                if (!l.Contains("\"type\":\"assistant\"", StringComparison.Ordinal) ||
-                    !l.Contains("\"usage\"", StringComparison.Ordinal) ||
-                    l.Contains("\"isSidechain\":true", StringComparison.Ordinal))
-                    continue;
-
-                long total;
-                try
-                {
-                    // a primeira linha do trecho vem cortada
-                    if (JsonNode.Parse(l)?["message"]?["usage"] is not JsonObject uso) continue;
-                    long Valor(string nome) => uso[nome] is JsonValue v && v.TryGetValue<long>(out var n) ? n : 0;
-                    total = Valor("input_tokens") + Valor("cache_read_input_tokens") + Valor("cache_creation_input_tokens");
-                }
-                catch (JsonException)
-                {
-                    continue;
-                }
-                if (total > 0) return total;
-            }
-            if (inteiro) return 0; // o arquivo todo, nenhuma resposta: não há contexto
+            if (total > 0) return total;
         }
         return null;
     }
 
     private static readonly Regex PosCompactacao = new("\"postTokens\":([0-9]+)", RegexOptions.Compiled);
 
-    /// <summary>"40 mil tokens", "850 tokens" ou "contexto ?": o Format-Tokens do cia.</summary>
-    public static string Tokens(long? t) => t switch
-    {
-        null => "contexto ?",
-        < 1000 => t + " tokens",
-        _ => Math.Round(t.Value / 1000d).ToString(CultureInfo.InvariantCulture) + " mil tokens",
-    };
+    /// <summary>
+    /// "40 mil tokens" ou "850 tokens": o Format-Tokens do cia. O "contexto ?" dele, da sessão
+    /// sem medida, não tem vez aqui: o quadro mostra o tamanho do .jsonl no lugar.
+    /// </summary>
+    public static string Tokens(long t) => t < 1000
+        ? t + " tokens"
+        : Math.Round(t / 1000d).ToString(CultureInfo.InvariantCulture) + " mil tokens";
 
     /// <summary>
     /// O branch, as alterações e o último commit do projeto, pelo git status e pelo git log,
@@ -523,6 +559,21 @@ public static class Cia
 
     /// <summary>O cia -Continuar: retoma a última sessão mesmo antiga ou grande.</summary>
     public const string ModoContinuar = "-Continuar";
+
+    /// <summary>
+    /// O modo do Enter depois de sair do Claude: a sessão que estava no terminal, grande ou não,
+    /// que é o que o aviso dele promete. É a última com conversa, se foi gravada depois de o
+    /// Claude subir; senão, a que ele subiu retomando (saiu sem digitar nada). Sem nenhuma das
+    /// duas (abriu sem skill e saiu) é null, como o cia abriria: o -Continuar aqui retomava a
+    /// última do projeto, que pode ser antiga e enorme e não era a que estava ali.
+    /// </summary>
+    /// <param name="ultima">A última sessão com conversa do projeto; o contexto não importa.</param>
+    /// <param name="subida">Quando subiu o Claude que acabou de sair.</param>
+    /// <param name="retomada">O id que ele subiu retomando (<see cref="Abertura.Retomada"/>).</param>
+    public static string? ModoDoEnter(UltimaSessao? ultima, DateTime subida, string? retomada) =>
+        ultima is not null && ultima.Quando >= subida ? ModoConversa + ultima.Id
+        : retomada is { Length: > 0 } ? ModoConversa + retomada
+        : null;
 
     /// <summary>
     /// O claude.exe: o do PATH, senão o do instalador nativo (%USERPROFILE%\.local\bin).

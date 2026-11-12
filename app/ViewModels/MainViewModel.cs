@@ -218,13 +218,41 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(TextoDaSessao), nameof(TemTextoDaSessao))]
     private bool _sessaoLida;
 
+    // o relógio da janela: o "de hoje" da regra e o "há 2 h" dos textos saem do mesmo lugar
+    private DateTime Agora => _main.Relogio();
+
+    /// <summary>
+    /// A sessão lida de novo. Pode ser a mesma, e aí ninguém seria avisado, mas o "de hoje" da
+    /// regra e o "há 2 h" do texto andam com o relógio: com o app aberto de um dia para o outro,
+    /// o botão seguia dizendo "Retomar a sessão" e o clique abria uma nova.
+    /// </summary>
+    public void MostrarSessao(UltimaSessao? sessao)
+    {
+        var mesma = SessaoLida && Equals(UltimaSessao, sessao);
+        UltimaSessao = sessao;
+        SessaoLida = true;
+        if (!mesma) return;
+
+        foreach (var nome in new[]
+                 {
+                     nameof(Retomavel), nameof(PodeContinuar), nameof(RotuloDeAbrir), nameof(TextoDaSessao),
+                     nameof(TemTextoDaSessao), nameof(QuandoDaSessao),
+                 })
+            OnPropertyChanged(nome);
+    }
+
     /// <summary>O botão de abrir retoma a última sessão: ela é de hoje e pequena (<see cref="Cia.Retomavel"/>).</summary>
-    public bool Retomavel => UltimaSessao is { } s && Cia.Retomavel(s, DateTime.Now);
+    public bool Retomavel => UltimaSessao is { } s && Cia.Retomavel(s, Agora);
 
     /// <summary>Há uma sessão que o abrir não retoma: o Continuar retoma mesmo assim.</summary>
     public bool PodeContinuar => UltimaSessao is not null && !Retomavel;
 
     public string RotuloDeAbrir => Retomavel ? "Retomar a sessão" : "Abrir o Claude";
+
+    /// <summary>A dica do botão de abrir, com o limite que a regra usa de verdade.</summary>
+    public static string DicaDeAbrir { get; } =
+        "Abre como o cia: retoma a última sessão só se ela for de hoje e tiver menos de " +
+        Cia.Tokens(Cia.LimiteParaRetomar) + " de contexto";
 
     private string Skill => EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto";
 
@@ -236,9 +264,9 @@ public sealed partial class ProjetoViewModel : ObservableObject
         : UltimaSessao is not { } s ? "Nenhuma sessão com conversa: abre " + Skill
         : $"A última sessão {PorQueNaoRetoma(s)}: abre uma sessão nova {Skill}. Ela fica guardada.";
 
-    private static string PorQueNaoRetoma(UltimaSessao s)
+    private string PorQueNaoRetoma(UltimaSessao s)
     {
-        var antiga = s.Quando.Date != DateTime.Today;
+        var antiga = s.Quando.Date != Agora.Date;
         var tamanho = s.Contexto is { } c
             ? (c >= Cia.LimiteParaRetomar ? "tem " + Cia.Tokens(c) + " de contexto" : "")
             : "não teve o contexto medido";
@@ -281,7 +309,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     public bool RevisaoDesatualizada => UltimaRevisao is { CommitsDepois: > 0 };
 
     public string TextoDaRevisaoAnterior =>
-        UltimaRevisao is { } r ? "code review " + Cia.Quando(r.Quando, DateTime.Now) : "";
+        UltimaRevisao is { } r ? "code review " + Cia.Quando(r.Quando, Agora) : "";
 
     /// <summary>"3 commits depois", "2 arquivos alterados" ou "em dia"; os alterados só com o git lido.</summary>
     public string SituacaoDaRevisao => UltimaRevisao switch
@@ -321,12 +349,12 @@ public sealed partial class ProjetoViewModel : ObservableObject
     }.Where(t => t.Length > 0));
 
     public bool TemCommit => ComGit && Git!.Commit is not null;
-    public string TextoDoCommit => Git?.Commit is { } c ? "último commit " + Cia.Quando(c, DateTime.Now) : "";
+    public string TextoDoCommit => Git?.Commit is { } c ? "último commit " + Cia.Quando(c, Agora) : "";
 
     [ObservableProperty] private bool _temClaudeMd;
 
     public bool TemSessao => UltimaSessao is not null;
-    public string QuandoDaSessao => UltimaSessao is { } s ? "sessão " + Cia.Quando(s.Quando, DateTime.Now) : "";
+    public string QuandoDaSessao => UltimaSessao is { } s ? "sessão " + Cia.Quando(s.Quando, Agora) : "";
     // o contexto é o que pesa a cada turno; sem ele medido, o tamanho do .jsonl
     public string TamanhoDaSessao => UltimaSessao is { } s
         ? s.Contexto is { } c ? Cia.Tokens(c) : Cia.Tamanho(s.KB)
@@ -339,7 +367,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
 
     public bool TemAbertura => UltimaAbertura is not null;
 
-    public string TextoDaAbertura => UltimaAbertura?.Quando is { } q ? "aberto " + Cia.Quando(q, DateTime.Now) : "aberto";
+    public string TextoDaAbertura => UltimaAbertura?.Quando is { } q ? "aberto " + Cia.Quando(q, Agora) : "aberto";
 
     /// <summary>" · pedido 6529 (writer)": o pedido e o modo, como o cia mostra.</summary>
     public string DetalheDaAbertura => UltimaAbertura is not { } r ? ""
@@ -567,7 +595,12 @@ public sealed partial class MainViewModel : ObservableObject
             _ = LerRevisoesAsync();
 
             // as marcas da árvore a cada minuto: a revisão pode ter sido feita em outro terminal
-            if (++tiques % 30 == 0) _ = LerRevisoesDosProjetosAsync();
+            if (++tiques % 30 != 0) return;
+            _ = LerRevisoesDosProjetosAsync();
+
+            // e a sessão do projeto parado à vista: o dia vira e o cia do terminal a faz crescer,
+            // e o botão tem de dizer o que o clique vai fazer
+            if (Selecionado is { Sessao: null } parado) _ = LerSessaoAsync(parado);
         };
         _vigiaDasRevisoes.Start();
 
@@ -624,16 +657,27 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     internal async Task CarregarQuadroAsync(ProjetoViewModel p)
     {
-        var conta = ClaudeHooks.PastaDaConta(p.Projeto.Conta);
         var git = Task.Run(() => Cia.Git(p.Pasta));
         p.TemClaudeMd = File.Exists(Path.Combine(p.Pasta, "CLAUDE.md"));
-        p.UltimaSessao = await Task.Run(() => Cia.UltimaSessao(p.Pasta, conta));
-        p.SessaoLida = true;
+        await LerSessaoAsync(p);
         p.Git = await git;
 
         var contaDasRevisoes = ClaudeHooks.PastaDaConta(_workspace.ContaDasSessoes);
         p.MostrarRevisao(await Task.Run(() => _revisoes.UltimaDoProjeto(contaDasRevisoes, p.Pasta)));
     }
+
+    /// <summary>A sessão que o abrir retomaria, com o contexto medido, lida fora da tela.</summary>
+    internal async Task LerSessaoAsync(ProjetoViewModel p) =>
+        p.MostrarSessao(await Task.Run(() => UltimaSessaoDe(p, medirContexto: true)));
+
+    private static UltimaSessao? UltimaSessaoDe(ProjetoViewModel p, bool medirContexto) =>
+        Cia.UltimaSessao(p.Pasta, ClaudeHooks.PastaDaConta(p.Projeto.Conta), medirContexto);
+
+    /// <summary>
+    /// O relógio do "de hoje" da regra de retomar e dos "há 2 h" do quadro. Só os testes trocam:
+    /// com o da máquina, o que eles afirmam mudaria na virada do dia.
+    /// </summary>
+    internal Func<DateTime> Relogio { get; set; } = () => DateTime.Now;
 
     // ------------------------------------------------------------ projetos e árvore
 
@@ -1227,13 +1271,19 @@ public sealed partial class MainViewModel : ObservableObject
         if (p.Sessao is null)
         {
             // o modo pedido aqui vale uma vez. O Enter depois de sair do Claude continua a sessão
-            // que estava ali, grande ou não: é o que o aviso do terminal promete
-            var daVez = modo;
+            // que estava ali, grande ou não: é o que o aviso do terminal promete. A subida é a
+            // hora da máquina, a mesma que o Claude põe no arquivo da sessão
+            var primeira = true;
+            var subida = DateTime.MinValue;
+            string? retomada = null;
             var sessao = new TerminalSessao(() =>
             {
-                var arranque = ArranqueDoClaude(p, daVez);
-                daVez = Cia.ModoContinuar;
-                return arranque;
+                var daVez = primeira
+                    ? modo
+                    : Cia.ModoDoEnter(UltimaSessaoDe(p, medirContexto: false), subida, retomada);
+                primeira = false;
+                subida = DateTime.Now;
+                return ArranqueDoClaude(p, daVez, out retomada);
             });
             try
             {
@@ -1273,21 +1323,26 @@ public sealed partial class MainViewModel : ObservableObject
     /// recente gravado no estado do cia, como ele grava. Roda a cada subida: o Enter depois
     /// de sair do Claude procura de novo a sessão a retomar.
     /// </summary>
-    private Arranque ArranqueDoClaude(ProjetoViewModel p, string? modo)
+    /// <param name="retomada">O id da sessão que ele sobe retomando; null numa sessão nova.</param>
+    private Arranque ArranqueDoClaude(ProjetoViewModel p, string? modo, out string? retomada)
     {
+        retomada = null;
         var claude = _workspace.Claude is { Length: > 0 } proprio ? proprio
             : Cia.Executavel() is { } exe ? "\"" + exe + "\""
             : throw new FileNotFoundException(
                 @"Claude Code não encontrado: o claude.exe não está no PATH nem em %USERPROFILE%\.local\bin.");
 
-        var abertura = Cia.Decidir(modo, p.EhDaBmsoft,
-            () => Cia.UltimaSessao(p.Pasta, ClaudeHooks.PastaDaConta(p.Projeto.Conta)));
+        // isto roda na thread da tela: o contexto só é medido para quem decide por ele. O
+        // Continuar retoma de qualquer tamanho, e medir era ler até 4 MB para jogar fora
+        var agora = Relogio();
+        var abertura = Cia.Decidir(modo, p.EhDaBmsoft, () => UltimaSessaoDe(p, medirContexto: modo is null), agora);
+        retomada = abertura.Retomada;
 
         if (Directory.Exists(p.Pasta))
         {
             try
             {
-                Cia.RegistrarRecente(_workspace.EstadoDoCia, p.Pasta, abertura.Pedido, abertura.Modo, DateTime.Now);
+                Cia.RegistrarRecente(_workspace.EstadoDoCia, p.Pasta, abertura.Pedido, abertura.Modo, agora);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
@@ -1475,6 +1530,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <returns>Falso quando o usuário desistiu, ou outro comando já cuidou do terminal.</returns>
     public async Task<bool> AbrirAsync(ProjetoViewModel p, string? modo = null)
     {
+        // continuar sem sessão nenhuma é abrir como o cia abriria (Cia.Decidir): a pergunta não
+        // promete uma sessão que não existe
+        if (p.Vivo && modo == Cia.ModoContinuar &&
+            await Task.Run(() => UltimaSessaoDe(p, medirContexto: false)) is null)
+            modo = null;
+
         if (p.Vivo && !await _dialogos.ConfirmAsync("Abrir o Claude de outro jeito",
                 $"O Claude de “{p.Nome}” está aberto. Ele sai pelo /exit e é aberto de novo{Descrever(modo)}, " +
                 "e o que estiver rodando nele será interrompido."))

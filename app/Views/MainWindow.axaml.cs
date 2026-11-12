@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -257,7 +258,16 @@ public partial class MainWindow : Window, IDialogService
 
             case LinhaDoProjeto { Projeto: var p } l:
                 Comando("Abrir o Claude", Glifos.Retomar, "verde", p.AbrirClaudeCommand);
-                Comando("Continuar a última sessão", Glifos.Retomar, "verde", p.ContinuarCommand);
+                // como no quadro: só com uma sessão que o Abrir não retoma. A sessão de um projeto
+                // que nunca esteve à vista é lida agora, fora da tela, e chega com o menu já
+                // aberto: por isso o binding. Com o Claude aberto é o Retomar da barra da aba,
+                // que está sempre lá
+                var continuar = Comando("Continuar a última sessão", Glifos.Retomar, "verde", p.ContinuarCommand);
+                if (!p.TemTerminal)
+                {
+                    continuar.Bind(IsVisibleProperty, new Binding(nameof(ProjetoViewModel.PodeContinuar)) { Source = p });
+                    if (!p.SessaoLida) _ = _vm.LerSessaoAsync(p);
+                }
                 Comando("Sessão nova", Glifos.SessaoNova, "azul", p.SessaoNovaCommand);
                 if (p.EhDaBmsoft)
                 {

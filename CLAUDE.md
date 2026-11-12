@@ -85,13 +85,16 @@ e por isso confirma antes.
   (`/delphi-writer` na primeira base, `/retomar` nas outras, `/pedido N`, `/delphi-pr`,
   nenhuma). O contexto é o uso da última resposta, lido do fim do .jsonl
   (`Cia.ContextoDaSessao`, o `Get-ContextoDaSessao` do cia-dash); o tamanho do arquivo não
-  serve, porque nunca diminui. O `-Continuar` (botão Continuar a última, o Retomar da barra
-  da aba e o Enter depois de sair do Claude) retoma mesmo antiga ou grande. Motivo: cada
+  serve, porque nunca diminui. O `-Continuar` (botão Continuar a última e o Retomar da barra
+  da aba) retoma mesmo antiga ou grande. Motivo: cada
   turno relê o contexto inteiro, e as sessões retomadas dia após dia chegavam perto de 1M.
   **Mudou lá, muda aqui.** A exceção de propósito é o `/compact` que o cia manda ao
   continuar uma sessão grande (mediana de 49 s até o Claude responder): aqui ele é o botão
   Compactar da barra da aba. Com um Claude já aberto, outro modo só depois de confirmar. Ao sair do
-  Claude o terminal fica com o aviso, e o Enter sobe outro retomando a sessão. O segundo
+  Claude o terminal fica com o aviso, e o Enter sobe outro na sessão que estava ali, grande
+  ou não (`Cia.ModoDoEnter`: a última com conversa, se gravada depois da subida; senão a que
+  subiu retomando). Sem nenhuma (aberto sem skill e fechado), abre como o cia: a última do
+  projeto pode ser antiga e enorme, e não era a que estava no terminal. O segundo
   terminal continua sendo um shell. Vigias de pasta (`FileSystemWatcher`) relêem o estado
   quando o cia grava um recente e a base quando aparece pasta nova.
 - **Árvore** — achatada numa `ListBox` (`MainViewModel.Linhas`), no estilo minimalista do
@@ -152,7 +155,10 @@ e por isso confirma antes.
 - **Projeto parado** — no lugar do terminal, o nome, a pasta e o tipo, o quadro do
   dashboard do cia (git, CLAUDE.md, a sessão que o Enter retoma e a última abertura, lidos
   em `MainViewModel.CarregarQuadroAsync` a cada escolha; o git por `Cia.Git`, sem travar o
-  índice) e os botões de abrir o Claude.
+  índice) e os botões de abrir o Claude. A sessão é relida a cada minuto enquanto o projeto
+  parado está à vista (`LerSessaoAsync`), e `ProjetoViewModel.MostrarSessao` avisa a tela
+  mesmo sem ela mudar: o "de hoje" da regra anda com o relógio, e o botão tem de dizer o
+  que o clique vai fazer.
 - **Abas** — `MainViewModel.Abertos`, na ordem em que foram abertos (Ctrl+Tab passa por
   elas). Encerrar a da frente traz a que ficou no lugar dela (a última dá lugar à anterior);
   sem outra aba, fica o quadro do projeto. A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;

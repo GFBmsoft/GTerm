@@ -692,7 +692,7 @@
 
             <Button Classes="verde principal" HorizontalAlignment="Center"
                     Command="{Binding Selecionado.IniciarCommand}"
-                    ToolTip.Tip="Abre como o cia: retoma a última sessão só se ela for de hoje e tiver menos de 150 mil tokens de contexto">
+                    ToolTip.Tip="{x:Static vm:ProjetoViewModel.DicaDeAbrir}">
               <StackPanel Classes="comIcone" Spacing="8">
                 <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Retomar}" />
                 <TextBlock Text="{Binding Selecionado.RotuloDeAbrir}" />
