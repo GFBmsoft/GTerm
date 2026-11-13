@@ -5,19 +5,23 @@
 
       <ResourceDictionary.ThemeDictionaries>
 
+        <!-- dois planos: a janela e a árvore no mais escuro (BgPanel), e em cima dele os cartões um tom
+             acima (Bg: o terminal, as entradas), com contorno fino. O que abre por cima de um cartão
+             (menu, quadro) sobe mais um tom (BgRaised) -->
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="Bg" Color="#0F1217" />
-          <SolidColorBrush x:Key="BgPanel" Color="#12151B" />
-          <SolidColorBrush x:Key="BgRaised" Color="#161A21" />
-          <SolidColorBrush x:Key="BgHover" Color="#1D222B" />
-          <SolidColorBrush x:Key="BgActive" Color="#232A35" />
-          <SolidColorBrush x:Key="Border" Color="#242A34" />
-          <SolidColorBrush x:Key="BorderSoft" Color="#1B2028" />
-          <SolidColorBrush x:Key="Text" Color="#DFE4EC" />
-          <SolidColorBrush x:Key="TextDim" Color="#8B95A6" />
-          <SolidColorBrush x:Key="TextFaint" Color="#707B8C" />
+          <SolidColorBrush x:Key="Bg" Color="#14151B" />
+          <SolidColorBrush x:Key="BgPanel" Color="#0F1014" />
+          <SolidColorBrush x:Key="BgRaised" Color="#191B22" />
+          <SolidColorBrush x:Key="BgHover" Color="#1B1D25" />
+          <SolidColorBrush x:Key="BgActive" Color="#242731" />
+          <SolidColorBrush x:Key="Border" Color="#282B34" />
+          <SolidColorBrush x:Key="BorderSoft" Color="#1E2028" />
+          <SolidColorBrush x:Key="Text" Color="#E2E5EC" />
+          <SolidColorBrush x:Key="TextDim" Color="#8C93A3" />
+          <SolidColorBrush x:Key="TextFaint" Color="#6A7182" />
           <!-- cores de estado: claras, para contrastar com o fundo escuro -->
           <SolidColorBrush x:Key="Accent" Color="#4F8CFF" />
+          <SolidColorBrush x:Key="AccentSoft" Color="#734F8CFF" />
           <SolidColorBrush x:Key="OnAccent" Color="#08121F" />
           <SolidColorBrush x:Key="Green" Color="#3FB950" />
           <SolidColorBrush x:Key="Red" Color="#FF7B72" />
@@ -28,8 +32,8 @@
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="Bg" Color="#F2F4F7" />
-          <SolidColorBrush x:Key="BgPanel" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Bg" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="BgPanel" Color="#F2F4F7" />
           <SolidColorBrush x:Key="BgRaised" Color="#FFFFFF" />
           <SolidColorBrush x:Key="BgHover" Color="#E8EDF3" />
           <SolidColorBrush x:Key="BgActive" Color="#D7E3F7" />
@@ -40,6 +44,7 @@
           <SolidColorBrush x:Key="TextFaint" Color="#61707F" />
           <!-- as mesmas cores em tons escuros: sobre branco as claras somem -->
           <SolidColorBrush x:Key="Accent" Color="#1F6FEB" />
+          <SolidColorBrush x:Key="AccentSoft" Color="#731F6FEB" />
           <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF" />
           <SolidColorBrush x:Key="Green" Color="#17803D" />
           <SolidColorBrush x:Key="Red" Color="#C5221F" />
@@ -98,9 +103,10 @@
          amarelo    pedido, grupos, favoritar
          vermelho   encerrar o Claude, excluir, remover
          cinza      sem skill, cor, Painel, Terminal, cancelar, fechar (é o botão sem classe)
-       Tamanhos: o comum (28), "pilula" (24: a do GTerm desde sempre, e a barra da aba, com ela, fica com os 28
-       da pesquisa) e "pequena" (22); "redonda" é só o ícone, numa bolinha. As classes antigas continuam
-       valendo: tiny = pequena, primary = azul (em negrito), danger = vermelho -->
+       Tamanhos: o comum (28), "pilula" (24: a do GTerm desde sempre, e o cabeçalho do cartão do terminal, com
+       ela, fica com os 32 da pesquisa) e "pequena" (22); "redonda" é só o ícone, numa bolinha. As classes
+       antigas continuam valendo: tiny = pequena, primary = azul (em negrito), danger = vermelho. No cabeçalho
+       do cartão as pílulas são "quieta" (na janela principal): só o ícone na cor até o mouse chegar -->
   <Style Selector="Button">
     <Setter Property="Background" Value="#246B7280" />
     <Setter Property="Foreground" Value="{DynamicResource Text}" />
@@ -264,15 +270,15 @@
     <Setter Property="Background" Value="{DynamicResource Bg}" />
     <Setter Property="Foreground" Value="{DynamicResource Text}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
-    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="CornerRadius" Value="8" />
     <Setter Property="MinHeight" Value="28" />
-    <Setter Property="Padding" Value="7,4" />
+    <Setter Property="Padding" Value="9,4" />
   </Style>
 
   <Style Selector="ComboBox">
     <Setter Property="Background" Value="{DynamicResource Bg}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
-    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="CornerRadius" Value="8" />
     <Setter Property="MinHeight" Value="28" />
   </Style>
 
@@ -312,7 +318,7 @@
     <Setter Property="Background" Value="{DynamicResource BgRaised}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="7" />
+    <Setter Property="CornerRadius" Value="10" />
   </Style>
 
   <!-- Barra de rolagem fina e sem setas. A barra permanente do tema Fluent traz
@@ -396,8 +402,9 @@
     <Setter Property="FontSize" Value="12.5" />
   </Style>
 
+  <!-- o menu já está um tom acima do cartão: a linha do mouse sobe mais um, senão não se vê -->
   <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot, MenuItem:selected /template/ Border#PART_LayoutRoot">
-    <Setter Property="Background" Value="{DynamicResource BgHover}" />
+    <Setter Property="Background" Value="{DynamicResource BgActive}" />
   </Style>
 
   <Style Selector="MenuItem:disabled">
@@ -415,25 +422,45 @@
     <Setter Property="Margin" Value="4,4" />
   </Style>
 
-  <!-- estado do terminal na sidebar -->
+  <!-- estado do terminal, na árvore e nas abas: um anel vazado com o Claude parado no prompt; o anel
+       aberto, girando, enquanto ele trabalha; cheio quando há o que ver (terminou, erro, espera por você) -->
   <Style Selector="Ellipse.estado">
-    <Setter Property="Width" Value="7" />
-    <Setter Property="Height" Value="7" />
-    <Setter Property="Margin" Value="0,0,11,0" />
+    <Setter Property="Width" Value="9" />
+    <Setter Property="Height" Value="9" />
+    <Setter Property="Margin" Value="0,0,10,0" />
     <Setter Property="VerticalAlignment" Value="Center" />
-    <Setter Property="Fill" Value="{DynamicResource TextFaint}" />
+    <Setter Property="Fill" Value="Transparent" />
+    <Setter Property="Stroke" Value="{DynamicResource TextFaint}" />
+    <Setter Property="StrokeThickness" Value="1.5" />
   </Style>
   <Style Selector="Ellipse.estado.rodando">
-    <Setter Property="Fill" Value="{DynamicResource Yellow}" />
+    <Setter Property="Stroke" Value="{DynamicResource Yellow}" />
+    <!-- em múltiplos da espessura: três quartos de volta de traço e um quarto de vão -->
+    <Setter Property="StrokeDashArray" Value="11.8,3.9" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Style.Animations>
+      <Animation Duration="0:0:1.1" IterationCount="INFINITE">
+        <KeyFrame Cue="0%">
+          <Setter Property="RotateTransform.Angle" Value="0" />
+        </KeyFrame>
+        <KeyFrame Cue="100%">
+          <Setter Property="RotateTransform.Angle" Value="360" />
+        </KeyFrame>
+      </Animation>
+    </Style.Animations>
   </Style>
   <Style Selector="Ellipse.estado.concluido">
     <Setter Property="Fill" Value="{DynamicResource Green}" />
+    <Setter Property="Stroke" Value="{DynamicResource Green}" />
   </Style>
   <Style Selector="Ellipse.estado.erro">
     <Setter Property="Fill" Value="{DynamicResource Red}" />
+    <Setter Property="Stroke" Value="{DynamicResource Red}" />
   </Style>
   <Style Selector="Ellipse.estado.aguardando">
     <Setter Property="Fill" Value="{DynamicResource Yellow}" />
+    <Setter Property="Stroke" Value="{DynamicResource Yellow}" />
+    <Setter Property="StrokeDashArray" Value="{x:Null}" />
     <Style.Animations>
       <Animation Duration="0:0:0.6" IterationCount="INFINITE" PlaybackDirection="Alternate">
         <KeyFrame Cue="0%">

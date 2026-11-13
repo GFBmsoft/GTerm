@@ -60,7 +60,7 @@ public abstract partial class LinhaDaArvore : ObservableObject
     [ObservableProperty] private bool _soltarDepois;
 }
 
-/// <summary>Título de grupo, minimalista como no GTest: seta, ponto e nome na cor dele, e a contagem.</summary>
+/// <summary>Título de grupo, minimalista: a seta, a contagem numa etiqueta na cor dele e o nome na mesma cor.</summary>
 public sealed partial class GrupoDaArvore : LinhaDaArvore
 {
     private readonly MainViewModel _main;
@@ -195,9 +195,10 @@ public sealed partial class ProjetoViewModel : ObservableObject
     // fundo da aba da frente: a cor esmaecida
     public IBrush Fundo => new SolidColorBrush(CorBase, 0.22);
 
-    // a barra dos botões, embaixo das abas: o tom da aba, mais leve
-    public IBrush FundoDaBarra => new SolidColorBrush(CorBase, 0.09);
-    public IBrush BordaDaBarra => new SolidColorBrush(CorBase, 0.35);
+    // o cabeçalho do cartão do terminal, com os botões da aba: o tom da aba, mais leve. A borda é a
+    // moldura do cartão inteiro, e a da ficha da aba à frente: uma cor só liga as duas
+    public IBrush FundoDaBarra => new SolidColorBrush(CorBase, 0.07);
+    public IBrush BordaDaBarra => new SolidColorBrush(CorBase, 0.55);
 
     /// <summary>A aba dele é a da frente: ganha o fundo e o contorno na cor do projeto.</summary>
     [ObservableProperty]
@@ -205,7 +206,7 @@ public sealed partial class ProjetoViewModel : ObservableObject
     private bool _aVista;
 
     public IBrush FundoDaAba => AVista ? Fundo : Brushes.Transparent;
-    public IBrush BordaDaAba => AVista ? Cor : Brushes.Transparent;
+    public IBrush BordaDaAba => AVista ? BordaDaBarra : Brushes.Transparent;
 
     /// <summary>A última sessão com conversa do projeto; null sem nenhuma.</summary>
     [ObservableProperty]
@@ -603,6 +604,7 @@ public sealed partial class MainViewModel : ObservableObject
             if (Selecionado is { Sessao: null } parado) _ = LerSessaoAsync(parado);
         };
         _vigiaDasRevisoes.Start();
+        IniciarConsumo();
 
         CarregarProjetos();
         CarregarEstado();
@@ -1262,6 +1264,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(PodeAuxiliar));
         OnPropertyChanged(nameof(AbaAtiva));
         OnPropertyChanged(nameof(TemAbaAtiva));
+        AcompanharConsumo();
     }
 
     /// <summary>Abre o Claude no terminal do projeto se ainda não houver um.</summary>
@@ -1634,6 +1637,7 @@ public sealed partial class MainViewModel : ObservableObject
         _releitura.Stop();
         _releituraDasSessoes.Stop();
         _vigiaDasRevisoes.Stop();
+        _relogioDoConsumo.Stop();
     }
 
     // ------------------------------------------------------------ atualização

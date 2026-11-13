@@ -120,6 +120,12 @@ public sealed class Workspace
     public string PainelComando { get; set; } = "";
 
     /// <summary>
+    /// O cartão do consumo do Claude (contexto, tokens, limites do plano), ao lado do terminal,
+    /// estava aberto: volta aberto. É da janela, não de cada projeto.
+    /// </summary>
+    public bool Consumo { get; set; }
+
+    /// <summary>
     /// Piscar na barra de tarefas e contar no título quando um projeto que não está à vista
     /// termina ou fica esperando por você.
     /// </summary>

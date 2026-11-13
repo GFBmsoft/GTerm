@@ -37,7 +37,8 @@ escrever no `%APPDATA%\GTerm\workspace.json` real. Nos testes quem trava isso é
 o `estado-cl.json` e as conversas do `~\.claude` reais, e favoritar num teste mexeria nos
 favoritos do usuário.
 
-`GTERM_SHOTS=<pasta>` faz o teste da janela gravar `janela.png`, para conferir o visual.
+`GTERM_SHOTS=<pasta>` faz os testes da janela gravarem as fotos dela (`abas.png`,
+`quadro.png`, `sessoes.png`, `revisao-rodando.png`…), para conferir o visual.
 
 ## Publicação
 
@@ -97,8 +98,19 @@ e por isso confirma antes.
   projeto pode ser antiga e enorme, e não era a que estava no terminal. O segundo
   terminal continua sendo um shell. Vigias de pasta (`FileSystemWatcher`) relêem o estado
   quando o cia grava um recente e a base quando aparece pasta nova.
-- **Árvore** — achatada numa `ListBox` (`MainViewModel.Linhas`), no estilo minimalista do
-  GTest: `GrupoDaArvore` (seta, ponto e nome na cor, contagem; o clique recolhe, e
+- **Visual** — repaginado em 13/11/2026 a partir de dois layouts do Herdr que o usuário
+  trouxe (bettr e over9k). Dois planos: a janela e a árvore no tom mais escuro (`BgPanel`),
+  separadas por um fio, e em cima dele os cartões um tom acima (`Bg`), de contorno fino e
+  canto 10: o terminal, o segundo terminal e o painel, cada um no seu (`Border.cartao`, com
+  `Border.cabecalho` dizendo o que é). O cartão do terminal leva no cabeçalho os botões da
+  aba e, por cima, a moldura na cor do projeto (`MolduraDaAba`,
+  `ProjetoViewModel.BordaDaBarra`), a mesma do contorno da ficha da aba. O contorno é um
+  `Border` por cima, sem espessura no cartão: assim o cabeçalho começa na altura da pesquisa.
+  No Windows 11 a barra de título leva a cor do fundo da janela (`BarraDeTitulo.Pintar`,
+  `DWMWA_CAPTION_COLOR`), e as duas viram um plano só; isso só se vê no app de verdade.
+- **Árvore** — achatada numa `ListBox` (`MainViewModel.Linhas`), minimalista:
+  `GrupoDaArvore` (seta, a contagem numa etiqueta na cor do grupo, no lugar do ponto do
+  GTest, e o nome na mesma cor; o clique recolhe, e
   `Workspace.Recolhidos` lembra; null = como no cia, Recentes e as bases fechados) e
   `LinhaDoProjeto` (o mesmo projeto aparece em mais de um grupo; as linhas ficam num cache
   por grupo e pasta para a lista não perder a seleção). A estrela e o ▶ da linha só
@@ -161,11 +173,17 @@ e por isso confirma antes.
   que o clique vai fazer.
 - **Abas** — `MainViewModel.Abertos`, na ordem em que foram abertos (Ctrl+Tab passa por
   elas). Encerrar a da frente traz a que ficou no lugar dela (a última dá lugar à anterior);
-  sem outra aba, fica o quadro do projeto. A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;
-  as outras ficam com o ponto da cor, o nome apagado e o ponto de estado. A aba não tem
+  sem outra aba, fica o quadro do projeto. A aba é uma ficha de canto suave (a pílula é do
+  botão). A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;
+  as outras ficam com o contorno neutro, o ponto da cor, o nome apagado e o estado. O estado,
+  aqui e na árvore, é um anel (`Ellipse.estado`): vazado com o Claude parado no prompt,
+  aberto e girando enquanto ele trabalha, cheio quando há o que ver (terminou, erro, espera
+  por você). A aba não tem
   menu: os botões dela (retomar, sessão nova, pedido, pull request, sem skill, compactar,
-  code review, cor, encerrar) ficam na barra embaixo das abas, no tom da aba da frente, e trocam com ela
-  (`MainViewModel.AbaAtiva`). Compactar digita o `/compact` no Claude
+  code review, cor, encerrar) ficam no cabeçalho do cartão do terminal, no tom da aba da
+  frente, e trocam com ela (`MainViewModel.AbaAtiva`). Ali as pílulas são `quieta`: só o
+  ícone na cor e o nome apagado, e a pílula inteira com o mouse em cima; nove acesas brigavam
+  com o terminal. O Code review rodando continua aceso. Compactar digita o `/compact` no Claude
   (`TerminalSessao.ComandoAsync`) e só vale com ele parado, o que só os hooks sabem dizer
   (`EsperaComando`): o Ctrl+C antes do comando interromperia um trabalho, e no meio da
   subida derrubaria o Claude. A cor é do projeto (`Projeto.Cor`, escolhida na barra e
@@ -175,8 +193,9 @@ e por isso confirma antes.
   `RevisoesDoClaude` o acompanha pelos arquivos dele (`projects\<chave>\<sessão>\subagents`:
   `.forked-skill.json`, `.jsonl` e `.meta.json` com `finished`; interrompido, o aviso
   `killed` na conversa principal), a cada 2 s, em `MainViewModel.LerRevisoesAsync`. Vale
-  também o digitado no terminal. A linha fica no vão embaixo da barra da aba, onde não mexe
-  no terminal; entre os botões, na janela padrão, sobravam 20 px. O percentual é estimado: o
+  também o digitado no terminal. A linha fica em cima do fio que separa o cabeçalho do
+  cartão do terminal, onde não mexe na altura dele; entre os botões, na janela padrão, não
+  sobra lugar. O percentual é estimado: o
   agente não informa a fase da receita, então a conta é o tempo corrido contra a mediana
   das revisões terminadas, do mesmo esforço se houver (`RevisoesDoClaude.Percentual`). Por
   isso ele só sobe, para em 99 e leva `~` no botão. Os passos não servem: vêm em rajadas.
@@ -186,11 +205,12 @@ e por isso confirma antes.
   (`Cia.CommitsDepois`), para não subir o git em dezenas de projetos; os arquivos alterados
   só o quadro vê. O resultado é texto livre: não há como contar os achados com segurança.
 - **Botões** — uma medida só: pílula de 24 (`Button.pilula` com a classe da cor: fundo
-  diluído, contorno e texto na cor de cada um, com ícone), na barra das abas, no projeto
+  diluído, contorno e texto na cor de cada um, com ícone), no cabeçalho do cartão do terminal
+  (lá, `quieta`), no projeto
   parado, na conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`,
   só com o ícone na cor, como as abas). O mesmo botão tem a mesma cor e o mesmo ícone em
-  qualquer lugar. O principal (retomar) é a pílula verde de 28 em negrito (`principal`); a
-  barra das abas tem os 28 da pesquisa ao lado. Painel e Terminal, no canto, ficam
+  qualquer lugar. O principal (retomar) é a pílula verde de 28 em negrito (`principal`); o
+  cabeçalho do cartão tem os 32 da pesquisa ao lado. Painel e Terminal, no canto, ficam
   `destacado` enquanto abertos. Na linha da árvore, o ▶ é a bolinha verde do Retomar e a
   estrela é só o símbolo (`simbolo`), sem pílula.
 - **Encerrar o Claude** — encerrar, ou abrir de novo de outro jeito, manda o `/exit` antes
@@ -209,7 +229,28 @@ e por isso confirma antes.
   selecionado, ou a janela atrás de outra) fica com o nome marcado, entra na conta do
   título da janela e faz o botão piscar na barra de tarefas (`MainViewModel.EstadoMudou`,
   `BarraDeTarefas`). O "aguardando" por silêncio não conta: é palpite.
-- **Segundo terminal** — cada projeto pode ter um shell simples embaixo do principal
+- **Consumo** — o cartão ao lado do terminal (a pílula "Consumo" do canto; é da janela,
+  `Workspace.Consumo`, e acompanha o projeto à vista) é o `ctop -Slim` com tela, no lugar do
+  painel lateral que o cia perdeu em 28/10/2026: o contexto da conversa, os limites do plano,
+  os tokens da sessão e o projeto dia a dia (`ViewModels/Consumo.cs`, `ConsumoViewModel`).
+  Com o Claude aberto é a conversa da aba (`sessions\<pid>.json`); parado, a última do
+  projeto. `ConsumoDoClaude` lê os transcripts como o ctop (`Scripts\claude-stats\claude-stats.ps1`):
+  o `usage` de cada resposta, uma vez por `message.id` (a resposta sai em várias linhas, e a
+  sessão bifurcada copia o histórico: vale o arquivo mais antigo), com os subagentes. **Mudou
+  lá, muda aqui.** A leitura é incremental (cada arquivo guarda até onde foi contado) e todo
+  arquivo abre com `FileShare.ReadWrite | Delete`: reler a sessão inteira a cada 3 s, só
+  compartilhando leitura, foi o que deixou o cia lento e fez o Claude avisar "Transcript
+  writes are failing (EBUSY)". A cada 5 s com o cartão à vista, os dias do projeto a cada
+  minuto, e arquivo sem gravação no período nem é aberto. Diferença de propósito: a janela de
+  contexto é 200 mil ou 1 milhão (`ConsumoDoClaude.Janela`), sem o degrau de 500 mil do ctop,
+  que não existe. `LimitesDoPlano` é o Get-Limits do ctop: o endpoint do /usage
+  (`api.anthropic.com/api/oauth/usage`, não é API pública estável) com o login de
+  `.credentials.json`, que nunca é renovado daqui. O estado fica no arquivo do ctop
+  (`%LOCALAPPDATA%\claude-stats\limits-cache.json`), para os dois respeitarem a mesma conta:
+  uma consulta a cada 2 minutos, 5 de espera depois de um 429. Com o cartão aberto e pouco
+  lugar, os botões do cabeçalho do terminal ficam só com o ícone (`MainWindow.CaberBotoes`).
+- **Segundo terminal** — cada projeto pode ter um shell simples embaixo do principal, num
+  cartão próprio com a pasta no cabeçalho
   (`AuxiliarSessao`), sem o comando de abertura; só existe com o terminal do projeto
   iniciado e é encerrado junto com ele. Abre e fecha na pílula "Terminal" do canto (acesa
   enquanto aberto); a do painel lateral, "Painel", é igual.
@@ -250,6 +291,10 @@ e por isso confirma antes.
 - A versão nova é procurada na API do GitHub e, se ela recusar (cota de 60 consultas por
   hora por IP), no redirecionamento de `releases/latest` do site. Não espere workflow
   consultando a API em laço: gasta a cota do app instalado na mesma máquina.
+- Nenhum teste consulta a conta do Claude: os limites do plano recebem uma conta de mentira
+  (`new LimitesDoPlano(consultar, pasta)`), e sem ela, com `Cia.PastaDeTeste` posta, a
+  consulta de verdade volta sem resposta. O estado deles nos testes fica na pasta do teste,
+  não no arquivo do ctop.
 - Não rode o `cia`/`cim` nem o `claude` do usuário em testes: gastam a cota dele. Os
   testes da janela montam bases e `estado.json` temporários e trocam o Claude por
   `cmd.exe /k echo` (`Workspace.Claude`), que mostra os argumentos e fica aberto como ele.
@@ -273,7 +318,8 @@ e por isso confirma antes.
   GTerm) ou `pequena` (= `tiny`); só ícone, `redonda`; botão sem classe já é a pílula cinza;
   `primary` = azul em negrito. Desligado fica cinza, e o estilo vem depois das cores (senão
   a cor vence); o Code review rodando (`revisando`) e a versão do rodapé ficam legíveis de
-  propósito. **Glifo sai de `Controls\Glifos`** (no XAML `{x:Static c:Glifos.Nome}`), nunca
+  propósito. `quieta` (só no cabeçalho do cartão do terminal, e só no GTerm) não troca a cor
+  nem o ícone da ação: esconde o fundo e o contorno até o mouse chegar. **Glifo sai de `Controls\Glifos`** (no XAML `{x:Static c:Glifos.Nome}`), nunca
   escrito direto; os da Nerd Font (tipo do projeto, git do quadro, classe `nerd`) são de
   outra fonte e ficam onde estão. Diálogos: o rótulo passa por `DialogWindow.Rotular` (a
   tabela `Acoes`). Estilo do conteúdo do botão com `>` (o menu e a paleta da Cor são

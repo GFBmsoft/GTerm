@@ -1,3 +1,11 @@
+## 1.0.0.28 — 13/11/2026
+- **Visual novo**: a janela e a árvore ficam num plano mais escuro, e o terminal, o segundo terminal e o painel viram cartões de contorno fino em cima dele. No Windows 11 a barra de título pega a cor da janela.
+- **O terminal ganhou moldura na cor do projeto**, a mesma da aba dele, e os botões da aba (Retomar, Sessão nova, Compactar, Code review…) passaram para o cabeçalho do cartão. Ali eles ficam quietos, só com o ícone na cor, e acendem com o mouse em cima; o Code review rodando continua aceso.
+- **Consumo, ao lado do terminal**: a pílula Consumo, no canto, abre um cartão com o contexto da conversa, os limites do plano (a sessão de 5 horas e a semana, com a hora em que zeram), os tokens da sessão e o consumo do projeto nos últimos 14 dias. É o que o ctop mostrava no painel do cia, agora sem terminal e lendo só o que o Claude acrescentou à conversa. Com o projeto parado, mostra a última conversa dele.
+- Quando os botões do cabeçalho não cabem (a janela estreita, o Consumo aberto), ficam só com o ícone, e a dica diz o que cada um faz. Antes, na janela estreita, um passava por baixo do outro.
+- As abas viraram fichas de canto suave. Na árvore, a contagem de cada grupo fica numa etiqueta na cor dele, e o estado do Claude é um anel: vazado com ele parado, girando enquanto trabalha, cheio quando terminou ou espera por você.
+- O segundo terminal mostra a pasta no cabeçalho do cartão dele.
+
 ## 1.0.0.27 — 12/11/2026
 - **O Enter depois de sair do Claude volta à conversa que estava no terminal**: antes ele retomava a última conversa do projeto, que podia ser uma antiga e enorme se você tivesse aberto sem skill, ou retomado uma conversa pelas Sessões, e saído sem digitar nada. Agora volta à que estava ali, grande ou não. Se não havia nenhuma, abre como o botão Abrir o Claude.
 - **O botão do projeto parado diz o que o clique vai fazer**: com o GTerm aberto de um dia para o outro, ele seguia mostrando "Retomar a sessão" e o clique abria uma sessão nova. O quadro agora relê a sessão a cada minuto: acompanha a virada do dia e a sessão que cresceu pelo cia no terminal.

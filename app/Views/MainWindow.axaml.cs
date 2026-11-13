@@ -156,6 +156,42 @@ public partial class MainWindow : Window, IDialogService
             if (_vm.AbaAtiva is { } aba) _vm.MudarCor(aba, hex);
         };
         botaoDaCor.Flyout = painelDaCor;
+
+        // os botões do cabeçalho do terminal perdem o nome quando não cabem. Outra aba à frente
+        // tem outros botões (o Pedido e o Pull request são só da BMSoft): mede de novo com os nomes
+        var faixa = this.FindControl<Border>("BarraDaAba")!;
+        faixa.LayoutUpdated += (_, _) => CaberBotoes();
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.AbaAtiva))
+                this.FindControl<StackPanel>("BotoesDaAba")!.Classes.Set("apertada", false);
+        };
+    }
+
+    private double _larguraComNomes;
+
+    /// <summary>
+    /// Com os nomes, os botões do cabeçalho do terminal pedem uns 850 px; a janela estreita ou o
+    /// cartão do consumo aberto deixam menos. Sem lugar, ficam só com o ícone ("apertada"), em vez
+    /// de sumir pela direita. A largura com os nomes é a da última vez em que eles estavam à vista:
+    /// medida sempre, a faixa ficaria trocando de um jeito para o outro a cada passada.
+    /// </summary>
+    private void CaberBotoes()
+    {
+        var faixa = this.FindControl<Border>("BarraDaAba")!;
+        if (!faixa.IsEffectivelyVisible) return;
+
+        var botoes = this.FindControl<StackPanel>("BotoesDaAba")!;
+        var apertada = botoes.Classes.Contains("apertada");
+        if (!apertada)
+        {
+            var visiveis = botoes.Children.Where(c => c.IsVisible).ToList();
+            _larguraComNomes = visiveis.Sum(c => c.DesiredSize.Width) + botoes.Spacing * Math.Max(0, visiveis.Count - 1);
+        }
+
+        // o que sobra para eles: a faixa, menos o Encerrar e os respiros das pontas
+        var cabe = faixa.Bounds.Width - this.FindControl<Button>("EncerrarDaAba")!.Bounds.Width - 16;
+        if (_larguraComNomes > cabe != apertada) botoes.Classes.Set("apertada", !apertada);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

@@ -55,6 +55,22 @@ public class ShellsTests
     public void ShellDesconhecidoCaiNoPadrao() => Assert.Equal(Shells.Padrao, Shells.Achar("zsh").Id);
 }
 
+public class BarraDeTituloTests
+{
+    /// <summary>No Windows 11 a barra de título leva a cor do fundo da janela, no formato dele (0x00BBGGRR).</summary>
+    [Fact]
+    public void ACorDaBarraEADoFundoDaJanela()
+    {
+        Assert.Equal(0x14100F, BarraDeTitulo.CorDaBarra(Avalonia.Media.Brush.Parse("#0F1014")));
+        Assert.Equal(0x0000FF, BarraDeTitulo.CorDaBarra(Avalonia.Media.Brushes.Red));
+
+        // fundo que não é uma cor cheia não tem o que pintar: fica a barra do sistema
+        Assert.Null(BarraDeTitulo.CorDaBarra(null));
+        Assert.Null(BarraDeTitulo.CorDaBarra(Avalonia.Media.Brushes.Transparent));
+        Assert.Null(BarraDeTitulo.CorDaBarra(Avalonia.Media.Brush.Parse("#800F1014")));
+    }
+}
+
 public class AtividadeTests
 {
     private static readonly DateTime T0 = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
@@ -1120,7 +1136,7 @@ public class JanelaTests : IDisposable
             List<Button> Pilulas() => janela.GetVisualDescendants().OfType<Button>()
                 .Where(b => b.IsEffectivelyVisible && (b.Classes.Contains("pilula") || b.Classes.Contains("aba")))
                 .ToList();
-            Assert.Equal(8, Pilulas().Count(b => b.Classes.Contains("pilula")));
+            Assert.Equal(9, Pilulas().Count(b => b.Classes.Contains("pilula"))); // com a do Consumo, no canto
             Assert.DoesNotContain("apagada", Pilulas().Single(b => b.Command == vm.VerProjetosCommand).Classes);
             Assert.Contains("apagada", Pilulas().Single(b => b.Command == vm.VerSessoesCommand).Classes);
             Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
@@ -1970,6 +1986,35 @@ public class JanelaTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             Assert.Same(financeiro, vm.Selecionado);
             Assert.True(vm.AuxiliarVisivel);
+
+            // a moldura do cartão do terminal é da cor do projeto da aba à frente, a mesma do
+            // contorno da ficha dela; a aba de trás não tem cor no contorno
+            static (Avalonia.Media.Color, double) Tom(Avalonia.Media.IBrush? b) =>
+                (((Avalonia.Media.ISolidColorBrush)b!).Color, b.Opacity);
+            var moldura = janela.FindControl<Border>("MolduraDaAba")!;
+            Assert.True(moldura.IsEffectivelyVisible);
+            Assert.Equal((Avalonia.Media.Color.Parse(financeiro.CorHex), 0.55), Tom(moldura.BorderBrush));
+            Assert.Equal(Tom(moldura.BorderBrush), Tom(financeiro.BordaDaAba));
+            Assert.Equal(Avalonia.Media.Brushes.Transparent, notas.BordaDaAba);
+            Assert.Equal(new CornerRadius(10), janela.FindControl<Border>("Cartao")!.CornerRadius);
+
+            // os botões do cabeçalho ficam quietos, só com o ícone na cor, até o mouse chegar
+            Assert.All(barra.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible),
+                b => Assert.Contains("quieta", b.Classes));
+            var retomar = Botao("Retomar");
+            var presenter = retomar.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First();
+            Assert.Equal(Avalonia.Media.Colors.Transparent, ((Avalonia.Media.ISolidColorBrush)presenter.Background!).Color);
+            Assert.True(janela.TryFindResource("Green", janela.ActualThemeVariant, out var verde));
+            Assert.True(janela.TryFindResource("TextDim", janela.ActualThemeVariant, out var apagado));
+            var textos = retomar.GetVisualDescendants().OfType<TextBlock>().ToList();
+            Assert.Same(verde, textos.Single(t => t.Classes.Contains("glifo")).Foreground);
+            Assert.Same(apagado, textos.Single(t => t.Text == "Retomar").Foreground);
+
+            // o segundo terminal tem o cartão dele, com o cabeçalho que diz o que é e de onde
+            var cabecalho = janela.GetVisualDescendants().OfType<Border>()
+                .Single(b => b.Classes.Contains("cabecalho") && b.IsEffectivelyVisible);
+            Assert.Equal(new[] { "Terminal", Financeiro },
+                cabecalho.GetVisualDescendants().OfType<TextBlock>().Where(t => !t.Classes.Contains("glifo")).Select(t => t.Text));
             Foto(janela, "abas.png");
         }
         finally
@@ -3000,6 +3045,182 @@ public class JanelaTests : IDisposable
         await vm.AtualizacaoCommand.ExecuteAsync(null);
         Assert.Equal("Build local, sem versão", vm.Rodape);
         Assert.Equal(0, consultas);
+    }
+
+    // a janela também lê sozinha (ao trocar de projeto, a cada 5 s): espera essa sair e lê de novo
+    private static async Task LerConsumo(MainViewModel vm)
+    {
+        Assert.True(await Esperar(() => !vm.LendoConsumo));
+        await vm.LerConsumoAsync();
+        Assert.True(await Esperar(() => !vm.LendoConsumo));
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>
+    /// O cartão do consumo ao lado do terminal, no lugar do painel lateral do cia: a pílula do canto
+    /// o abre e fecha e a escolha fica gravada. Com o projeto parado mostra a última conversa dele;
+    /// com o Claude aberto, a conversa da aba. Os limites do plano vêm de uma conta de mentira.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task CartaoDoConsumoAoLadoDoTerminal()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var agora = DateTime.Today.AddHours(12);
+            vm.Relogio = () => agora;
+
+            var consultas = 0;
+            Transcript.Login(ContaDoClaude, agora.AddHours(1));
+            vm.LimitesDoPlano = new LimitesDoPlano(_ =>
+            {
+                consultas++;
+                return Task.FromResult(new LimitesDoPlano.Resposta(200, Transcript.Limites(agora)));
+            }, Path.Combine(_raiz, "claude-stats"));
+
+            // uma conversa de ontem no Financeiro
+            var conversas = Path.Combine(ContaDoClaude, "projects", SessoesDoClaude.Chave(Financeiro));
+            Directory.CreateDirectory(conversas);
+            File.WriteAllText(Path.Combine(conversas, "antiga.jsonl"),
+                Transcript.Resposta("msg_a", agora.AddDays(-1), 100, 900, 4000, 5000) + "\n");
+            File.SetLastWriteTime(Path.Combine(conversas, "antiga.jsonl"), agora.AddDays(-1));
+
+            var cartao = janela.FindControl<Border>("CartaoDoConsumo")!;
+            var botao = janela.FindControl<Button>("BotaoDoConsumo")!;
+            List<string?> Textos() => cartao.GetVisualDescendants().OfType<TextBlock>()
+                .Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
+            ProgressBar Medidor(int i) => cartao.GetVisualDescendants().OfType<ProgressBar>().Where(b => b.IsEffectivelyVisible).ElementAt(i);
+
+            // fechado até pedir: nada é lido, nem a conta consultada
+            Assert.False(cartao.IsVisible);
+            Assert.False(vm.ConsumoVisivel);
+            Assert.DoesNotContain("destacado", botao.Classes);
+            Assert.Equal(24, botao.Bounds.Height);
+            await vm.LerConsumoAsync();
+            Assert.Equal(0, consultas);
+
+            // aberto com o projeto parado: a última conversa dele, os limites e os dias
+            var financeiro = vm.Selecionado!;
+            vm.AlternarConsumoCommand.Execute(null);
+            await LerConsumo(vm);
+            Assert.True(cartao.IsVisible);
+            Assert.Contains("destacado", botao.Classes);
+            Assert.True(WorkspaceStore.Load().Consumo);
+            Assert.Equal(1, consultas);
+
+            var textos = Textos();
+            foreach (var texto in new[]
+                     {
+                         "Consumo", "Max",
+                         "CONTEXTO", "5%", "9,1 mil de 200 mil tokens",
+                         "LIMITES DO PLANO", "Sessão (5h)", "64%", "zera em 3h12", "Semana (7d)", "23%", "Semana Sonnet", "82%", "limite semanal",
+                         "ÚLTIMA SESSÃO", "10 mil", "entrada", "100", "1%", "saída", "900", "9%", "cache gravado", "4 mil", "40%",
+                         "cache lido", "5 mil", "50%", "cache 55% · 10 mil por resposta",
+                         "PROJETO · 14 DIAS", "hoje",
+                     })
+                Assert.Contains(texto, textos);
+            Assert.DoesNotContain(vm.Consumo.AvisoDoContexto, textos);
+            Assert.DoesNotContain("lendo…", textos);
+            Assert.Equal(new long[] { 10_000, 0 }, vm.Consumo.PorDia.Skip(12));
+
+            // os medidores: o contexto e a sessão em verde, a semana do Sonnet em vermelho
+            Assert.Equal(4, cartao.GetVisualDescendants().OfType<ProgressBar>().Count(b => b.IsEffectivelyVisible));
+            Assert.DoesNotContain("alerta", Medidor(0).Classes);
+            Assert.Contains("alerta", Medidor(1).Classes);   // 64% da sessão: da metade em diante
+            Assert.DoesNotContain("critico", Medidor(2).Classes);
+            Assert.Contains("critico", Medidor(3).Classes);
+            Assert.Equal(6, Medidor(0).Bounds.Height);
+            Assert.Equal(64, Medidor(1).Value);
+            var barra = cartao.GetVisualDescendants().OfType<BarraEmpilhada>().Single();
+            Assert.Equal(new double[] { 100, 900, 4000, 5000 }, barra.Partes);
+            Assert.True(barra.Bounds.Width > 200, "largura " + barra.Bounds.Width);
+            var dias = cartao.GetVisualDescendants().OfType<BarrasPorDia>().Single();
+            Assert.Equal(14, dias.Valores!.Count);
+            Assert.Equal(14, dias.Rotulos!.Count);
+            Assert.True(dias.IsEffectivelyVisible);
+            Foto(janela, "consumo-parado.png");
+
+            // o Claude sobe, e a conversa da aba é a que ele diz estar: outra, de hoje, com o
+            // contexto acima do que o cia retoma sozinho
+            await financeiro.IniciarCommand.ExecuteAsync(null);
+            Assert.True(await Esperar(() => financeiro.Sessao is { Pid: not null }));
+            var pid = financeiro.Sessao!.Pid!.Value;
+            await LerConsumo(vm);
+            Assert.Contains("SESSÃO", Textos());
+            Assert.Contains("O Claude ainda não respondeu nesta conversa.", Textos());
+            Assert.DoesNotContain("CONTEXTO", Textos());
+
+            Directory.CreateDirectory(Path.Combine(ContaDoClaude, "sessions"));
+            File.WriteAllText(Path.Combine(ContaDoClaude, "sessions", pid + ".json"),
+                $$"""{"pid":{{pid}},"sessionId":"nova","cwd":{{Json(Financeiro)}}}""");
+            File.WriteAllText(Path.Combine(conversas, "nova.jsonl"),
+                Transcript.Pergunta + "\n" + Transcript.Resposta("msg_b", agora.AddMinutes(-10), 2, 1000, 10_000, 150_000) + "\n");
+            agora = agora.AddSeconds(90); // os dias do projeto são relidos a cada minuto
+            await LerConsumo(vm);
+
+            textos = Textos();
+            foreach (var texto in new[]
+                     {
+                         "CONTEXTO", "80%", "160 mil de 200 mil tokens", vm.Consumo.AvisoDoContexto,
+                         "SESSÃO", "161 mil", "cache 94% · 161 mil por resposta", "PROJETO · 14 DIAS", "171 mil",
+                     })
+                Assert.Contains(texto, textos);
+            Assert.DoesNotContain("ÚLTIMA SESSÃO", textos);
+            Assert.Contains("critico", Medidor(0).Classes);
+            Assert.Equal(new long[] { 10_000, 161_002 }, vm.Consumo.PorDia.Skip(12));
+            Assert.Equal(1, consultas); // a conta não é consultada a cada volta: a resposta vale 2 minutos
+            Assert.True(vm.AbaAtiva is not null && cartao.Bounds.Height > 400, "altura " + cartao.Bounds.Height);
+
+            // com o cartão aberto na janela padrão, os botões do cabeçalho do terminal não cabem com
+            // o nome: ficam só com o ícone, todos à vista, em vez de sumir pela direita
+            var botoes = janela.FindControl<StackPanel>("BotoesDaAba")!;
+            var nome = botoes.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "Retomar");
+            Assert.Contains("apertada", botoes.Classes);
+            Assert.False(nome.IsVisible);
+            Assert.All(botoes.Children.Where(c => c.IsVisible),
+                c => Assert.True(c.Bounds.Right <= botoes.Bounds.Width + 0.5, $"{c.Bounds.Right} em {botoes.Bounds.Width}"));
+            Assert.All(botoes.Children.OfType<Button>().Where(b => b.IsVisible), b => Assert.Equal(24, b.Bounds.Height));
+            Foto(janela, "consumo.png");
+
+            // fechado o cartão, há lugar de novo e os nomes voltam; aberto, somem outra vez
+            vm.AlternarConsumoCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.DoesNotContain("apertada", botoes.Classes);
+            Assert.True(nome.IsVisible);
+            vm.AlternarConsumoCommand.Execute(null);
+            await LerConsumo(vm);
+            Assert.Contains("apertada", botoes.Classes);
+
+            // outro projeto à vista: o cartão é dele, e sem conversa diz isso
+            vm.Ver(Projeto(vm, "Notas"));
+            await LerConsumo(vm);
+            textos = Textos();
+            Assert.Contains("Nenhuma conversa neste projeto.", textos);
+            Assert.DoesNotContain("161 mil", textos);
+            Assert.Contains("64%", textos); // os limites são da conta: continuam
+            Assert.Equal(1, consultas);
+
+            // vencida a resposta da conta, a volta seguinte consulta de novo
+            agora = agora.AddMinutes(2);
+            await LerConsumo(vm);
+            Assert.Equal(2, consultas);
+
+            // fechado, some e fica gravado
+            vm.AlternarConsumoCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(cartao.IsVisible);
+            Assert.DoesNotContain("destacado", botao.Classes);
+            Assert.False(WorkspaceStore.Load().Consumo);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
     }
 
     /// <summary>

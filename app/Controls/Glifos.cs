@@ -21,6 +21,9 @@ public static class Glifos
     public const string Painel = "";
     public const string Terminal = "";
 
+    // o cartão do consumo do Claude, ao lado do terminal (AreaChart)
+    public const string Consumo = "";
+
     // a árvore: modos, estrela, setas e marcas
     public const string Projetos = "";
     public const string Sessoes = "";

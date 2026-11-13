@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Styling;
 
 namespace GTerm.Services;
@@ -29,12 +30,43 @@ public static class BarraDeTitulo
     /// <summary>Aplica agora e a cada troca de tema da janela.</summary>
     public static void Acompanhar(Window janela)
     {
-        if (!OperatingSystem.IsWindows() || Atributo(Environment.OSVersion.Version.Build) is not { } atributo)
+        if (!OperatingSystem.IsWindows()) return;
+
+        // do Windows 11 em diante a barra aceita uma cor: a do fundo da janela, e as duas viram um
+        // plano só, sem a faixa cinza do sistema em cima do app
+        if (Environment.OSVersion.Version.Build >= PrimeiroWindows11)
+        {
+            Pintar(janela);
+            janela.ActualThemeVariantChanged += (_, _) => Pintar(janela);
             return;
+        }
+
+        if (Atributo(Environment.OSVersion.Version.Build) is not { } atributo) return;
 
         Aplicar(janela, atributo);
         janela.ActualThemeVariantChanged += (_, _) => Aplicar(janela, atributo);
     }
+
+    /// <summary>A cor da barra, no formato do Windows (0x00BBGGRR); null se o fundo não é uma cor cheia.</summary>
+    public static int? CorDaBarra(IBrush? fundo) =>
+        fundo is ISolidColorBrush { Color: { A: 255 } c } ? c.R | c.G << 8 | c.B << 16 : null;
+
+    private static void Pintar(Window janela)
+    {
+        if (janela.TryGetPlatformHandle()?.Handle is not { } hwnd || hwnd == IntPtr.Zero) return;
+        if (CorDaBarra(janela.Background) is not { } cor) return;
+
+        try
+        {
+            DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref cor, sizeof(int));
+        }
+        catch (Exception)
+        {
+            // cosmético, como embaixo
+        }
+    }
+
+    private const int DWMWA_CAPTION_COLOR = 35;
 
     private static void Aplicar(Window janela, int atributo)
     {

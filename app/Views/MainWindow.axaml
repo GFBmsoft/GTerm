@@ -40,7 +40,7 @@
     <Style Selector="Button.grupo">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="6,0,8,0" />
       <Setter Property="Margin" Value="6,4,6,0" />
       <Setter Property="Height" Value="26" />
@@ -52,8 +52,9 @@
       <Setter Property="Background" Value="{DynamicResource BgHover}" />
     </Style>
 
-    <!-- abas dos abertos: a da frente ganha fundo e contorno na cor do projeto (no Border de
-         dentro); as outras ficam só com o ponto da cor e o nome apagado -->
+    <!-- abas dos abertos, em ficha de canto suave (a pílula é do botão): a da frente ganha fundo
+         e contorno na cor do projeto, a mesma da moldura do cartão embaixo dela; as outras ficam
+         com o contorno neutro, o ponto da cor e o nome apagado -->
     <Style Selector="Button.aba">
       <!-- a altura da pílula: com os 28 do botão comum, a faixa das abas crescia ao abrir a
            primeira, e a árvore e o terminal desciam junto -->
@@ -61,8 +62,8 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
-      <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Margin" Value="0,0,4,0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Margin" Value="0,0,6,0" />
     </Style>
     <Style Selector="Button.aba:pointerover /template/ ContentPresenter, Button.aba:pressed /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource BgHover}" />
@@ -84,8 +85,28 @@
     <Style Selector="Border.linha">
       <Setter Property="Height" Value="26" />
       <Setter Property="Margin" Value="6,0" />
-      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- os cartões em cima do plano da janela: o terminal, o segundo terminal e o painel, cada um
+         com o contorno fino e, os dois últimos, um cabeçalho que diz o que são -->
+    <Style Selector="Border.cartao">
+      <Setter Property="Background" Value="{DynamicResource Bg}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.cabecalho">
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSoft}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.cabecalho TextBlock">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <!-- a conversa tem duas linhas: o título e, embaixo, de onde e quando -->
     <Style Selector="Border.linha.sessao">
@@ -138,6 +159,46 @@
       <Setter Property="Foreground" Value="{DynamicResource Yellow}" />
     </Style>
 
+    <!-- no cabeçalho do cartão do terminal as pílulas ficam quietas: são nove, cada uma na sua cor, e
+         acesas todas brigavam com o terminal. Parada, só o ícone na cor e o nome apagado, como a
+         escolha apagada de Projetos/Sessões; com o mouse em cima, a pílula inteira. Desligada, tudo
+         apagado. Vem antes do Code review rodando, que continua aceso: é onde está o andamento -->
+    <Style Selector="Button.quieta">
+      <Setter Property="Padding" Value="8,0,9,0" />
+    </Style>
+    <Style Selector="Button.quieta /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.quieta:pointerover /template/ ContentPresenter, Button.quieta:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+      <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+    </Style>
+    <Style Selector="Button.quieta > StackPanel.comIcone > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    </Style>
+    <Style Selector="Button.quieta:pointerover > StackPanel.comIcone > TextBlock">
+      <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+    <Style Selector="Button.quieta > StackPanel.comIcone > TextBlock.glifo">
+      <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+    <Style Selector="Button.quieta:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.quieta:disabled > StackPanel.comIcone > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextFaint}" />
+    </Style>
+    <!-- apertados, os botões do cabeçalho ficam só com o ícone, e a dica diz o que cada um faz. O
+         Code review rodando mantém o texto: é o andamento -->
+    <Style Selector="StackPanel.apertada > Button > StackPanel.comIcone > TextBlock:not(.glifo)">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="StackPanel.apertada > Button.revisando > StackPanel.comIcone > TextBlock">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
     <!-- à espera (o Compactar, com o Claude ocupado), a pílula fica cinza como qualquer desligada.
          O Code review rodando também não aceita clique, mas o texto dele é o status: fica na cor -->
     <Style Selector="Button.revisando:disabled">
@@ -169,6 +230,44 @@
     </Style>
     <Style Selector="ProgressBar.revisao.parada">
       <Setter Property="Foreground" Value="{DynamicResource Red}" />
+    </Style>
+
+    <!-- os medidores do cartão do consumo (o contexto, as janelas do plano): verde, amarelo quando
+         merece atenção, vermelho perto do fim -->
+    <Style Selector="ProgressBar.medidor">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="MinHeight" Value="6" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="{DynamicResource BgActive}" />
+      <Setter Property="Foreground" Value="{DynamicResource Green}" />
+    </Style>
+    <Style Selector="ProgressBar.medidor.alerta">
+      <Setter Property="Foreground" Value="{DynamicResource Yellow}" />
+    </Style>
+    <Style Selector="ProgressBar.medidor.critico">
+      <Setter Property="Foreground" Value="{DynamicResource Red}" />
+    </Style>
+    <!-- as linhas do cartão do consumo: o quadradinho da cor da série, o nome, e os números à direita -->
+    <Style Selector="Grid.tokens > Border">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Grid.tokens > TextBlock">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.numero">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="TextTrimming" Value="None" />
+    </Style>
+    <Style Selector="TextBlock.total">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
     <!-- Projetos e Sessões são uma escolha, como as abas: a escolhida é a pílula colorida
@@ -209,8 +308,8 @@
       <Setter Property="Background" Value="{DynamicResource BgRaised}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="16,12" />
     </Style>
     <Style Selector="Border.quadro TextBlock">
       <Setter Property="FontSize" Value="12" />
@@ -227,10 +326,14 @@
        pesquisa fica na mesma altura do cartão do terminal -->
   <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,*">
 
+    <!-- a árvore é um plano só, de cima a baixo, no tom da janela: um fio a separa dos cartões -->
+    <Border Grid.RowSpan="2" Grid.Column="0" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,0,1,0"
+            IsHitTestVisible="False" />
+
     <!-- na faixa das abas, em cima da árvore: os projetos do cia ou as conversas do Claude
          (o cl), e no modo das conversas o Claude sem nenhuma delas, no azul do Claude sem
          conversa do quadro -->
-    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="10,6,8,6" Spacing="6">
+    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="10,8,9,8" Spacing="6">
       <Button Classes="pilula laranja" Classes.apagada="{Binding ModoSessoes}" Command="{Binding VerProjetosCommand}"
               ToolTip.Tip="Os projetos das pastas do cia, como no dashboard dele">
         <StackPanel Classes="comIcone">
@@ -257,8 +360,10 @@
     <Border Grid.Row="1" Grid.Column="0">
       <Grid RowDefinitions="Auto,*,Auto">
 
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="10,0,8,4">
+        <!-- a pesquisa tem a altura do cabeçalho do cartão do terminal, ao lado dela -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="10,0,9,6">
           <TextBox x:Name="CaixaDoFiltro" Text="{Binding Filtro}" Watermark="{Binding MarcaDoFiltro}"
+                   MinHeight="32" VerticalContentAlignment="Center" BorderBrush="{DynamicResource BorderSoft}"
                    ToolTip.Tip="Filtra a lista (Ctrl+Shift+P): os projetos pelo nome, as conversas pelo título ou pelo projeto. Enter vai ao primeiro, Esc limpa" />
           <Button Grid.Column="1" Classes="pilula redonda amarelo" Margin="6,0,0,0" Command="{Binding NovoGrupoCommand}"
                   ToolTip.Tip="Novo grupo. Clique direito num grupo cria um subgrupo, e arrastar leva projetos e conversas para ele">
@@ -269,18 +374,20 @@
         <ListBox Grid.Row="1" x:Name="Lista" ItemsSource="{Binding Linhas}"
                  SelectedItem="{Binding LinhaSelecionada}" AutoScrollToSelectedItem="False">
           <ListBox.DataTemplates>
-            <!-- grupo minimalista, como no GTest: seta, ponto cheio e o nome na cor dele -->
+            <!-- grupo minimalista: a seta, a contagem numa etiqueta na cor do grupo (no lugar do
+                 ponto do GTest) e o nome na mesma cor -->
             <DataTemplate DataType="vm:GrupoDaArvore">
               <Button Classes="grupo" Classes.alvo="{Binding AlvoDeSoltar}" Command="{Binding AlternarCommand}">
-                <Grid ColumnDefinitions="12,Auto,*,Auto" Margin="{Binding Recuo}">
+                <Grid ColumnDefinitions="12,Auto,*" Margin="{Binding Recuo}">
                   <TextBlock Grid.Column="0" Text="{Binding Seta}" Classes="glifo faint" FontSize="8"
                              VerticalAlignment="Center" />
-                  <Ellipse Grid.Column="1" Width="8" Height="8" Margin="2,0,0,0" VerticalAlignment="Center"
-                           Fill="{Binding Cor}" />
-                  <TextBlock Grid.Column="2" Text="{Binding Titulo}" FontSize="12" FontWeight="SemiBold" Margin="8,0"
+                  <Grid Grid.Column="1" MinWidth="18" Height="16" Margin="3,0,0,0" VerticalAlignment="Center">
+                    <Border CornerRadius="5" Background="{Binding Cor}" Opacity="0.18" />
+                    <TextBlock Text="{Binding Contagem}" FontSize="10" FontWeight="SemiBold" Margin="5,0"
+                               Foreground="{Binding Cor}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Grid>
+                  <TextBlock Grid.Column="2" Text="{Binding Titulo}" FontSize="12.5" FontWeight="SemiBold" Margin="8,0,0,0"
                              Foreground="{Binding Cor}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="3" Text="{Binding Contagem}" FontSize="11" Classes="faint"
-                             VerticalAlignment="Center" />
                 </Grid>
               </Button>
             </DataTemplate>
@@ -355,7 +462,8 @@
 
         <!-- a versão em uso, que vira o convite quando há uma mais nova (um clique procura e
              pergunta se instala), e ao lado dela as preferências, no azul do ícone do app -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="6,2,6,7">
+        <Border Grid.Row="2" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,0,0" Padding="10,8,9,9">
+        <StackPanel Orientation="Horizontal">
           <Button x:Name="BotaoDoRodape" Classes="pilula rodape" Classes.azul="{Binding !TemAtualizacao}"
                   Classes.verde="{Binding TemAtualizacao}" Command="{Binding AtualizacaoCommand}"
                   ToolTip.ShowOnDisabled="True" ToolTip.Tip="{Binding DicaDoRodape}">
@@ -366,18 +474,19 @@
               <TextBlock Text="{Binding Rodape}" MaxWidth="160" />
             </StackPanel>
           </Button>
-          <Button Classes="redonda azul" Margin="4,0,0,0" Command="{Binding AbrirPreferenciasCommand}"
+          <Button Classes="redonda azul" Margin="6,0,0,0" Command="{Binding AbrirPreferenciasCommand}"
                   ToolTip.Tip="Preferências: fonte e tamanho do terminal, contas do Claude">
             <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Ajustes}" />
           </Button>
         </StackPanel>
+        </Border>
       </Grid>
     </Border>
 
     <!-- uma aba por projeto com o Claude aberto, na ordem em que foram abertos (Ctrl+Tab
          passa por elas). Sem botão de fechar: encerrar só pela barra embaixo, e com
          confirmação -->
-    <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" Margin="0,6,10,6" MinHeight="24">
+    <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto,Auto" Margin="10,8,10,8" MinHeight="24">
       <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
         <ItemsControl x:Name="Abas" ItemsSource="{Binding Abertos}">
           <ItemsControl.ItemsPanel>
@@ -388,25 +497,39 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate>
               <Button Classes="aba" Command="{Binding MostrarCommand}" ToolTip.Tip="{Binding Pasta}">
-                <Border CornerRadius="12" Height="24" Padding="10,0" BorderThickness="1"
-                        Background="{Binding FundoDaAba}" BorderBrush="{Binding BordaDaAba}">
-                  <StackPanel Orientation="Horizontal" Spacing="7">
-                    <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding Nome}" FontSize="12" VerticalAlignment="Center" Classes="aba"
-                               Classes.frente="{Binding AVista}" Classes.atencao="{Binding PedeAtencao}" />
-                    <!-- o estado do Claude, como na árvore -->
-                    <Ellipse Classes="estado" Margin="1,0,0,0" IsVisible="{Binding Vivo}"
-                             Classes.rodando="{Binding Rodando}" Classes.aguardando="{Binding Aguardando}"
-                             Classes.concluido="{Binding Concluido}" Classes.erro="{Binding Erro}" />
-                  </StackPanel>
-                </Border>
+                <Panel>
+                  <!-- o contorno neutro das que não estão à frente -->
+                  <Border CornerRadius="7" BorderThickness="1" BorderBrush="{DynamicResource Border}"
+                          IsVisible="{Binding !AVista}" />
+                  <Border CornerRadius="7" Height="24" Padding="10,0" BorderThickness="1"
+                          Background="{Binding FundoDaAba}" BorderBrush="{Binding BordaDaAba}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Nome}" FontSize="12" VerticalAlignment="Center" Classes="aba"
+                                 Classes.frente="{Binding AVista}" Classes.atencao="{Binding PedeAtencao}" />
+                      <!-- o estado do Claude, como na árvore -->
+                      <Ellipse Classes="estado" Margin="1,0,0,0" IsVisible="{Binding Vivo}"
+                               Classes.rodando="{Binding Rodando}" Classes.aguardando="{Binding Aguardando}"
+                               Classes.concluido="{Binding Concluido}" Classes.erro="{Binding Erro}" />
+                    </StackPanel>
+                  </Border>
+                </Panel>
               </Button>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </ScrollViewer>
-      <!-- os botões do canto: pílula cinza, acesa (destacado) enquanto o que ela abre está aberto -->
-      <Button Grid.Column="1" Classes="pilula cinza" Classes.destacado="{Binding PainelVisivel}" Margin="6,0,0,0"
+      <!-- os botões do canto: pílula cinza, acesa (destacado) enquanto o que ela abre está aberto.
+           O consumo é da janela: ligado, o cartão acompanha o projeto que estiver à vista -->
+      <Button Grid.Column="1" x:Name="BotaoDoConsumo" Classes="pilula cinza" Classes.destacado="{Binding ConsumoLigado}"
+              Margin="6,0,0,0" Command="{Binding AlternarConsumoCommand}"
+              ToolTip.Tip="Abre ou fecha o cartão do consumo do Claude, ao lado do terminal: o contexto e os tokens da sessão, os limites do plano e o consumo do projeto por dia">
+        <StackPanel Classes="comIcone">
+          <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Consumo}" />
+          <TextBlock Text="Consumo" />
+        </StackPanel>
+      </Button>
+      <Button Grid.Column="2" Classes="pilula cinza" Classes.destacado="{Binding PainelVisivel}" Margin="6,0,0,0"
               Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
               ToolTip.Tip="Abre ou fecha o painel lateral deste projeto">
         <StackPanel Classes="comIcone">
@@ -414,7 +537,7 @@
           <TextBlock Text="Painel" />
         </StackPanel>
       </Button>
-      <Button Grid.Column="2" Classes="pilula cinza" Classes.destacado="{Binding AuxiliarVisivel}" Margin="6,0,0,0"
+      <Button Grid.Column="3" Classes="pilula cinza" Classes.destacado="{Binding AuxiliarVisivel}" Margin="6,0,0,0"
               Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
               ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude">
         <StackPanel Classes="comIcone">
@@ -424,64 +547,76 @@
       </Button>
     </Grid>
 
-    <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
+    <!-- os cartões: o do terminal, e, quando abertos, o do segundo terminal embaixo dele e o do
+         painel ao lado, cada um na sua moldura -->
+    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" RowDefinitions="*,Auto" Margin="10,0,10,10">
 
-      <!-- os botões da aba da frente, no tom dela: trocar de aba troca os botões. São as
-           pílulas do projeto parado, com as mesmas cores. Quem encerra o Claude manda o
-           /exit antes, e tudo que o encerra confirma. Com as pílulas de 24, a barra fica com
-           os 28 da pesquisa ao lado -->
-      <Border Grid.Row="0" x:Name="BarraDaAba" IsVisible="{Binding TemAbaAtiva}" Margin="0,0,8,6">
+      <!-- o terminal encaixado num cartão, um tom acima da janela. O recorte arredonda também o
+           conteúdo do terminal, e o contorno vai por cima (os dois Border do fim): neutro sem aba,
+           na cor do projeto com a aba dele à frente -->
+      <Border Grid.Row="0" Grid.Column="0" x:Name="Cartao" CornerRadius="10" ClipToBounds="True"
+              Background="{DynamicResource Bg}">
+      <Grid RowDefinitions="Auto,*">
+
+      <!-- o cabeçalho do cartão: os botões da aba da frente, no tom dela. Trocar de aba troca os
+           botões. São as pílulas do projeto parado, com as mesmas cores, quietas até o mouse
+           chegar. Quem encerra o Claude manda o /exit antes, e tudo que o encerra confirma. O
+           cabeçalho tem a altura da pesquisa, ao lado -->
+      <Border Grid.Row="0" x:Name="BarraDaAba" IsVisible="{Binding TemAbaAtiva}" Height="32">
         <Grid>
-        <Border DataContext="{Binding AbaAtiva}" CornerRadius="14" Padding="1" BorderThickness="1"
-                Background="{Binding FundoDaBarra}" BorderBrush="{Binding BordaDaBarra}">
+        <Border DataContext="{Binding AbaAtiva}" Padding="5,0,5,0" BorderThickness="0,0,0,1"
+                Background="{Binding FundoDaBarra}" BorderBrush="{Binding Fundo}">
           <Grid ColumnDefinitions="*,Auto">
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <Button Classes="pilula verde" Command="{Binding ContinuarCommand}"
+            <!-- sem lugar para todos (a janela estreita, o cartão do consumo aberto), os botões ficam
+                 só com o ícone: quem põe e tira o "apertada" é a janela (MainWindow.CaberBotoes).
+                 O recorte é só para o que ainda assim não couber não passar por baixo do Encerrar -->
+            <StackPanel x:Name="BotoesDaAba" Orientation="Horizontal" Spacing="2" ClipToBounds="True">
+              <Button Classes="pilula quieta verde" Command="{Binding ContinuarCommand}"
                       ToolTip.Tip="Abre de novo continuando a última sessão, mesmo grande ou de outro dia">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Retomar}" />
                   <TextBlock Text="Retomar" />
                 </StackPanel>
               </Button>
-              <Button Classes="pilula azul" Command="{Binding SessaoNovaCommand}"
+              <Button Classes="pilula quieta azul" Command="{Binding SessaoNovaCommand}"
                       ToolTip.Tip="Começa do zero, sem retomar a última sessão">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.SessaoNova}" />
                   <TextBlock Text="Sessão nova" />
                 </StackPanel>
               </Button>
-              <Button Classes="pilula amarelo" Command="{Binding PedidoCommand}" IsVisible="{Binding EhDaBmsoft}"
+              <Button Classes="pilula quieta amarelo" Command="{Binding PedidoCommand}" IsVisible="{Binding EhDaBmsoft}"
                       ToolTip.Tip="Sessão nova no /pedido com o número do Mantis">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Pedido}" />
                   <TextBlock Text="Pedido…" />
                 </StackPanel>
               </Button>
-              <Button Classes="pilula roxo" Command="{Binding PullRequestCommand}" IsVisible="{Binding EhDaBmsoft}"
+              <Button Classes="pilula quieta roxo" Command="{Binding PullRequestCommand}" IsVisible="{Binding EhDaBmsoft}"
                       ToolTip.Tip="Sessão nova na /delphi-pr">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.PullRequest}" />
                   <TextBlock Text="Pull request" />
                 </StackPanel>
               </Button>
-              <Button Classes="pilula cinza" Command="{Binding SemSkillCommand}"
+              <Button Classes="pilula quieta cinza" Command="{Binding SemSkillCommand}"
                       ToolTip.Tip="O Claude limpo, sem skill nenhuma">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.SemSkill}" />
                   <TextBlock Text="Sem skill" />
                 </StackPanel>
               </Button>
-              <Rectangle Width="1" Height="12" Margin="2,0" Fill="{DynamicResource Border}" VerticalAlignment="Center" />
+              <Rectangle Width="1" Height="14" Margin="4,0" Fill="{DynamicResource Border}" VerticalAlignment="Center" />
 
               <!-- depois do traço, o que age na aba sem abrir o Claude de novo -->
-              <Button Classes="pilula verdeAgua" Command="{Binding CompactarCommand}" ToolTip.ShowOnDisabled="True"
+              <Button Classes="pilula quieta verdeAgua" Command="{Binding CompactarCommand}" ToolTip.ShowOnDisabled="True"
                       ToolTip.Tip="Manda o /compact ao Claude, para resumir a conversa. Disponível com ele parado, esperando um pedido">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Compactar}" />
                   <TextBlock Text="Compactar" />
                 </StackPanel>
               </Button>
-              <Button Classes="pilula laranja" Classes.revisando="{Binding RevisaoRodando}" x:Name="CodeReview"
+              <Button Classes="pilula quieta laranja" Classes.revisando="{Binding RevisaoRodando}" x:Name="CodeReview"
                       Command="{Binding RevisarCommand}" ToolTip.ShowOnDisabled="True" ToolTip.Tip="{Binding DicaDaRevisao}">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Revisar}" />
@@ -490,7 +625,7 @@
               </Button>
 
               <!-- a paleta do GRepos abre aqui, montada no código da janela -->
-              <Button Classes="pilula cinza" x:Name="CorDaAba" ToolTip.Tip="A cor da aba deste projeto">
+              <Button Classes="pilula quieta cinza" x:Name="CorDaAba" ToolTip.Tip="A cor da aba deste projeto e da moldura do terminal">
                 <StackPanel Classes="comIcone">
                   <Ellipse Width="8" Height="8" Fill="{Binding Cor}" VerticalAlignment="Center" />
                   <TextBlock Text="Cor" />
@@ -498,7 +633,7 @@
               </Button>
             </StackPanel>
 
-            <Button Grid.Column="1" Classes="pilula vermelho" Command="{Binding EncerrarCommand}"
+            <Button Grid.Column="1" x:Name="EncerrarDaAba" Classes="pilula quieta vermelho" Command="{Binding EncerrarCommand}"
                     ToolTip.Tip="Manda o /exit ao Claude e fecha a aba; o que estiver rodando é interrompido">
               <StackPanel Classes="comIcone">
                 <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Encerrar}" />
@@ -508,26 +643,23 @@
           </Grid>
         </Border>
 
-        <!-- a linha do code review, na largura da barra, no vão até o terminal: entre os
-             botões não sobra lugar na janela padrão, e aqui ela aparecer não mexe na altura do
-             terminal. O percentual é estimado pelo tempo: o agente não informa a fase -->
+        <!-- a linha do code review, na largura do cabeçalho, em cima do fio que o separa do
+             terminal: entre os botões não sobra lugar na janela padrão, e aqui ela aparecer não
+             mexe na altura do terminal. O percentual é estimado pelo tempo: o agente não informa
+             a fase -->
         <ProgressBar x:Name="BarraDaRevisao" DataContext="{Binding AbaAtiva}" Classes="revisao"
                      Classes.concluida="{Binding RevisaoConcluida}" Classes.parada="{Binding RevisaoParada}"
                      IsVisible="{Binding TemRevisao}" Minimum="0" Maximum="100" Value="{Binding PercentualDaRevisao}"
                      Height="4" MinHeight="4" MinWidth="0" CornerRadius="2"
-                     Margin="14,0,14,-5" VerticalAlignment="Bottom" IsHitTestVisible="False"
-                     Background="{DynamicResource BgHover}" />
+                     Margin="12,0,12,-2" VerticalAlignment="Bottom" IsHitTestVisible="False"
+                     Background="{DynamicResource BgActive}" />
         </Grid>
       </Border>
 
-      <!-- o terminal encaixado num cartão: a janela em volta é a moldura, no tom da
-           árvore. O recorte arredonda também o conteúdo do terminal -->
-      <Border Grid.Row="1" x:Name="Cartao" Margin="0,0,8,8" CornerRadius="10" ClipToBounds="True"
-              Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
-      <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+      <Grid Grid.Row="1">
 
         <!-- um terminal por projeto aberto, todos vivos; só o do selecionado aparece -->
-        <ItemsControl Grid.Column="0" x:Name="Sessoes" ItemsSource="{Binding Sessoes}" Margin="10,7,3,8">
+        <ItemsControl x:Name="Sessoes" ItemsSource="{Binding Sessoes}" Margin="12,9,4,9">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <Grid />
@@ -544,53 +676,9 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- segundo terminal do projeto, embaixo do principal: um shell simples, para o
-             build ou o git que não podem esperar o Claude terminar -->
-        <Border Grid.Row="1" Grid.Column="0" Height="230" IsVisible="{Binding AuxiliarVisivel}"
-                BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
-          <ItemsControl x:Name="Auxiliares" ItemsSource="{Binding Auxiliares}" Margin="10,7,3,8">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <Grid />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <term:TerminalControl Model="{Binding Modelo}" IsVisible="{Binding Ativa}"
-                                      RightClickAction="CopyOrPaste" CaretStyle="Bar"
-                                      DefaultBackground="{DynamicResource Bg}" CaretBrush="{DynamicResource Text}"
-                                      FontFamily="{Binding $parent[ItemsControl].DataContext.Fonte}"
-                                      FontSize="{Binding $parent[ItemsControl].DataContext.TamanhoDaFonte}" />
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </Border>
-
-        <!-- painel lateral (o consumo do Claude, por exemplo): outro terminal, estreito,
-             rodando o script das preferências na pasta e na conta do projeto -->
-        <Border Grid.Column="1" Grid.RowSpan="2" Width="330" IsVisible="{Binding PainelVisivel}"
-                BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
-          <ItemsControl x:Name="Paineis" ItemsSource="{Binding Paineis}" Margin="8,7,3,8">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <Grid />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <term:TerminalControl Model="{Binding Modelo}" IsVisible="{Binding Ativa}"
-                                      RightClickAction="CopyOrPaste" CaretStyle="Bar"
-                                      DefaultBackground="{DynamicResource Bg}" CaretBrush="{DynamicResource Bg}"
-                                      FontFamily="{Binding $parent[ItemsControl].DataContext.Fonte}"
-                                      FontSize="{Binding $parent[ItemsControl].DataContext.TamanhoDaFonte}" />
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </Border>
-
         <!-- sem terminal à vista: o aviso (nenhum projeto, nenhum escolhido, erro ao abrir)
              e, no projeto parado, os jeitos de abrir o Claude pelo cia -->
-        <StackPanel Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12"
                     MaxWidth="520" Margin="16,0">
           <TextBlock Text="{Binding Aviso}" Classes="dim" TextWrapping="Wrap" TextAlignment="Center"
                      IsVisible="{Binding Aviso, Converter={x:Static ObjectConverters.IsNotNull}}" />
@@ -822,6 +910,206 @@
           </StackPanel>
         </StackPanel>
       </Grid>
+
+      <!-- o contorno do cartão, por cima de tudo e sem ocupar lugar: com uma aba à frente, na cor
+           do projeto dela, como a ficha da aba em cima -->
+      <Border Grid.RowSpan="2" CornerRadius="10" BorderThickness="1" IsHitTestVisible="False"
+              BorderBrush="{DynamicResource Border}" IsVisible="{Binding !TemAbaAtiva}" />
+      <Border Grid.RowSpan="2" x:Name="MolduraDaAba" CornerRadius="10" BorderThickness="1" IsHitTestVisible="False"
+              BorderBrush="{Binding AbaAtiva.BordaDaBarra}" IsVisible="{Binding TemAbaAtiva}" />
+      </Grid>
+      </Border>
+
+      <!-- segundo terminal do projeto, num cartão embaixo do principal: um shell simples, para o
+           build ou o git que não podem esperar o Claude terminar -->
+      <Border Grid.Row="1" Grid.Column="0" Classes="cartao" Height="258" Margin="0,8,0,0"
+              IsVisible="{Binding AuxiliarVisivel}">
+        <Grid RowDefinitions="Auto,*">
+          <Border Classes="cabecalho">
+            <StackPanel Classes="comIcone" Spacing="8">
+              <TextBlock Classes="glifo cinza" Text="{x:Static c:Glifos.Terminal}" />
+              <TextBlock Text="Terminal" />
+              <TextBlock Text="{Binding Selecionado.Pasta}" Classes="faint" FontSize="11" />
+            </StackPanel>
+          </Border>
+          <ItemsControl Grid.Row="1" x:Name="Auxiliares" ItemsSource="{Binding Auxiliares}" Margin="12,8,4,9">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <Grid />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <term:TerminalControl Model="{Binding Modelo}" IsVisible="{Binding Ativa}"
+                                      RightClickAction="CopyOrPaste" CaretStyle="Bar"
+                                      DefaultBackground="{DynamicResource Bg}" CaretBrush="{DynamicResource Text}"
+                                      FontFamily="{Binding $parent[ItemsControl].DataContext.Fonte}"
+                                      FontSize="{Binding $parent[ItemsControl].DataContext.TamanhoDaFonte}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Grid>
+      </Border>
+
+      <!-- painel lateral (o consumo do Claude, por exemplo), num cartão ao lado: outro terminal,
+           estreito, rodando o script das preferências na pasta e na conta do projeto -->
+      <Border Grid.Column="1" Grid.RowSpan="2" Classes="cartao" Width="330" Margin="8,0,0,0"
+              IsVisible="{Binding PainelVisivel}">
+        <Grid RowDefinitions="Auto,*">
+          <Border Classes="cabecalho">
+            <StackPanel Classes="comIcone" Spacing="8">
+              <TextBlock Classes="glifo cinza" Text="{x:Static c:Glifos.Painel}" />
+              <TextBlock Text="Painel" />
+            </StackPanel>
+          </Border>
+          <ItemsControl Grid.Row="1" x:Name="Paineis" ItemsSource="{Binding Paineis}" Margin="10,8,4,9">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <Grid />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <term:TerminalControl Model="{Binding Modelo}" IsVisible="{Binding Ativa}"
+                                      RightClickAction="CopyOrPaste" CaretStyle="Bar"
+                                      DefaultBackground="{DynamicResource Bg}" CaretBrush="{DynamicResource Bg}"
+                                      FontFamily="{Binding $parent[ItemsControl].DataContext.Fonte}"
+                                      FontSize="{Binding $parent[ItemsControl].DataContext.TamanhoDaFonte}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Grid>
+      </Border>
+
+      <!-- o consumo do Claude, num cartão ao lado do terminal: o que o ctop -Slim mostrava no painel
+           lateral do cia, lido aqui dos mesmos arquivos e sem terminal nenhum. De cima para baixo, o
+           contexto da conversa, os limites do plano, os tokens da sessão e o projeto dia a dia -->
+      <Border Grid.Column="2" Grid.RowSpan="2" x:Name="CartaoDoConsumo" Classes="cartao" Width="286" Margin="8,0,0,0"
+              IsVisible="{Binding ConsumoVisivel}">
+        <Grid RowDefinitions="Auto,*" DataContext="{Binding Consumo}">
+          <Border Classes="cabecalho">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Classes="comIcone" Spacing="8">
+                <TextBlock Classes="glifo cinza" Text="{x:Static c:Glifos.Consumo}" />
+                <TextBlock Text="Consumo" />
+              </StackPanel>
+              <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center" IsVisible="{Binding TemPlano}"
+                      ToolTip.Tip="O plano da conta do Claude">
+                <TextBlock Text="{Binding Plano}" Classes="dim" FontSize="10.5" />
+              </Border>
+            </Grid>
+          </Border>
+
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="14,12,14,14" Spacing="18">
+
+              <!-- o contexto: o que a conversa relê a cada turno. Amarelo acima do que o cia retoma sozinho -->
+              <StackPanel Spacing="6" IsVisible="{Binding TemContexto}">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="sectionTitle" Text="CONTEXTO" />
+                  <TextBlock Grid.Column="1" Classes="total" Text="{Binding PercentualDoContexto}" />
+                </Grid>
+                <ProgressBar Classes="medidor" Classes.alerta="{Binding ContextoAlto}" Classes.critico="{Binding ContextoCritico}"
+                             Minimum="0" Maximum="100" Value="{Binding Contexto}"
+                             ToolTip.Tip="A janela é deduzida do maior contexto que a conversa já teve: 200 mil tokens, ou 1 milhão se ela já passou disso. O Claude não a grava na conversa" />
+                <TextBlock Classes="faint" FontSize="11.5" Text="{Binding TextoDoContexto}" />
+                <TextBlock FontSize="11" Foreground="{DynamicResource Yellow}" TextWrapping="Wrap"
+                           Text="{Binding AvisoDoContexto}" IsVisible="{Binding ContextoAlto}" />
+              </StackPanel>
+
+              <!-- os limites do plano, como o /usage: são da conta, e não mudam com o projeto -->
+              <StackPanel Spacing="9">
+                <TextBlock Classes="sectionTitle" Text="LIMITES DO PLANO" />
+                <ItemsControl ItemsSource="{Binding Limites}" IsVisible="{Binding TemLimites}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="11" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Spacing="5">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                          <TextBlock Text="{Binding Nome}" FontSize="12" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Classes="faint" Text="{Binding Zera}" FontSize="11" Margin="8,0"
+                                     VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="2" Classes="total" FontSize="12" Text="{Binding Percentual}" />
+                        </Grid>
+                        <ProgressBar Classes="medidor" Classes.alerta="{Binding Alerta}" Classes.critico="{Binding Critico}"
+                                     Minimum="0" Maximum="100" Value="{Binding Valor}" />
+                        <TextBlock Text="{Binding Bloqueio}" IsVisible="{Binding TemBloqueio}" FontSize="11"
+                                   Foreground="{DynamicResource Red}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Classes="faint" FontSize="11" TextWrapping="Wrap" Text="{Binding AvisoDosLimites}"
+                           IsVisible="{Binding TemAvisoDosLimites}" />
+              </StackPanel>
+
+              <!-- os tokens da conversa, com os subagentes dela, crus como o ctop soma -->
+              <StackPanel Spacing="7">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="sectionTitle" Text="{Binding TituloDaSessao}" />
+                  <TextBlock Grid.Column="1" Classes="total" Text="{Binding TotalDaSessao}" IsVisible="{Binding TemSessao}"
+                             ToolTip.Tip="Tokens crus, cada tipo com peso 1. Não é a conta do /usage, que pondera pelo modelo e pelo cache" />
+                </Grid>
+                <TextBlock Classes="faint" FontSize="11.5" TextWrapping="Wrap" Text="{Binding SemSessao}"
+                           IsVisible="{Binding !TemSessao}" />
+                <StackPanel Spacing="7" IsVisible="{Binding TemSessao}">
+                  <c:BarraEmpilhada Height="6" Partes="{Binding Partes}" Trilho="{DynamicResource BgActive}"
+                                    Cor0="{DynamicResource Accent}" Cor1="{DynamicResource Purple}"
+                                    Cor2="{DynamicResource Orange}" Cor3="{DynamicResource Teal}" />
+                  <StackPanel Spacing="3">
+                    <Grid Classes="tokens" ColumnDefinitions="16,*,Auto,40">
+                      <Border Background="{DynamicResource Accent}" />
+                      <TextBlock Grid.Column="1" Classes="dim" Text="entrada" />
+                      <TextBlock Grid.Column="2" Classes="numero" Text="{Binding Entrada.Valor}" />
+                      <TextBlock Grid.Column="3" Classes="numero faint" Text="{Binding Entrada.Percentual}" />
+                    </Grid>
+                    <Grid Classes="tokens" ColumnDefinitions="16,*,Auto,40">
+                      <Border Background="{DynamicResource Purple}" />
+                      <TextBlock Grid.Column="1" Classes="dim" Text="saída" />
+                      <TextBlock Grid.Column="2" Classes="numero" Text="{Binding Saida.Valor}" />
+                      <TextBlock Grid.Column="3" Classes="numero faint" Text="{Binding Saida.Percentual}" />
+                    </Grid>
+                    <Grid Classes="tokens" ColumnDefinitions="16,*,Auto,40">
+                      <Border Background="{DynamicResource Orange}" />
+                      <TextBlock Grid.Column="1" Classes="dim" Text="cache gravado" />
+                      <TextBlock Grid.Column="2" Classes="numero" Text="{Binding CacheGravado.Valor}" />
+                      <TextBlock Grid.Column="3" Classes="numero faint" Text="{Binding CacheGravado.Percentual}" />
+                    </Grid>
+                    <Grid Classes="tokens" ColumnDefinitions="16,*,Auto,40">
+                      <Border Background="{DynamicResource Teal}" />
+                      <TextBlock Grid.Column="1" Classes="dim" Text="cache lido" />
+                      <TextBlock Grid.Column="2" Classes="numero" Text="{Binding CacheLido.Valor}" />
+                      <TextBlock Grid.Column="3" Classes="numero faint" Text="{Binding CacheLido.Percentual}" />
+                    </Grid>
+                  </StackPanel>
+                  <StackPanel Spacing="2">
+                    <TextBlock Classes="faint" FontSize="11" Text="{Binding ResumoDaSessao}" />
+                    <TextBlock Classes="faint" FontSize="11" Text="{Binding AndamentoDaSessao}" />
+                  </StackPanel>
+                </StackPanel>
+              </StackPanel>
+
+              <!-- o projeto dia a dia, de todas as conversas dele: a barra de hoje é a acesa -->
+              <StackPanel Spacing="7" IsVisible="{Binding TemProjeto}">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="sectionTitle" Text="{Binding TituloDoProjeto}" />
+                  <TextBlock Grid.Column="1" Classes="total" Text="{Binding TotalDoProjeto}" />
+                </Grid>
+                <c:BarrasPorDia Height="46" Valores="{Binding PorDia}" Rotulos="{Binding RotulosDosDias}"
+                                Cor="{DynamicResource AccentSoft}" CorDeHoje="{DynamicResource Accent}"
+                                Trilho="{DynamicResource BgActive}" />
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Classes="faint" FontSize="10.5" Text="{Binding PrimeiroDia}" />
+                  <TextBlock Grid.Column="1" Classes="faint" FontSize="10.5" Text="hoje" />
+                </Grid>
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
       </Border>
     </Grid>
   </Grid>
