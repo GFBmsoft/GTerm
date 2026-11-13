@@ -234,7 +234,7 @@ public class ConsumoTests : IDisposable
     [Theory]
     [InlineData(0, 200_000)]
     [InlineData(200_000, 200_000)]
-    [InlineData(200_037, 1_000_000)] // passou de 200 mil: só pode ser a de 1 milhão (não há a de 500 mil do ctop)
+    [InlineData(200_037, 1_000_000)] // passou de 200 mil: só pode ser a de 1 milhão (não existe a de 500 mil)
     [InlineData(486_000, 1_000_000)]
     [InlineData(1_200_000, 1_500_000)]
     public void AJanelaEAMenorEmQueOContextoCabe(long maior, long janela) => Assert.Equal(janela, ConsumoDoClaude.Janela(maior));

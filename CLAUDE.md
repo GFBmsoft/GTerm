@@ -241,9 +241,10 @@ e por isso confirma antes.
   arquivo abre com `FileShare.ReadWrite | Delete`: reler a sessão inteira a cada 3 s, só
   compartilhando leitura, foi o que deixou o cia lento e fez o Claude avisar "Transcript
   writes are failing (EBUSY)". A cada 5 s com o cartão à vista, os dias do projeto a cada
-  minuto, e arquivo sem gravação no período nem é aberto. Diferença de propósito: a janela de
-  contexto é 200 mil ou 1 milhão (`ConsumoDoClaude.Janela`), sem o degrau de 500 mil do ctop,
-  que não existe. `LimitesDoPlano` é o Get-Limits do ctop: o endpoint do /usage
+  minuto, e arquivo sem gravação no período nem é aberto. A janela de contexto é 200 mil ou
+  1 milhão (`ConsumoDoClaude.Janela`, o `Get-CtxLimit` do ctop, que perdeu em 13/11/2026 um
+  degrau de 500 mil que não existe); aqui ela sai do maior contexto que a sessão já teve, lá
+  do de agora. `LimitesDoPlano` é o Get-Limits do ctop: o endpoint do /usage
   (`api.anthropic.com/api/oauth/usage`, não é API pública estável) com o login de
   `.credentials.json`, que nunca é renovado daqui. O estado fica no arquivo do ctop
   (`%LOCALAPPDATA%\claude-stats\limits-cache.json`), para os dois respeitarem a mesma conta:

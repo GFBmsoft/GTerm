@@ -200,9 +200,10 @@ public sealed class ConsumoDoClaude
     /// <summary>
     /// A janela de contexto não está na conversa (o modelo pedido é o mesmo com 200 mil ou 1 milhão):
     /// é a menor das duas em que cabe o maior contexto que a sessão já teve. Com 190 mil numa janela
-    /// de 1 milhão, mostra 200 mil: é o que dá para saber. De propósito diferente do Get-CtxLimit do
-    /// ctop, que tem um degrau de 500 mil no meio: essa janela não existe, e com 486 mil o cartão
-    /// dizia 97% de uma conversa que estava na metade.
+    /// de 1 milhão, mostra 200 mil: é o que dá para saber. É a regra do Get-CtxLimit do ctop, que
+    /// até 13/11/2026 tinha um degrau de 500 mil no meio: essa janela não existe, e com 486 mil os
+    /// dois diziam 97% de uma conversa que estava na metade. Lá entra o contexto de agora; aqui, o
+    /// maior que a sessão já teve, que não volta para 200 mil depois de um /compact.
     /// </summary>
     public static long Janela(long maiorContexto)
     {
