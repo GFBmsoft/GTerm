@@ -1,3 +1,8 @@
+## 1.0.0.29 — 13/11/2026
+- **As abas ficam na barra de título**: a faixa de cima do GTerm (Projetos e Sessões, as abas e as pílulas do canto) passou a ser a própria barra da janela, com minimizar, maximizar e fechar no canto direito. Para arrastar a janela, pegue em qualquer vão da faixa; o duplo clique ali maximiza.
+- **Ctrl+← e Ctrl+→ andam pelas abas**, na ordem delas, e dão a volta, como o Ctrl+Tab, que continua valendo. São as teclas que pulam palavra no terminal: com uma aba só elas continuam fazendo isso, com Shift também, e dentro da pesquisa da árvore são do texto.
+- O título da janela, com o aviso de qual projeto espera por você, agora aparece só na barra de tarefas e no Alt+Tab. A aba em amarelo e o botão piscando continuam avisando.
+
 ## 1.0.0.28 — 13/11/2026
 - **Visual novo**: a janela e a árvore ficam num plano mais escuro, e o terminal, o segundo terminal e o painel viram cartões de contorno fino em cima dele. No Windows 11 a barra de título pega a cor da janela.
 - **O terminal ganhou moldura na cor do projeto**, a mesma da aba dele, e os botões da aba (Retomar, Sessão nova, Compactar, Code review…) passaram para o cabeçalho do cartão. Ali eles ficam quietos, só com o ícone na cor, e acendem com o mouse em cima; o Code review rodando continua aceso.

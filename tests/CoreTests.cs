@@ -2441,6 +2441,15 @@ public class JanelaTests : IDisposable
             janela.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
             Assert.True(await Esperar(() => Tela(financeiro.Sessao!).Contains("echo digitado")), Tela(financeiro.Sessao!));
 
+            // com uma aba só não há para onde ir, e o Ctrl+seta continua do terminal: volta uma
+            // palavra, e o X entra antes do "dois"
+            Assert.False(vm.PodeTrocarDeAba);
+            janela.KeyTextInput("echo um dois");
+            janela.KeyPress(Key.Left, RawInputModifiers.Control, PhysicalKey.ArrowLeft, null);
+            janela.KeyTextInput("X");
+            janela.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Assert.True(await Esperar(() => Tela(financeiro.Sessao!).Contains("um Xdois")), Tela(financeiro.Sessao!));
+
             // o mesmo com o Enter na árvore, em outro projeto
             var notas = Projeto(vm, "Notas");
             vm.Ver(notas);
@@ -2448,6 +2457,33 @@ public class JanelaTests : IDisposable
             await notas.IniciarCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();
             Assert.Same(notas.Sessao!.Modelo, Assert.IsType<TerminalControl>(janela.FocusManager!.GetFocusedElement()).Model);
+
+            // com duas abas, Ctrl+← e Ctrl+→ andam por elas e dão a volta, e o teclado vai junto
+            // para o terminal da que veio para a frente
+            void Seta(Key tecla, RawInputModifiers mais = RawInputModifiers.None)
+            {
+                janela.KeyPress(tecla, RawInputModifiers.Control | mais,
+                    tecla == Key.Left ? PhysicalKey.ArrowLeft : PhysicalKey.ArrowRight, null);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.True(vm.PodeTrocarDeAba);
+            Assert.Equal(new[] { financeiro, notas }, vm.Abertos);
+            Seta(Key.Left);
+            Assert.Same(financeiro, vm.Selecionado);
+            Assert.Same(financeiro.Sessao!.Modelo, Assert.IsType<TerminalControl>(janela.FocusManager!.GetFocusedElement()).Model);
+            Seta(Key.Left); // da primeira para a última
+            Assert.Same(notas, vm.Selecionado);
+            Seta(Key.Right); // e da última para a primeira
+            Assert.Same(financeiro, vm.Selecionado);
+            Seta(Key.Right);
+            Assert.Same(notas, vm.Selecionado);
+
+            // com Shift é do terminal, e dentro da pesquisa é do texto: nenhum dos dois troca de aba
+            Seta(Key.Left, RawInputModifiers.Shift);
+            Assert.Same(notas, vm.Selecionado);
+            janela.FindControl<TextBox>("CaixaDoFiltro")!.Focus();
+            Seta(Key.Left);
+            Assert.Same(notas, vm.Selecionado);
         }
         finally
         {
@@ -3045,6 +3081,77 @@ public class JanelaTests : IDisposable
         await vm.AtualizacaoCommand.ExecuteAsync(null);
         Assert.Equal("Build local, sem versão", vm.Rodape);
         Assert.Equal(0, consultas);
+    }
+
+    /// <summary>
+    /// A faixa das abas é a barra de título da janela: a área do app sobe até ela, com a altura
+    /// dela. O que é botão recebe o clique; todo o resto é o fundo que o Windows trata como barra
+    /// (arrasta, maximiza no duplo clique). No canto direito fica o lugar dos botões da janela.
+    /// Arrastar de verdade só se confere no app aberto: aqui fica o que o sustenta.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task AFaixaDasAbasEABarraDeTitulo()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var financeiro = vm.Selecionado!;
+            await financeiro.IniciarCommand.ExecuteAsync(null);
+            Dispatcher.UIThread.RunJobs();
+
+            // a área do app vai até a barra, na altura da faixa: a pesquisa começa logo embaixo
+            Assert.True(janela.ExtendClientAreaToDecorationsHint);
+            var filtro = janela.FindControl<TextBox>("CaixaDoFiltro")!;
+            Assert.Equal(janela.ExtendClientAreaTitleBarHeightHint, filtro.TranslatePoint(default, janela)!.Value.Y);
+
+            // o fundo dela, de ponta a ponta, é barra de título para o Windows
+            var fundo = janela.FindControl<Border>("FundoDaBarra")!;
+            Assert.Equal(Win32Properties.Win32HitTestValue.Caption, Win32Properties.GetNonClientHitTestResult(fundo));
+            Assert.Equal(new Rect(0, 0, janela.Bounds.Width, 40), fundo.Bounds);
+
+            Point Meio(Control c, double dx = 0) =>
+                c.TranslatePoint(new Point(dx == 0 ? c.Bounds.Width / 2 : dx, c.Bounds.Height / 2), janela)!.Value;
+            Button? BotaoEm(Point p) => (janela.InputHitTest(p) as Visual)?.FindAncestorOfType<Button>(includeSelf: true);
+
+            var sessoes = janela.GetVisualDescendants().OfType<Button>().Single(b => b.Command == vm.VerSessoesCommand);
+            var aba = janela.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("aba"));
+            var consumo = janela.FindControl<Button>("BotaoDoConsumo")!;
+
+            // os botões da faixa recebem o clique
+            Assert.Same(sessoes, BotaoEm(Meio(sessoes)));
+            Assert.Same(aba, BotaoEm(Meio(aba)));
+            Assert.Same(consumo, BotaoEm(Meio(consumo)));
+
+            // os vãos são o fundo: ao lado de Sessões, depois da última aba (a rolagem das abas não
+            // tem fundo que tape) e o vão que sempre sobra antes das pílulas do canto
+            Assert.Same(fundo, janela.InputHitTest(Meio(sessoes, sessoes.Bounds.Width + 10)));
+            Assert.Same(fundo, janela.InputHitTest(Meio(aba, aba.Bounds.Width + 40)));
+            Assert.Same(fundo, janela.InputHitTest(Meio(consumo, -18)));
+            Assert.Same(fundo, janela.InputHitTest(new Point(600, 3)));  // em cima das pílulas
+            Assert.Same(fundo, janela.InputHitTest(new Point(600, 37))); // e embaixo delas
+            Assert.NotSame(fundo, janela.InputHitTest(new Point(600, 44))); // fora da faixa já é o app
+
+            // sem barra para ocupar (aqui, sem tela), as pílulas vão até a beirada; na barra, param
+            // antes dos três botões da janela, de 45 cada um
+            var faixa = janela.FindControl<Grid>("FaixaDasAbas")!;
+            var terminal = janela.GetVisualDescendants().OfType<Button>().Single(b => b.Command == vm.AlternarAuxiliarCommand);
+            double Direita(Control c) => c.TranslatePoint(new Point(c.Bounds.Width, 0), janela)!.Value.X;
+            Assert.False(janela.IsExtendedIntoWindowDecorations);
+            Assert.Equal(janela.Bounds.Width - 10, Direita(terminal));
+            faixa.Classes.Set("naBarra", true);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(Direita(terminal) <= janela.Bounds.Width - 3 * 45, "a pílula ficou por baixo dos botões da janela");
+            faixa.Classes.Set("naBarra", false);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
     }
 
     // a janela também lê sozinha (ao trocar de projeto, a cada 5 s): espera essa sair e lê de novo

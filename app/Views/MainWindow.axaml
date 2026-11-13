@@ -6,7 +6,9 @@
         x:Class="GTerm.Views.MainWindow"
         Title="{Binding Titulo}" Width="1200" Height="720" MinWidth="640" MinHeight="360"
         Icon="/Assets/app.ico" Background="{DynamicResource BgPanel}"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaTitleBarHeightHint="40"
+        Padding="{Binding $self.OffScreenMargin}">
 
   <Window.Styles>
     <!-- árvore no padrão do GTest: linha discreta de cantos suaves, que só ganha fundo ao
@@ -35,6 +37,15 @@
     </Style>
     <Style Selector="Button.rodape:disabled > StackPanel.comIcone > TextBlock">
       <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+
+    <!-- a faixa das abas, que é a barra de título: no canto direito ficam os três botões da janela
+         (45 cada um), e as pílulas do app param antes deles -->
+    <Style Selector="Grid.faixaDasAbas">
+      <Setter Property="Margin" Value="10,8,10,8" />
+    </Style>
+    <Style Selector="Grid.faixaDasAbas.naBarra">
+      <Setter Property="Margin" Value="10,8,145,8" />
     </Style>
 
     <Style Selector="Button.grupo">
@@ -322,9 +333,21 @@
     </Style>
   </Window.Styles>
 
-  <!-- a faixa de cima é a das abas; embaixo dela começam a árvore e o terminal, e a
-       pesquisa fica na mesma altura do cartão do terminal -->
+  <!-- a faixa de cima é a das abas, e é também a barra de título da janela: a área do app sobe
+       até ela (ExtendClientAreaToDecorationsHint, com os 40 da faixa de altura), e o sistema
+       desenha só os botões de minimizar, maximizar e fechar no canto. O que tem botão ali recebe
+       o clique; o resto é o FundoDaBarra, que arrasta a janela e maximiza no duplo clique. Por
+       isso nada por cima dele pode ganhar Background sem ser para clicar, nem transparente:
+       tiraria o arrasto daquele pedaço. Maximizada, a janela passa da tela pela moldura: o
+       Padding (OffScreenMargin) traz o conteúdo de volta.
+       Embaixo dela começam a árvore e o terminal, e a pesquisa fica na mesma altura do cartão -->
   <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,*">
+
+    <!-- o fundo da faixa de cima diz ao Windows que ali é barra de título: o que não for botão
+         arrasta a janela, na altura toda e também maximizada (sem isto, maximizada, só os 24 px
+         de cima arrastavam: o Avalonia desconta a moldura da altura pedida) -->
+    <Border Grid.Row="0" Grid.ColumnSpan="2" x:Name="FundoDaBarra" Background="Transparent"
+            Win32Properties.NonClientHitTestResult="Caption" />
 
     <!-- a árvore é um plano só, de cima a baixo, no tom da janela: um fio a separa dos cartões -->
     <Border Grid.RowSpan="2" Grid.Column="0" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,0,1,0"
@@ -486,8 +509,14 @@
     <!-- uma aba por projeto com o Claude aberto, na ordem em que foram abertos (Ctrl+Tab
          passa por elas). Sem botão de fechar: encerrar só pela barra embaixo, e com
          confirmação -->
-    <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto,Auto,Auto" Margin="10,8,10,8" MinHeight="24">
-      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <!-- na barra de título, o canto direito é dos botões da janela ("naBarra" abre o lugar deles).
+         Entre as abas e as pílulas fica sempre um vão para pegar e arrastar a janela, mesmo com
+         abas de sobra: a rolagem delas não tem fundo, para o vazio depois da última também valer -->
+    <Grid Grid.Row="0" Grid.Column="1" x:Name="FaixaDasAbas" Classes="faixaDasAbas"
+          Classes.naBarra="{Binding $parent[Window].IsExtendedIntoWindowDecorations}"
+          ColumnDefinitions="*,36,Auto,Auto,Auto" MinHeight="24">
+      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                    Background="{x:Null}">
         <ItemsControl x:Name="Abas" ItemsSource="{Binding Abertos}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
@@ -521,7 +550,7 @@
       </ScrollViewer>
       <!-- os botões do canto: pílula cinza, acesa (destacado) enquanto o que ela abre está aberto.
            O consumo é da janela: ligado, o cartão acompanha o projeto que estiver à vista -->
-      <Button Grid.Column="1" x:Name="BotaoDoConsumo" Classes="pilula cinza" Classes.destacado="{Binding ConsumoLigado}"
+      <Button Grid.Column="2" x:Name="BotaoDoConsumo" Classes="pilula cinza" Classes.destacado="{Binding ConsumoLigado}"
               Margin="6,0,0,0" Command="{Binding AlternarConsumoCommand}"
               ToolTip.Tip="Abre ou fecha o cartão do consumo do Claude, ao lado do terminal: o contexto e os tokens da sessão, os limites do plano e o consumo do projeto por dia">
         <StackPanel Classes="comIcone">
@@ -529,7 +558,7 @@
           <TextBlock Text="Consumo" />
         </StackPanel>
       </Button>
-      <Button Grid.Column="2" Classes="pilula cinza" Classes.destacado="{Binding PainelVisivel}" Margin="6,0,0,0"
+      <Button Grid.Column="3" Classes="pilula cinza" Classes.destacado="{Binding PainelVisivel}" Margin="6,0,0,0"
               Command="{Binding AlternarPainelCommand}" IsVisible="{Binding TemPainel}"
               ToolTip.Tip="Abre ou fecha o painel lateral deste projeto">
         <StackPanel Classes="comIcone">
@@ -537,7 +566,7 @@
           <TextBlock Text="Painel" />
         </StackPanel>
       </Button>
-      <Button Grid.Column="3" Classes="pilula cinza" Classes.destacado="{Binding AuxiliarVisivel}" Margin="6,0,0,0"
+      <Button Grid.Column="4" Classes="pilula cinza" Classes.destacado="{Binding AuxiliarVisivel}" Margin="6,0,0,0"
               Command="{Binding AlternarAuxiliarCommand}" IsVisible="{Binding PodeAuxiliar}"
               ToolTip.Tip="Abre ou fecha um segundo terminal na pasta do projeto, para rodar comandos sem interromper o Claude">
         <StackPanel Classes="comIcone">

@@ -47,6 +47,7 @@ public partial class MainWindow : Window, IDialogService
 
         Opened += (_, _) =>
         {
+            AlinharBotoesDaJanela();
             Focar();
             _vm.CorrigirHooks();
             _ = _vm.VerificarAtualizacaoAsync(); // em segundo plano, no máximo uma consulta por dia
@@ -195,6 +196,27 @@ public partial class MainWindow : Window, IDialogService
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    /// <summary>
+    /// Os botões da janela (minimizar, maximizar, fechar) no meio da faixa das abas, na altura das
+    /// pílulas ao lado. O tema os limita a 30 de altura, e ficavam mais para cima. Maximizada, a
+    /// barra que o Avalonia desenha perde a moldura que sai da tela (40 vira 32), e eles subiam de
+    /// novo: descem metade do que ela perdeu.
+    /// </summary>
+    private void AlinharBotoesDaJanela()
+    {
+        foreach (var botoes in this.GetVisualDescendants().OfType<Avalonia.Controls.Chrome.CaptionButtons>())
+        {
+            botoes.MaxHeight = double.PositiveInfinity;
+            botoes.Margin = new Thickness(0, OffScreenMargin.Top / 2, 0, 0);
+        }
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == OffScreenMarginProperty) AlinharBotoesDaJanela(); // maximizou ou restaurou
+    }
 
     private void AbrirMenuDaArvore(object? sender, ContextRequestedEventArgs e)
     {
@@ -357,6 +379,11 @@ public partial class MainWindow : Window, IDialogService
 
         if (e.Key == Key.Tab)
             _vm.SelecionarVizinho(shift ? -1 : 1);
+        // Ctrl+← e Ctrl+→ andam pelas abas, na ordem delas, e dão a volta como o Ctrl+Tab (pedido do
+        // usuário). São as teclas que no terminal pulam palavra: por isso só valem com outra aba
+        // para onde ir, e nunca dentro da pesquisa, onde continuam do texto. Com Shift, do terminal
+        else if (!shift && e.Key is (Key.Left or Key.Right) && e.Source is not TextBox && _vm.PodeTrocarDeAba)
+            _vm.SelecionarVizinho(e.Key == Key.Left ? -1 : 1);
         else if (!shift && e.Key is >= Key.D1 and <= Key.D9)
             _vm.SelecionarPorNumero(e.Key - Key.D1 + 1);
         else if (!shift && e.Key is >= Key.NumPad1 and <= Key.NumPad9)

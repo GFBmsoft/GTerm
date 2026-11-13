@@ -106,8 +106,24 @@ e por isso confirma antes.
   aba e, por cima, a moldura na cor do projeto (`MolduraDaAba`,
   `ProjetoViewModel.BordaDaBarra`), a mesma do contorno da ficha da aba. O contorno é um
   `Border` por cima, sem espessura no cartão: assim o cabeçalho começa na altura da pesquisa.
-  No Windows 11 a barra de título leva a cor do fundo da janela (`BarraDeTitulo.Pintar`,
-  `DWMWA_CAPTION_COLOR`), e as duas viram um plano só; isso só se vê no app de verdade.
+  No Windows 11 a barra de título dos diálogos leva a cor do fundo da janela
+  (`BarraDeTitulo.Pintar`, `DWMWA_CAPTION_COLOR`); isso só se vê no app de verdade.
+- **Barra de título** — na janela principal não há barra do sistema: a faixa das abas é a
+  barra (`ExtendClientAreaToDecorationsHint`, com os 40 da faixa em
+  `ExtendClientAreaTitleBarHeightHint`), como no Windows Terminal e nos layouts do Herdr. O
+  Avalonia desenha só os três botões da janela no canto, que o Windows enxerga como
+  minimizar, maximizar e fechar (os layouts de encaixe do Windows 11 continuam valendo);
+  `MainWindow.AlinharBotoesDaJanela` os põe na altura das pílulas. Na faixa, o que é botão
+  recebe o clique e todo o resto é o `FundoDaBarra`
+  (`Win32Properties.NonClientHitTestResult="Caption"`): arrasta a janela e maximiza no duplo
+  clique. Por isso nada por cima dele ganha `Background` sem ser para clicar, nem
+  transparente (a rolagem das abas tem `Background="{x:Null}"`), e sempre sobra um vão de 36
+  antes das pílulas do canto. `naBarra` abre o lugar dos botões da janela (3 de 45), e
+  `Padding = OffScreenMargin` traz o conteúdo de volta com a janela maximizada, que passa da
+  tela pela moldura. O título continua na barra de tarefas e no Alt+Tab. **Os testes sem tela
+  não veem nada disso**: `IsExtendedIntoWindowDecorations` é falso neles. Para conferir, abra
+  o app e mande `WM_NCHITTEST` aos pontos da faixa (2 = arrasta, 1 = app, 8/9/20 = botões da
+  janela), normal e maximizada.
 - **Árvore** — achatada numa `ListBox` (`MainViewModel.Linhas`), minimalista:
   `GrupoDaArvore` (seta, a contagem numa etiqueta na cor do grupo, no lugar do ponto do
   GTest, e o nome na mesma cor; o clique recolhe, e
@@ -171,8 +187,11 @@ e por isso confirma antes.
   parado está à vista (`LerSessaoAsync`), e `ProjetoViewModel.MostrarSessao` avisa a tela
   mesmo sem ela mudar: o "de hoje" da regra anda com o relógio, e o botão tem de dizer o
   que o clique vai fazer.
-- **Abas** — `MainViewModel.Abertos`, na ordem em que foram abertos (Ctrl+Tab passa por
-  elas). Encerrar a da frente traz a que ficou no lugar dela (a última dá lugar à anterior);
+- **Abas** — `MainViewModel.Abertos`, na ordem em que foram abertos. Ctrl+Tab passa por
+  elas, e também Ctrl+← e Ctrl+→ (pedido do usuário), dando a volta. As setas são as teclas
+  que no terminal pulam palavra: por isso só trocam de aba com outra para onde ir
+  (`PodeTrocarDeAba`; com uma aba só, seguem para o terminal), nunca dentro da pesquisa, e com
+  Shift continuam do terminal. Encerrar a da frente traz a que ficou no lugar dela (a última dá lugar à anterior);
   sem outra aba, fica o quadro do projeto. A aba é uma ficha de canto suave (a pílula é do
   botão). A da frente (`ProjetoViewModel.AVista`) ganha fundo e contorno na cor do projeto;
   as outras ficam com o contorno neutro, o ponto da cor, o nome apagado e o estado. O estado,

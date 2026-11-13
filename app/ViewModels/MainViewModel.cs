@@ -1500,7 +1500,13 @@ public sealed partial class MainViewModel : ObservableObject
         if (_favoritos.ElementAtOrDefault(numero - 1) is { } p) Ver(p);
     }
 
-    /// <summary>Ctrl+Tab e Ctrl+Shift+Tab: dá a volta nas abas.</summary>
+    /// <summary>
+    /// Há outra aba para onde ir: mais de uma aberta, ou uma só que não é a que está à vista. Sem
+    /// isso o Ctrl+seta não tem o que fazer aqui e segue para o terminal, onde pula palavra.
+    /// </summary>
+    public bool PodeTrocarDeAba => Abertos.Count > 1 || Abertos.Count == 1 && ProjetoAVista != Abertos[0];
+
+    /// <summary>Ctrl+Tab e Ctrl+Shift+Tab, e Ctrl+→ e Ctrl+←: dá a volta nas abas.</summary>
     public void SelecionarVizinho(int passo)
     {
         if (Abertos.Count == 0) return;
