@@ -205,7 +205,7 @@ public static class ClaudeHooks
         {
             // a conta padrão guarda o .claude.json na raiz do perfil; as outras, dentro da pasta
             var arquivo = Path.Combine(ContaPropria(pastaDaConta) ? pastaDaConta : Perfil, ".claude.json");
-            if (File.Exists(arquivo)) perfil = JsonNode.Parse(File.ReadAllText(arquivo))?["oauthAccount"];
+            if (File.Exists(arquivo)) perfil = JsonNode.Parse(Compartilhado.Texto(arquivo))?["oauthAccount"];
         }
         catch (Exception)
         {
@@ -246,7 +246,7 @@ public static class ClaudeHooks
             var arquivo = Path.Combine(pastaDaConta, ".credentials.json");
             if (!File.Exists(arquivo)) return null;
             // só o nome do plano: o resto do arquivo são as credenciais, que não interessam aqui
-            var plano = JsonNode.Parse(File.ReadAllText(arquivo))?["claudeAiOauth"]?["subscriptionType"]?.GetValue<string>();
+            var plano = JsonNode.Parse(Compartilhado.Texto(arquivo))?["claudeAiOauth"]?["subscriptionType"]?.GetValue<string>();
             return string.IsNullOrWhiteSpace(plano) ? null : plano.ToUpperInvariant();
         }
         catch (Exception)
@@ -359,7 +359,7 @@ public static class ClaudeHooks
 
         // arquivo que não é um objeto JSON estoura aqui, de propósito: melhor não instalar
         // do que gravar por cima de um settings.json que não se soube ler
-        return JsonNode.Parse(File.ReadAllText(arquivo)) as JsonObject
+        return JsonNode.Parse(Compartilhado.Texto(arquivo)) as JsonObject
                ?? throw new InvalidDataException("O settings.json de " + pastaDaConta + " não é um objeto JSON.");
     }
 

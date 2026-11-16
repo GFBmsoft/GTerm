@@ -187,6 +187,33 @@ public class ClaudeTests
         Assert.Equal(EstadoDoTerminal.Rodando, a.Estado);
     }
 
+    /// <summary>
+    /// Os arquivos do Claude e dos hooks são lidos sem travar quem grava. O File.ReadAllText
+    /// só compartilha leitura: com o arquivo aberto para gravação ele falha, e aberto por ele
+    /// quem falha é a gravação do outro, que foi o que derrubou a esteira da 1.0.0.29. A
+    /// regra vale nos dois sentidos, e o primeiro dá para reproduzir sem depender da sorte.
+    /// </summary>
+    [Fact]
+    public void ArquivoDoClaudeLidoSemTravarQuemGrava()
+    {
+        var arquivo = Path.Combine(Directory.CreateTempSubdirectory("gterm-compartilhado-").FullName, "agent-a1.meta.json");
+        File.WriteAllText(arquivo, """{ "finished": true }""");
+
+        // como o Claude grava: aberto para escrita, deixando os outros lerem, gravarem e apagarem
+        using (new FileStream(arquivo, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+        {
+            Assert.Throws<IOException>(() => File.ReadAllText(arquivo));
+            Assert.Equal("""{ "finished": true }""", Compartilhado.Texto(arquivo));
+        }
+
+        // e com ele aberto pela leitura, a gravação passa
+        using (new FileStream(arquivo, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            File.WriteAllText(arquivo, "pronto 1");
+        Assert.Equal("pronto 1", Compartilhado.Texto(arquivo));
+
+        Directory.Delete(Path.GetDirectoryName(arquivo)!, true);
+    }
+
     [Fact]
     public void InstalarERemoverHooksPreservaOQueJaHavia()
     {
@@ -1600,8 +1627,10 @@ public class JanelaTests : IDisposable
         Assert.True(await Esperar(() => Tela(sessao).Contains("\naberto-.estado")), Tela(sessao));
         Assert.True(await Esperar(() => sessao.Estado == EstadoDoTerminal.Concluido), "ficou em " + sessao.Estado);
 
-        // o que o hook faria: o próprio shell grava o aviso no arquivo dele
-        sessao.Modelo.Send("echo aguardando 1> \"%GTERM_ESTADO%\"\r");
+        // o que o hook faria: o próprio shell grava o aviso no arquivo dele. O pause segura o
+        // prompt, como o Claude ainda aberto: o prompt de volta diz que ele saiu (Atividade.FecharOsc),
+        // e um tique que lesse o aviso antes de a marca do prompt chegar à tela ficava em Concluido
+        sessao.Modelo.Send("echo aguardando 1> \"%GTERM_ESTADO%\" & pause\r");
         Assert.True(await Esperar(() => sessao.Estado == EstadoDoTerminal.Aguardando), "ficou em " + sessao.Estado);
     }
 

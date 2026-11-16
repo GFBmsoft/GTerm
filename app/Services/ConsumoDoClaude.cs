@@ -92,7 +92,7 @@ public sealed class ConsumoDoClaude
             var arquivo = Path.Combine(pastaDaConta, "sessions", pid + ".json");
             if (!File.Exists(arquivo)) return null;
 
-            var sessao = JsonNode.Parse(Texto(arquivo));
+            var sessao = JsonNode.Parse(Compartilhado.Texto(arquivo));
             return Cia.Texto(sessao?["sessionId"]) is { Length: > 0 } id ? (id, Cia.Texto(sessao?["cwd"])) : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -227,14 +227,6 @@ public sealed class ConsumoDoClaude
     };
 
     private Pasta PastaDe(string dir) => _pastas.TryGetValue(dir, out var p) ? p : _pastas[dir] = new Pasta();
-
-    // um arquivo pequeno inteiro, sem travar quem grava nele
-    private static string Texto(string arquivo)
-    {
-        using var fluxo = new FileStream(arquivo, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var leitor = new StreamReader(fluxo);
-        return leitor.ReadToEnd();
-    }
 
     // uma linha de tool result com um arquivo embutido passa de megabytes; acima disto não é
     // resposta do Claude, e é pulada sem ir para a memória

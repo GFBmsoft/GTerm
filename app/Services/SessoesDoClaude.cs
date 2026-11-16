@@ -256,7 +256,7 @@ public sealed class SessoesDoClaude
         {
             try
             {
-                var n = JsonNode.Parse(File.ReadAllText(arquivo));
+                var n = JsonNode.Parse(Compartilhado.Texto(arquivo));
                 if (Cia.Texto(n?["sessionId"]) is { Length: > 0 } id &&
                     int.TryParse(Cia.Texto(n?["pid"]), NumberStyles.None, CultureInfo.InvariantCulture, out var pid) &&
                     rodando(pid))
@@ -295,7 +295,7 @@ public sealed class SessoesDoClaude
         try
         {
             if (!File.Exists(arquivo)) return Array.Empty<string>();
-            return Cia.Itens(JsonNode.Parse(File.ReadAllText(arquivo))?["favoritas"])
+            return Cia.Itens(JsonNode.Parse(Compartilhado.Texto(arquivo))?["favoritas"])
                 .Select(Cia.Texto).Where(t => t.Length > 0).ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)

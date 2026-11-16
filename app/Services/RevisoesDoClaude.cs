@@ -137,8 +137,8 @@ public sealed class RevisoesDoClaude
         var meta = nome + ".meta.json";
         var diario = new FileInfo(nome + ".jsonl");
         return File.Exists(meta) && diario.Exists &&
-               Cia.Texto(JsonNode.Parse(File.ReadAllText(meta))?["finished"]) == "true" &&
-               Cia.Texto(JsonNode.Parse(File.ReadAllText(marca.FullName))?["skillName"]) == "code-review"
+               Cia.Texto(JsonNode.Parse(Compartilhado.Texto(meta))?["finished"]) == "true" &&
+               Cia.Texto(JsonNode.Parse(Compartilhado.Texto(marca.FullName))?["skillName"]) == "code-review"
             ? diario : null;
     }
 
@@ -189,7 +189,7 @@ public sealed class RevisoesDoClaude
         var aberta = Path.Combine(pastaDaConta, "sessions", pid + ".json");
         if (!File.Exists(aberta)) return null;
 
-        var sessao = JsonNode.Parse(File.ReadAllText(aberta));
+        var sessao = JsonNode.Parse(Compartilhado.Texto(aberta));
         if (Cia.Texto(sessao?["sessionId"]) is not { Length: > 0 } id) return null;
         var cwd = Cia.Texto(sessao?["cwd"]);
 
@@ -199,7 +199,7 @@ public sealed class RevisoesDoClaude
 
         var marca = new DirectoryInfo(pastaDosAgentes).GetFiles("agent-*" + Sufixo)
             .OrderByDescending(f => f.LastWriteTime)
-            .FirstOrDefault(f => Cia.Texto(JsonNode.Parse(File.ReadAllText(f.FullName))?["skillName"]) == "code-review");
+            .FirstOrDefault(f => Cia.Texto(JsonNode.Parse(Compartilhado.Texto(f.FullName))?["skillName"]) == "code-review");
         if (marca is null) return null;
 
         var nome = marca.Name[..^Sufixo.Length];
@@ -210,7 +210,7 @@ public sealed class RevisoesDoClaude
         var passos = existe ? Passos(diario) : 0;
 
         var meta = Path.Combine(pastaDosAgentes, nome + ".meta.json");
-        var terminou = File.Exists(meta) && Cia.Texto(JsonNode.Parse(File.ReadAllText(meta))?["finished"]) == "true";
+        var terminou = File.Exists(meta) && Cia.Texto(JsonNode.Parse(Compartilhado.Texto(meta))?["finished"]) == "true";
 
         var estado = terminou ? EstadoDaRevisao.Concluida
             : agora - ultimaEscrita > Silencio || Interrompida(Path.Combine(conversa, id + ".jsonl"), agente) ? EstadoDaRevisao.Parada

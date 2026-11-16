@@ -381,7 +381,10 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         try
         {
             if (!File.Exists(_arquivoDeEstado)) return;
-            var aviso = File.ReadAllText(_arquivoDeEstado);
+            // sem travar o hook: lido com o File.ReadAllText, um aviso gravado neste instante
+            // era recusado, e o hook engole o erro
+            var aviso = Compartilhado.Texto(_arquivoDeEstado);
+            if (aviso.Length == 0) return; // pego entre o hook esvaziar o arquivo e gravar
             if (aviso == _ultimoAviso) return;
             _ultimoAviso = aviso;
             _atividade.Claude(ClaudeHooks.Evento(aviso));

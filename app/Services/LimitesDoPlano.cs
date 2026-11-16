@@ -155,7 +155,7 @@ public sealed class LimitesDoPlano
             var arquivo = Path.Combine(pastaDaConta, ".credentials.json");
             if (!File.Exists(arquivo)) return (null, default, "");
 
-            var oauth = JsonNode.Parse(Texto(arquivo))?["claudeAiOauth"];
+            var oauth = JsonNode.Parse(Compartilhado.Texto(arquivo))?["claudeAiOauth"];
             var login = Cia.Texto(oauth?["accessToken"]);
             var vence = oauth?["expiresAt"] is JsonValue v && v.TryGetValue<long>(out var ms)
                 ? DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime
@@ -175,7 +175,7 @@ public sealed class LimitesDoPlano
         try
         {
             if (!File.Exists(arquivo)) return default;
-            var estado = JsonNode.Parse(Texto(arquivo));
+            var estado = JsonNode.Parse(Compartilhado.Texto(arquivo));
             return (Data(estado?["at"]) ?? DateTime.MinValue, estado?["data"] as JsonObject,
                 Data(estado?["nextTry"]) ?? DateTime.MinValue, Cia.Texto(estado?["erro"]) is { Length: > 0 } erro ? erro : null);
         }
@@ -216,13 +216,6 @@ public sealed class LimitesDoPlano
         DateTimeOffset.TryParse(texto, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var data)
             ? data.LocalDateTime
             : null;
-
-    private static string Texto(string arquivo)
-    {
-        using var fluxo = new FileStream(arquivo, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var leitor = new StreamReader(fluxo);
-        return leitor.ReadToEnd();
-    }
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(8) };
 

@@ -308,6 +308,12 @@ e por isso confirma antes.
 - Terminal que não está à vista não se mede, e o shell espera a medida para subir: por
   isso as sessões dos projetos emprestam a medida umas às outras (`TerminalSessao.Medir`).
   Painel e segundo terminal têm outro tamanho e ficam de fora.
+- Arquivo que outro programa grava (o Claude, os hooks, o ctop, o cl) se lê pelo
+  `Compartilhado.Texto` (ou por um `FileStream` com `FileShare.ReadWrite | Delete`), nunca
+  pelo `File.ReadAllText`: ele só compartilha leitura, e aberto bem na hora em que o outro
+  grava, a gravação do outro é recusada. Foi o que tirou a 1.0.0.29 da esteira (o teste
+  gravando o `meta.json` enquanto o relógio das revisões o lia, 1 vez em 48 suítes), e no
+  app o aviso do hook, que engole o erro, podia se perder.
 - A versão nova é procurada na API do GitHub e, se ela recusar (cota de 60 consultas por
   hora por IP), no redirecionamento de `releases/latest` do site. Não espere workflow
   consultando a API em laço: gasta a cota do app instalado na mesma máquina.
