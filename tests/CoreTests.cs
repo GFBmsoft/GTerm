@@ -3150,9 +3150,19 @@ public class JanelaTests : IDisposable
             var aba = janela.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("aba"));
             var consumo = janela.FindControl<Button>("BotaoDoConsumo")!;
 
-            // os botões da faixa recebem o clique
+            // os botões da faixa recebem o clique. A aba acabou de entrar, e na esteira o meio dela
+            // às vezes ainda não recebia (3 de 4 execuções, em 13 e 16/11/2026; aqui, nunca): espera,
+            // e se não vier diz o que estava no lugar
+            string NoMeio(Control c)
+            {
+                var p = Meio(c);
+                var v = janela.InputHitTest(p) as Control;
+                return $"{v?.GetType().Name} \"{v?.Name}\" em {p}; aba {c.Bounds}, rolagem {c.FindAncestorOfType<ScrollViewer>()?.Bounds}, " +
+                       $"faixa {janela.FindControl<Grid>("FaixaDasAbas")!.Bounds}, janela {janela.Bounds}";
+            }
             Assert.Same(sessoes, BotaoEm(Meio(sessoes)));
-            Assert.Same(aba, BotaoEm(Meio(aba)));
+            var antes = NoMeio(aba);
+            Assert.True(await Esperar(() => BotaoEm(Meio(aba)) == aba), $"antes: {antes} | depois: {NoMeio(aba)}");
             Assert.Same(consumo, BotaoEm(Meio(consumo)));
 
             // os vãos são o fundo: ao lado de Sessões, depois da última aba (a rolagem das abas não
