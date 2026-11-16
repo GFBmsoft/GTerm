@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Media;
 using Avalonia.Styling;
 
@@ -27,17 +28,23 @@ public static class BarraDeTitulo
         _ => null,
     };
 
-    /// <summary>Aplica agora e a cada troca de tema da janela.</summary>
+    /// <summary>Aplica agora e a cada troca do fundo (no Windows 11) ou do tema (no 10) da janela.</summary>
     public static void Acompanhar(Window janela)
     {
         if (!OperatingSystem.IsWindows()) return;
 
         // do Windows 11 em diante a barra aceita uma cor: a do fundo da janela, e as duas viram um
-        // plano só, sem a faixa cinza do sistema em cima do app
+        // plano só, sem a faixa cinza do sistema em cima do app. Pinta de novo a cada troca do
+        // fundo, não do tema: num diálogo montado em código o fundo vem do estilo Window
+        // ({DynamicResource Bg}) e, ao abrir, ainda é o branco, com o tema já escuro. Só a troca
+        // de tema deixava a barra branca (EV12). A troca de tema também troca o fundo
         if (Environment.OSVersion.Version.Build >= PrimeiroWindows11)
         {
             Pintar(janela);
-            janela.ActualThemeVariantChanged += (_, _) => Pintar(janela);
+            janela.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == TemplatedControl.BackgroundProperty) Pintar(janela);
+            };
             return;
         }
 

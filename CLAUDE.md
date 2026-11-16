@@ -107,7 +107,9 @@ e por isso confirma antes.
   `ProjetoViewModel.BordaDaBarra`), a mesma do contorno da ficha da aba. O contorno é um
   `Border` por cima, sem espessura no cartão: assim o cabeçalho começa na altura da pesquisa.
   No Windows 11 a barra de título dos diálogos leva a cor do fundo da janela
-  (`BarraDeTitulo.Pintar`, `DWMWA_CAPTION_COLOR`); isso só se vê no app de verdade.
+  (`BarraDeTitulo.Pintar`, `DWMWA_CAPTION_COLOR`), repintada a cada troca do fundo, não do
+  tema: o diálogo é montado em código, o fundo vem do estilo `Window` e, ao abrir, ainda é o
+  branco, com o tema já escuro (a barra saía branca, EV12). Isso só se vê no app de verdade.
 - **Barra de título** — na janela principal não há barra do sistema: a faixa das abas é a
   barra (`ExtendClientAreaToDecorationsHint`, com os 40 da faixa em
   `ExtendClientAreaTitleBarHeightHint`), como no Windows Terminal e nos layouts do Herdr. O

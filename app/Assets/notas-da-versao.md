@@ -1,3 +1,6 @@
+## 1.0.0.31 — 16/11/2026
+- A barra de título dos diálogos (confirmar, preferências…) fica da cor do diálogo, e não mais branca.
+
 ## 1.0.0.30 — 16/11/2026
 - **As abas ficam na barra de título**: a faixa de cima do GTerm (Projetos e Sessões, as abas e as pílulas do canto) passou a ser a própria barra da janela, com minimizar, maximizar e fechar no canto direito. Para arrastar a janela, pegue em qualquer vão da faixa; o duplo clique ali maximiza.
 - **Ctrl+← e Ctrl+→ andam pelas abas**, na ordem delas, e dão a volta, como o Ctrl+Tab, que continua valendo. São as teclas que pulam palavra no terminal: com uma aba só elas continuam fazendo isso, com Shift também, e dentro da pesquisa da árvore são do texto.
