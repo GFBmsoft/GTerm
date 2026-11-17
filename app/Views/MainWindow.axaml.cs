@@ -47,7 +47,7 @@ public partial class MainWindow : Window, IDialogService
 
         Opened += (_, _) =>
         {
-            AlinharBotoesDaJanela();
+            AjustarBotoesDaJanela();
             Focar();
             _vm.CorrigirHooks();
             _ = _vm.VerificarAtualizacaoAsync(); // em segundo plano, no máximo uma consulta por dia
@@ -198,24 +198,28 @@ public partial class MainWindow : Window, IDialogService
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 
     /// <summary>
-    /// Os botões da janela (minimizar, maximizar, fechar) no meio da faixa das abas, na altura das
-    /// pílulas ao lado. O tema os limita a 30 de altura, e ficavam mais para cima. Maximizada, a
-    /// barra que o Avalonia desenha perde a moldura que sai da tela (40 vira 32), e eles subiam de
-    /// novo: descem metade do que ela perdeu.
+    /// Os botões da janela (minimizar, maximizar, fechar) ocupam a faixa das abas inteira, do topo à
+    /// borda, como no Windows Terminal e nos outros apps do Windows 11 (EV13; o desenho deles está no
+    /// Theme.axaml). O tema os limita a 30 de altura. Maximizada, a barra que o Avalonia desenha perde
+    /// a moldura que sai da tela (40 vira 33), mas a faixa continua com 40: a altura mínima é a dela.
+    /// Com a janela atrás de outra, os símbolos se apagam ("inativa"): pela troca do IsActive, não
+    /// pelo evento Activated, que o Avalonia dispara antes de pô-lo em verdadeiro.
     /// </summary>
-    private void AlinharBotoesDaJanela()
+    private void AjustarBotoesDaJanela()
     {
         foreach (var botoes in this.GetVisualDescendants().OfType<Avalonia.Controls.Chrome.CaptionButtons>())
         {
             botoes.MaxHeight = double.PositiveInfinity;
-            botoes.Margin = new Thickness(0, OffScreenMargin.Top / 2, 0, 0);
+            botoes.MinHeight = ExtendClientAreaTitleBarHeightHint;
+            botoes.Classes.Set("inativa", !IsActive);
         }
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == OffScreenMarginProperty) AlinharBotoesDaJanela(); // maximizou ou restaurou
+        // maximizou ou restaurou; ganhou ou perdeu a frente
+        if (change.Property == OffScreenMarginProperty || change.Property == IsActiveProperty) AjustarBotoesDaJanela();
     }
 
     private void AbrirMenuDaArvore(object? sender, ContextRequestedEventArgs e)

@@ -264,6 +264,35 @@
     <Setter Property="Opacity" Value="0.8" />
   </Style>
 
+  <!-- os três botões da janela (minimizar, maximizar, fechar), que o Avalonia desenha no canto da faixa das
+       abas: não são pílulas, são os do Windows 11 e do Windows Terminal. Ocupam a faixa inteira, do topo à
+       borda, sem canto (quem arredonda o do fechar é a curva da janela), e acendem nas cores do Windows. Sem
+       isto o estilo de Button lá em cima chegava neles: 28 de altura no meio da faixa de 40, o vermelho solto
+       da borda, e com o mouse em cima o fundo no tom do contorno, que no fechar é o vermelho de pressionado
+       (EV13). Fica depois dele, senão ele vence. O fundo é posto direto no ContentPresenter: o vermelho do
+       fechar vem do template e passa por cima de estilo no Background do botão -->
+  <Style Selector="CaptionButtons /template/ Button">
+    <Setter Property="Height" Value="NaN" />
+    <Setter Property="Cursor" Value="Arrow" />
+  </Style>
+  <Style Selector="CaptionButtons /template/ Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#0FFFFFFF" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="CaptionButtons /template/ Button:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#0AFFFFFF" />
+  </Style>
+  <Style Selector="CaptionButtons /template/ Button#PART_CloseButton:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#C42B1C" />
+  </Style>
+  <Style Selector="CaptionButtons /template/ Button#PART_CloseButton:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#E6C42B1C" />
+  </Style>
+  <!-- com a janela atrás de outra, os símbolos se apagam, como nos outros apps (a classe vem da MainWindow) -->
+  <Style Selector="CaptionButtons.inativa /template/ Button:not(:pointerover) > Viewbox">
+    <Setter Property="Opacity" Value="0.4" />
+  </Style>
+
   <!-- entradas -->
 
   <Style Selector="TextBox">

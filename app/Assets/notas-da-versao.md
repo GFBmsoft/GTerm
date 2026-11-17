@@ -1,3 +1,7 @@
+## 1.0.0.32 — 17/11/2026
+- **Minimizar, maximizar e fechar ficaram como os do Windows**: ocupam a altura toda da faixa de cima, do topo até a borda da janela, e acendem nas cores do Windows 11, o fechar em vermelho até o canto. Antes ficavam menores, soltos no meio da faixa, o fechar acendia num vermelho claro solto da borda, e logo abaixo dele sobrava um pedaço que arrastava a janela em vez de fechar.
+- Com a janela atrás de outra, os símbolos dos três botões se apagam, como nos outros programas.
+
 ## 1.0.0.31 — 16/11/2026
 - A barra de título dos diálogos (confirmar, preferências…) fica da cor do diálogo, e não mais branca.
 

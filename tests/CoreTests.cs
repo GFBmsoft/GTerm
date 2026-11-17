@@ -69,6 +69,64 @@ public class BarraDeTituloTests
         Assert.Null(BarraDeTitulo.CorDaBarra(Avalonia.Media.Brushes.Transparent));
         Assert.Null(BarraDeTitulo.CorDaBarra(Avalonia.Media.Brush.Parse("#800F1014")));
     }
+
+    /// <summary>
+    /// Os botões da janela são os do Windows, não pílulas (EV13): a altura inteira da faixa e, com o
+    /// mouse em cima, o fundo do Windows 11 (o vermelho dele no fechar). Na janela de verdade eles só
+    /// existem com a faixa na barra de título, que os testes sem tela não têm: aqui ficam numa comum.
+    /// </summary>
+    [AvaloniaFact]
+    public void OsBotoesDaJanelaSaoOsDoWindows()
+    {
+        // a altura é a que a MainWindow dá a eles (AjustarBotoesDaJanela): o tema os limita a 30
+        var botoes = new Avalonia.Controls.Chrome.CaptionButtons
+        {
+            MaxHeight = double.PositiveInfinity,
+            MinHeight = 40,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+        };
+        var janela = new Window { Width = 300, Height = 100, Content = botoes };
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var todos = botoes.GetVisualDescendants().OfType<Button>().Where(b => b.IsVisible).ToList();
+            Assert.Equal(3, todos.Count);
+            Assert.All(todos, b => Assert.Equal(40, b.Bounds.Height)); // eram 28, os da pílula
+
+            var fechar = todos.Single(b => b.Name == "PART_CloseButton");
+            var minimizar = todos.Single(b => b.Name == "PART_MinimizeButton");
+            void PassarPorCima(Button b, bool em)
+            {
+                ((IPseudoClasses)b.Classes).Set(":pointerover", em);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Avalonia.Media.Color Fundo(Button b)
+            {
+                PassarPorCima(b, true);
+                var cor = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(
+                    b.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First().Background).Color;
+                PassarPorCima(b, false);
+                return cor;
+            }
+            Assert.Equal(Avalonia.Media.Color.Parse("#C42B1C"), Fundo(fechar)); // era o #F1707A
+            Assert.Equal(Avalonia.Media.Color.Parse("#0FFFFFFF"), Fundo(minimizar));
+
+            // com a janela atrás de outra, os símbolos se apagam; o do fechar aceso, não
+            double Simbolo(Button b) => b.GetVisualDescendants().OfType<Viewbox>().Single().Opacity;
+            botoes.Classes.Add("inativa");
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0.4, Simbolo(minimizar));
+            PassarPorCima(fechar, true);
+            Assert.Equal(1, Simbolo(fechar));
+        }
+        finally
+        {
+            janela.Close();
+        }
+    }
 }
 
 public class AtividadeTests

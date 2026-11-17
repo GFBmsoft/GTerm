@@ -110,12 +110,27 @@ e por isso confirma antes.
   (`BarraDeTitulo.Pintar`, `DWMWA_CAPTION_COLOR`), repintada a cada troca do fundo, não do
   tema: o diálogo é montado em código, o fundo vem do estilo `Window` e, ao abrir, ainda é o
   branco, com o tema já escuro (a barra saía branca, EV12). Isso só se vê no app de verdade.
+  A borda de 1 px que o Windows desenha em volta da janela fica quase branca (#E8E8EA) com
+  ela na frente, e o app não a pinta: o `DWMWA_BORDER_COLOR` não segura. Testado em
+  17/11/2026 (EV13): a cor pedida vale por 200 a 400 ms depois de cada ativação e o Windows
+  volta à dele; reaplicar (a cada mensagem, a cada 100 ms, 1 s depois) só faz piscar, e
+  inativa ela às vezes fica, às vezes não. Vale também com a barra do sistema, sem a faixa
+  das abas, e nos três modos de composição do Avalonia, com ou sem a cor da barra. Numa
+  janela Win32 comum a mesma chamada fica, mesmo com a moldura estendida, sem área não
+  cliente, sem bitmap de redirecionamento, com o Fechar desligado e passando pelo
+  `DwmDefWindowProc`. A causa não foi achada; antes de tentar de novo, comece por aí.
 - **Barra de título** — na janela principal não há barra do sistema: a faixa das abas é a
   barra (`ExtendClientAreaToDecorationsHint`, com os 40 da faixa em
   `ExtendClientAreaTitleBarHeightHint`), como no Windows Terminal e nos layouts do Herdr. O
   Avalonia desenha só os três botões da janela no canto, que o Windows enxerga como
-  minimizar, maximizar e fechar (os layouts de encaixe do Windows 11 continuam valendo);
-  `MainWindow.AlinharBotoesDaJanela` os põe na altura das pílulas. Na faixa, o que é botão
+  minimizar, maximizar e fechar (os layouts de encaixe do Windows 11 continuam valendo).
+  Eles não são pílulas: como no Windows Terminal, ocupam a faixa inteira, do topo à borda, sem
+  canto (a curva da janela arredonda o do fechar), e acendem nas cores do Windows 11 (EV13).
+  O estilo geral de `Button` chegava neles (28 de altura, e o fundo no tom do contorno, que
+  no fechar é o vermelho de pressionado): os de `CaptionButtons` no Theme.axaml ficam depois
+  dele. `MainWindow.AjustarBotoesDaJanela` tira o limite de 30 do tema, segura os 40 também
+  maximizada (a barra do Avalonia cai para 33) e apaga os símbolos com a janela atrás de
+  outra. Na faixa, o que é botão
   recebe o clique e todo o resto é o `FundoDaBarra`
   (`Win32Properties.NonClientHitTestResult="Caption"`): arrasta a janela e maximiza no duplo
   clique. Por isso nada por cima dele ganha `Background` sem ser para clicar, nem
