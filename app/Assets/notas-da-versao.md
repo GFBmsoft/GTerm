@@ -1,3 +1,6 @@
+## 1.0.0.34 — 17/11/2026
+- Minimizar ou maximizar pelos botões do canto não tira mais o cursor do terminal: ao voltar a janela, dá para digitar direto, sem clicar no terminal antes.
+
 ## 1.0.0.33 — 17/11/2026
 - **Ctrl+clique abre links e arquivos do terminal**: um endereço vai para o navegador, um arquivo abre no programa dele e uma pasta no Explorer, como as imagens de antes e depois que o Claude mostra, ou um `arquivo.cs:42`, que parte da pasta do projeto. Com o Ctrl apertado, o cursor vira a mãozinha em cima do que dá para abrir. Programas e scripts não rodam: o Explorer abre com eles marcados.
 - **Arraste um arquivo para o terminal** e o caminho dele é colado, entre aspas se tiver espaço.

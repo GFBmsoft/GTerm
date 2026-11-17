@@ -270,10 +270,13 @@
        isto o estilo de Button lá em cima chegava neles: 28 de altura no meio da faixa de 40, o vermelho solto
        da borda, e com o mouse em cima o fundo no tom do contorno, que no fechar é o vermelho de pressionado
        (EV13). Fica depois dele, senão ele vence. O fundo é posto direto no ContentPresenter: o vermelho do
-       fechar vem do template e passa por cima de estilo no Background do botão -->
+       fechar vem do template e passa por cima de estilo no Background do botão. Também não pegam o foco,
+       como os do Windows: clicar em minimizar levava o teclado para o botão, e ao voltar a janela o
+       Avalonia o devolvia a ele, não ao terminal, que ficava sem cursor -->
   <Style Selector="CaptionButtons /template/ Button">
     <Setter Property="Height" Value="NaN" />
     <Setter Property="Cursor" Value="Arrow" />
+    <Setter Property="Focusable" Value="False" />
   </Style>
   <Style Selector="CaptionButtons /template/ Button:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="#0FFFFFFF" />

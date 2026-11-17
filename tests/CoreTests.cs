@@ -127,6 +127,48 @@ public class BarraDeTituloTests
             janela.Close();
         }
     }
+
+    /// <summary>
+    /// Clicar em minimizar ou maximizar não tira o teclado do terminal. Os botões da janela são
+    /// botões do Avalonia, e o clique neles pegava o foco; ao voltar, o Avalonia devolve o foco ao
+    /// último dono, que era o botão, e o terminal ficava sem cursor até um clique nele. Aqui o
+    /// terminal é uma caixa de texto: o que conta é quem fica com o foco.
+    /// </summary>
+    [AvaloniaFact]
+    public void OsBotoesDaJanelaNaoTiramOTecladoDoTerminal()
+    {
+        var botoes = new Avalonia.Controls.Chrome.CaptionButtons { VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
+        var terminal = new TextBox();
+        var painel = new DockPanel();
+        DockPanel.SetDock(botoes, Dock.Top);
+        painel.Children.Add(botoes);
+        painel.Children.Add(terminal);
+        var janela = new Window { Width = 300, Height = 200, Content = painel };
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            terminal.Focus();
+
+            foreach (var nome in new[] { "PART_MinimizeButton", "PART_RestoreButton" })
+            {
+                var botao = botoes.GetVisualDescendants().OfType<Button>().Single(b => b.Name == nome);
+                var meio = botao.TranslatePoint(new Point(botao.Bounds.Width / 2, botao.Bounds.Height / 2), janela)!.Value;
+                janela.MouseDown(meio, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(terminal, janela.FocusManager!.GetFocusedElement());
+                janela.MouseUp(meio, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+                janela.WindowState = WindowState.Normal;
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.Same(terminal, janela.FocusManager!.GetFocusedElement());
+        }
+        finally
+        {
+            janela.Close();
+        }
+    }
 }
 
 public class AtividadeTests
