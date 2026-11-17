@@ -264,7 +264,12 @@ e por isso confirma antes.
 - **Atenção** — um projeto que termina ou para para perguntar sem estar à vista (outro
   selecionado, ou a janela atrás de outra) fica com o nome marcado, entra na conta do
   título da janela e faz o botão piscar na barra de tarefas (`MainViewModel.EstadoMudou`,
-  `BarraDeTarefas`). O "aguardando" por silêncio não conta: é palpite.
+  `BarraDeTarefas`). O "aguardando" por silêncio não conta: é palpite. Não há selo com a
+  conta no ícone: foi feito e tirado em 17/11/2026, a pedido do usuário. A barra dele está em
+  botões menores (32 px), e assim o Windows ignora o selo de qualquer app (`SetOverlayIcon`,
+  está na documentação); trocar o ícone da janela também não aparece, a barra mostra o do
+  executável. Se voltar: pedir o `ITaskbarList4`, porque no Windows 11 26300 o objeto recusa
+  o 3 (E_NOINTERFACE).
 - **Consumo** — o cartão ao lado do terminal (a pílula "Consumo" do canto; é da janela,
   `Workspace.Consumo`, e acompanha o projeto à vista) é o `ctop -Slim` com tela, no lugar do
   painel lateral que o cia perdeu em 28/10/2026: o contexto da conversa, os limites do plano,
@@ -291,6 +296,17 @@ e por isso confirma antes.
   (`AuxiliarSessao`), sem o comando de abertura; só existe com o terminal do projeto
   iniciado e é encerrado junto com ele. Abre e fecha na pílula "Terminal" do canto (acesa
   enquanto aberto); a do painel lateral, "Painel", é igual.
+- **No terminal, como no Windows Terminal** (vindos do omux) — arquivo solto cola o caminho,
+  entre aspas se tiver espaço; colar (Ctrl+V ou arquivo) vai entre `ESC[200~` e `ESC[201~`
+  quando o programa pede (modo 2004), e é assim que o Claude reconhece o caminho de uma
+  imagem. Ctrl+clique abre o endereço ou o caminho debaixo do mouse, com a mãozinha antes
+  (`LinksDoTerminal`): o caminho relativo parte da pasta do terminal (`TerminalSessao.Pasta`),
+  só conta se existir, e uma palavra solta precisa de barra ou extensão para não virar link;
+  o caminho que o Claude quebrou em duas linhas é juntado pela vizinha; o que rodaria (.exe,
+  script) só aparece marcado no Explorer. O terminal entrega a linha pelo evento
+  `LinkRequested` e o app decide. Ctrl+=, Ctrl+-, Ctrl+0 e Ctrl+roda em cima do terminal
+  mudam a fonte (`MainViewModel.MudarFonte`): é o tamanho das Preferências, gravado, igual
+  em todos os terminais. Ctrl+Shift+- segue para o terminal (o Ctrl+_ do Claude).
 - **ViewModels** — CommunityToolkit.Mvvm. `MainViewModel` tem os projetos, a árvore, a
   seleção e as sessões abertas; `TerminalSessao` é o shell de um projeto, criado quando o
   usuário manda abrir (o ▶ da linha, Enter ou duplo clique na árvore, o botão do projeto

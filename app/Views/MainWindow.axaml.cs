@@ -74,6 +74,20 @@ public partial class MainWindow : Window, IDialogService
         // em túnel: o terminal consome o teclado todo, então a janela olha antes dele
         AddHandler(KeyDownEvent, AoTeclar, RoutingStrategies.Tunnel);
 
+        // Ctrl+roda do mouse no terminal muda a fonte, como no Windows Terminal; antes do terminal,
+        // que rolaria o histórico
+        AddHandler(PointerWheelChangedEvent, AoRolar, RoutingStrategies.Tunnel);
+
+        // Ctrl+clique num endereço ou caminho do terminal: o terminal entrega a linha, e o caminho
+        // relativo parte da pasta em que o terminal subiu
+        AddHandler(TerminalControl.LinkRequestedEvent, (_, e) =>
+        {
+            var pasta = (e.Source as Control)?.DataContext is TerminalSessao s ? s.Pasta : null;
+            e.Target = LinksDoTerminal.Resolver(e.Context, pasta);
+            if (e.Open && e.Target is { } alvo) LinksDoTerminal.Abrir(alvo);
+            e.Handled = true;
+        });
+
         var lista = this.FindControl<ListBox>("Lista")!;
         lista.AddHandler(KeyDownEvent, (_, e) =>
         {
@@ -398,8 +412,36 @@ public partial class MainWindow : Window, IDialogService
             filtro.Focus();
             filtro.SelectAll();
         }
+        // o tamanho da fonte, como no Windows Terminal. Com Shift, o Ctrl+- segue para o terminal:
+        // é o Ctrl+_ (desfazer) do Claude
+        else if (e.Key is Key.OemPlus or Key.Add)
+            _vm.MudarFonte(1);
+        else if (!shift && e.Key is Key.OemMinus or Key.Subtract)
+            _vm.MudarFonte(-1);
+        else if (!shift && e.Key is Key.D0 or Key.NumPad0)
+            _vm.MudarFonte(0);
         else
             return;
+
+        e.Handled = true;
+    }
+
+    // a roda de um touchpad chega em frações: um ponto da fonte a cada volta inteira
+    private double _rodaDaFonte;
+
+    private void AoRolar(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.Delta.Y == 0 ||
+            (e.Source as Visual)?.FindAncestorOfType<TerminalControl>(includeSelf: true) is null) return;
+
+        if (Math.Sign(_rodaDaFonte) != Math.Sign(e.Delta.Y)) _rodaDaFonte = 0;
+        _rodaDaFonte += e.Delta.Y;
+        while (Math.Abs(_rodaDaFonte) >= 1)
+        {
+            var passo = Math.Sign(_rodaDaFonte);
+            _vm.MudarFonte(passo);
+            _rodaDaFonte -= passo;
+        }
 
         e.Handled = true;
     }

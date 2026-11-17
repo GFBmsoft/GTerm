@@ -111,7 +111,10 @@ public sealed class Workspace
 
     /// <summary>Fonte do terminal; vazia usa a lista padrão.</summary>
     public string Fonte { get; set; } = "";
-    public double TamanhoDaFonte { get; set; } = 13;
+    public double TamanhoDaFonte { get; set; } = TamanhoPadrao;
+
+    /// <summary>O tamanho de quem nunca mudou, e o que o Ctrl+0 traz de volta.</summary>
+    public const double TamanhoPadrao = 13;
 
     /// <summary>
     /// Script de PowerShell do painel lateral (ex.: o ctop de consumo do Claude). Roda na

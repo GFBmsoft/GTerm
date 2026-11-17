@@ -4,7 +4,9 @@
     Cópia do AvaloniaTerminal 1.0.0-alpha.13 (MIT, Ivan Josipovic; ver LICENSE), trazida
     para dentro do repositório para corrigir o que o pacote não deixa mudar: teclas eram
     enviadas ao soltar (atraso ao digitar, acento morto quebrado), cursor só em bloco e
-    fundo preso à cor 0 da paleta. Alterações marcadas com "GRepos:".
+    fundo preso à cor 0 da paleta. Alterações marcadas com "GRepos:"; as do GTerm (arquivo
+    solto, colar avisando o programa, Ctrl+clique em link) com "GTerm:", e o grosso delas em
+    TerminalLinks.cs.
 
     XTerm.NET 1.0.16 e não a 1.0.12 do original: a 1.0.12 perguntava ao Unicode.net se
     cada caractere impresso era emoji, a 2,5 µs cada, e o interpretador não passava de

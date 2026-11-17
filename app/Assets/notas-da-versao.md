@@ -1,3 +1,9 @@
+## 1.0.0.33 — 17/11/2026
+- **Ctrl+clique abre links e arquivos do terminal**: um endereço vai para o navegador, um arquivo abre no programa dele e uma pasta no Explorer, como as imagens de antes e depois que o Claude mostra, ou um `arquivo.cs:42`, que parte da pasta do projeto. Com o Ctrl apertado, o cursor vira a mãozinha em cima do que dá para abrir. Programas e scripts não rodam: o Explorer abre com eles marcados.
+- **Arraste um arquivo para o terminal** e o caminho dele é colado, entre aspas se tiver espaço.
+- **Ctrl+= e Ctrl+- aumentam e diminuem a fonte dos terminais**, como no Windows Terminal; Ctrl+0 volta ao tamanho padrão, e o Ctrl com a roda do mouse em cima do terminal também muda. O tamanho fica gravado, o mesmo das Preferências.
+- Colar no terminal avisa o programa que o texto foi colado, como faz o Windows Terminal.
+
 ## 1.0.0.32 — 17/11/2026
 - **Minimizar, maximizar e fechar ficaram como os do Windows**: ocupam a altura toda da faixa de cima, do topo até a borda da janela, e acendem nas cores do Windows 11, o fechar em vermelho até o canto. Antes ficavam menores, soltos no meio da faixa, o fechar acendia num vermelho claro solto da borda, e logo abaixo dele sobrava um pedaço que arrastava a janela em vez de fechar.
 - Com a janela atrás de outra, os símbolos dos três botões se apagam, como nos outros programas.

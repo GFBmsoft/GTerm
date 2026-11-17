@@ -97,6 +97,8 @@ public partial class TerminalControl : Grid
         };
         _selectionAutoScrollTimer.Tick += OnSelectionAutoScrollTimerTick;
 
+        SetUpFileDrop(); // GTerm: arquivo solto aqui cola o caminho (TerminalLinks.cs)
+
         ApplyResourceDefaults();
         CalculateTextSize();
         UpdateScrollBar();
@@ -191,10 +193,16 @@ public partial class TerminalControl : Grid
 
     public void Paste(string text)
     {
-        if (!string.IsNullOrEmpty(text))
+        if (string.IsNullOrEmpty(text) || Model == null)
         {
-            Model?.Send(text);
+            return;
         }
+
+        // GTerm: com o programa pedindo (modo 2004), o colado vai entre ESC[200~ e ESC[201~, como no
+        // Windows Terminal: ele recebe o texto como colado, e não as quebras de linha como Enter. É
+        // assim que o Claude reconhece o caminho de uma imagem solta aqui. Sem ESC no meio: o texto
+        // colado não pode fechar a colagem antes da hora
+        Model.Send(Model.Terminal.Engine.BracketedPasteMode ? "\x1b[200~" + text.Replace("\x1b", "") + "\x1b[201~" : text);
     }
 
     public async Task CopySelectionAsync()
@@ -465,6 +473,13 @@ public partial class TerminalControl : Grid
             return;
         }
 
+        // GTerm: Ctrl+clique num link abre, mesmo com o programa tomando o mouse
+        if (TryOpenLink(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (TryHandleTerminalMousePressed(e))
         {
             e.Handled = true;
@@ -490,6 +505,7 @@ public partial class TerminalControl : Grid
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        UpdateLinkCursor(e); // GTerm
 
         if (TryHandleTerminalMouseMoved(e))
         {

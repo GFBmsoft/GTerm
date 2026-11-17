@@ -1894,6 +1894,69 @@ public class JanelaTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Ctrl+=, Ctrl+-, Ctrl+0 e Ctrl+roda em cima do terminal mudam a fonte, como no Windows
+    /// Terminal; é o tamanho das Preferências, e fica gravado. Ctrl+Shift+- é do terminal.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task CtrlMaisEMenosMudamAFonte()
+    {
+        Montar();
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            void Tecla(Key tecla, PhysicalKey fisica, RawInputModifiers mais = RawInputModifiers.None)
+            {
+                janela.KeyPress(tecla, RawInputModifiers.Control | mais, fisica, null);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Tecla(Key.OemPlus, PhysicalKey.Equal);
+            Assert.Equal(14, vm.TamanhoDaFonte);
+            Tecla(Key.Add, PhysicalKey.NumPadAdd);
+            Assert.Equal(15, vm.TamanhoDaFonte);
+            Assert.Equal(15, WorkspaceStore.Load().TamanhoDaFonte);
+            Tecla(Key.OemMinus, PhysicalKey.Minus);
+            Assert.Equal(14, vm.TamanhoDaFonte);
+            Tecla(Key.OemMinus, PhysicalKey.Minus, RawInputModifiers.Shift);
+            Assert.Equal(14, vm.TamanhoDaFonte);
+            Tecla(Key.D0, PhysicalKey.Digit0);
+            Assert.Equal(13, vm.TamanhoDaFonte);
+            for (var i = 0; i < 10; i++) Tecla(Key.Subtract, PhysicalKey.NumPadSubtract);
+            Assert.Equal(8, vm.TamanhoDaFonte); // o mínimo das Preferências
+
+            // a roda só com o mouse em cima do terminal; a de um touchpad chega em frações
+            var financeiro = vm.Selecionado!;
+            await financeiro.IniciarCommand.ExecuteAsync(null);
+            Dispatcher.UIThread.RunJobs();
+            var terminal = janela.GetVisualDescendants().OfType<TerminalControl>().First(t => t.IsEffectivelyVisible);
+            var meio = terminal.TranslatePoint(new Point(terminal.Bounds.Width / 2, terminal.Bounds.Height / 2), janela)!.Value;
+            void Roda(double quanto)
+            {
+                janela.MouseWheel(meio, new Vector(0, quanto), RawInputModifiers.Control);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Roda(1);
+            Assert.Equal(9, vm.TamanhoDaFonte);
+            Assert.Equal(9, terminal.FontSize);
+            Roda(0.5);
+            Assert.Equal(9, vm.TamanhoDaFonte);
+            Roda(0.5);
+            Assert.Equal(10, vm.TamanhoDaFonte);
+            Roda(-1);
+            Assert.Equal(9, vm.TamanhoDaFonte);
+            Assert.Equal(9, WorkspaceStore.Load().TamanhoDaFonte);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+        }
+    }
+
     [AvaloniaFact]
     public async Task PastaQueSumiuViraAvisoEmVezDeDerrubarOApp()
     {

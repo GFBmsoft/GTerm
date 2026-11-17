@@ -1458,6 +1458,21 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(TemPainel));
     }
 
+    /// <summary>
+    /// Ctrl+= e Ctrl+- (e Ctrl+roda do mouse) mudam a fonte dos terminais um ponto, Ctrl+0 volta
+    /// ao padrão, como no Windows Terminal. É o mesmo tamanho das Preferências, e fica gravado: os
+    /// terminais dos projetos emprestam a medida uns aos outros, e não podem ter tamanhos diferentes.
+    /// </summary>
+    public void MudarFonte(int passo)
+    {
+        var novo = passo == 0 ? Workspace.TamanhoPadrao : Math.Clamp(_workspace.TamanhoDaFonte + passo, 8, 32);
+        if (novo == _workspace.TamanhoDaFonte) return;
+
+        _workspace.TamanhoDaFonte = novo;
+        Salvar();
+        OnPropertyChanged(nameof(TamanhoDaFonte));
+    }
+
     /// <summary>Abre ou fecha o painel lateral do projeto selecionado, e lembra a escolha.</summary>
     [RelayCommand]
     private void AlternarPainel()

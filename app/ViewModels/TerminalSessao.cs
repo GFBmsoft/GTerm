@@ -106,6 +106,9 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
     /// <summary>O processo vivo no terminal; é por ele que se sabe qual conversa do Claude a aba tem.</summary>
     public int? Pid => _pty is { } pty && !Encerrada ? pty.Pid : null;
 
+    /// <summary>A pasta em que o processo subiu: o Ctrl+clique num caminho relativo parte dela.</summary>
+    public string? Pasta { get; private set; }
+
 
     /// <summary>O terminal foi medido na tela, com estas colunas e linhas.</summary>
     public event Action<int, int>? Mediu;
@@ -212,6 +215,7 @@ public sealed partial class TerminalSessao : ObservableObject, IDisposable
         _pty?.Dispose();
         var pty = ConPty.Iniciar(arranque.Linha, arranque.Pasta, _colunas, _linhas, ambiente);
         _pty = pty;
+        Pasta = arranque.Pasta;
         _comando = string.IsNullOrWhiteSpace(arranque.Comando) ? null : arranque.Comando.Trim();
         Encerrada = false;
         _atividade.Reiniciar();
