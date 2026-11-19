@@ -1,3 +1,10 @@
+## 1.0.0.35 — 19/11/2026
+- **O que falta em cada projeto, pelo GNotas**: com uma nota do projeto no caderno Projetos do GNotas (Projetos\GTerm.md, por exemplo), o quadro do projeto parado diz quantos itens faltam e qual é o primeiro. A pílula Notas, no quadro, no cabeçalho do terminal e no clique direito da árvore, abre o Claude para fazê-los: ele marca ✅ no que ficou pronto e tira da galeria do GNotas as imagens dos itens feitos.
+- **Configurações no jeito do GNotas**: a engrenagem no pé da árvore abre as seções à esquerda (Terminal, Avisos, Claude Code, GNotas e Sobre) e a escolhida à direita. A versão em uso, o procurar atualização e as notas da versão ficam no Sobre. Com versão nova, o convite verde aparece ao lado da engrenagem, e só então.
+- Projetos e Sessões são duas pílulas do mesmo tamanho, de ponta a ponta da árvore, e o + das conversas foi para o lado da pesquisa.
+- A pesquisa da árvore ficou mais compacta, com a lupa dentro, como a do GIsam.
+- Na linha da árvore, a estrela e o ▶ são bolinhas do mesmo tamanho, com espaço entre elas: com o mouse em cima, o fundo da estrela encostava no ▶. O ▶ ficou no meio da bolinha.
+
 ## 1.0.0.34 — 17/11/2026
 - Minimizar ou maximizar pelos botões do canto não tira mais o cursor do terminal: ao voltar a janela, dá para digitar direto, sem clicar no terminal antes.
 

@@ -98,6 +98,12 @@ public sealed class Workspace
     public string ContaDasSessoes { get; set; } = Cia.ContaDasSessoesPadrao();
 
     /// <summary>
+    /// A pasta das notas do GNotas, onde o caderno Projetos diz o que falta em cada programa.
+    /// Vazia é a das configurações do próprio GNotas; os testes põem uma pasta temporária.
+    /// </summary>
+    public string PastaDoGNotas { get; set; } = GNotas.PastaPadrao();
+
+    /// <summary>
     /// Como o Claude Code é chamado no terminal do projeto, sem shell. Vazio acha o
     /// claude.exe sozinho; os testes põem um eco no lugar.
     /// </summary>

@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using GTerm.Controls;
 using GTerm.Services;
@@ -54,7 +56,6 @@ public abstract class DialogWindow : Window
         ["Fechar"] = (Glifos.Fechar, "cinza"),
         ["Confirmar"] = (Glifos.Confirmar, "azul"),
         ["Salvar"] = (Glifos.Salvar, "azul"),
-        ["Notas da versão"] = (Glifos.Documento, "azul"),
         ["Instalar"] = (Glifos.Instalar, "verde"),
         ["Remover"] = (Glifos.Excluir, "vermelho"),
         ["Corrigir"] = (Glifos.Corrigir, "laranja"),
@@ -260,23 +261,56 @@ public sealed class GrupoWindow : DialogWindow
     }
 }
 
-// --------------------------------------------------------------- preferências
+// ------------------------------------------------------------- configurações
 
-/// <summary>Preferências do aplicativo. Devolve null quando o usuário cancela.</summary>
-public sealed class PreferenciasWindow : DialogWindow
+/// <summary>
+/// As configurações, no padrão das do GNotas (a EV05 dele): as seções numa lista à esquerda e a
+/// escolhida num cartão à direita. A versão em uso, a procura de atualização e as notas da versão
+/// ficam no Sobre; no pé da árvore só a engrenagem. Devolve null quando o usuário cancela.
+/// </summary>
+public sealed class ConfiguracoesWindow : DialogWindow
 {
-    public PreferenciasWindow(Preferencias atuais, IReadOnlyList<string> contas) : base("Preferências", 520)
+    public static readonly string[] Secoes = { "Terminal", "Avisos", "Claude Code", "GNotas", "Sobre" };
+    private static readonly string[] GlifosDasSecoes = { Glifos.Terminal, Glifos.Avisos, Glifos.Codigo, Glifos.Notas, Glifos.Sobre };
+
+    private readonly ListBox _lista;
+    private readonly ScrollViewer _conteudo;
+    private readonly Dictionary<string, Control> _montadas = new();
+    private readonly IReadOnlyList<string> _contas;
+    private readonly MainViewModel? _vm;
+
+    // o que o Salvar lê: criados todos de uma vez, valem mesmo sem a seção deles ter sido aberta
+    private readonly AutoCompleteBox _fonte;
+    private readonly NumericUpDown _tamanho;
+    private readonly TextBox _painel;
+    private readonly CheckBox _avisar;
+
+    /// <param name="vm">O da janela: a versão e a atualização do Sobre, e a pasta do GNotas. Null nos testes da tela.</param>
+    public ConfiguracoesWindow(Preferencias atuais, IReadOnlyList<string> contas, MainViewModel? vm = null, string? secao = null)
+        : base("Configurações", 780)
     {
+        _contas = contas;
+        _vm = vm;
+        SizeToContent = SizeToContent.Manual;
+        Height = 560;
+        MinWidth = 640;
+        MinHeight = 440;
+        CanResize = true;
+        // a janela no plano escuro, como a principal, e a seção num cartão um tom acima
+        this.Bind(BackgroundProperty, new DynamicResourceExtension("BgPanel"));
+
         // digitar filtra a lista; nome fora dela também vale (a fonte pode ser instalada depois)
-        var fonteBox = new AutoCompleteBox
+        _fonte = new AutoCompleteBox
         {
             Text = atuais.Fonte,
             ItemsSource = FontManager.Current.SystemFonts.Select(f => f.Name).OrderBy(n => n).ToList(),
             FilterMode = AutoCompleteFilterMode.Contains,
             MinimumPrefixLength = 0,
             Watermark = "Padrão (" + MainViewModel.FontePadrao.Split(',')[0] + ")",
+            Width = 320,
+            HorizontalAlignment = HorizontalAlignment.Left,
         };
-        var tamanhoBox = new NumericUpDown
+        _tamanho = new NumericUpDown
         {
             Value = (decimal)atuais.Tamanho,
             Minimum = 8,
@@ -286,50 +320,241 @@ public sealed class PreferenciasWindow : DialogWindow
             Width = 130,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        var painelBox = new TextBox
+        _painel = new TextBox
         {
             Text = atuais.PainelComando,
             Watermark = @"Ex.: & 'C:\Scripts\claude-stats.ps1' -Slim -Live",
+            MaxWidth = 520,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
-
-        var avisarBox = new CheckBox
+        _avisar = new CheckBox
         {
             Content = "Avisar quando um projeto fora da vista terminar ou esperar por mim",
             IsChecked = atuais.Avisar,
         };
 
-        var notas = Btn("Notas da versão");
-        notas.Click += (_, _) => new NotasWindow().ShowDialog(this);
+        _lista = new ListBox { Classes = { "secoes" }, ItemsSource = Secoes, Margin = new Thickness(0, 6, 10, 0) };
+        _lista.ItemTemplate = new FuncDataTemplate<string>((s, _) => new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            Height = 30,
+            Margin = new Thickness(10, 0),
+            Children =
+            {
+                new TextBlock { Text = GlifosDasSecoes[Array.IndexOf(Secoes, s)], Classes = { "glifo", "faint" }, VerticalAlignment = VerticalAlignment.Center },
+                new TextBlock { Text = s, VerticalAlignment = VerticalAlignment.Center },
+            },
+        });
+        _conteudo = new ScrollViewer { HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+        _lista.SelectionChanged += (_, _) => Mostrar(_lista.SelectedItem as string);
+
+        var cartao = new Border { Child = _conteudo, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), ClipToBounds = true };
+        cartao.Bind(Border.BackgroundProperty, new DynamicResourceExtension("Bg"));
+        cartao.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("Border"));
 
         var cancelar = Btn("Cancelar");
         var salvar = Btn("Salvar", true);
         cancelar.Click += (_, _) => Close(null);
         salvar.Click += (_, _) => Close(new Preferencias(
-            (fonteBox.Text ?? "").Trim(),
-            (double)(tamanhoBox.Value ?? (decimal)atuais.Tamanho),
-            (painelBox.Text ?? "").Trim(),
-            avisarBox.IsChecked == true));
-
-        var corpo = new List<Control>
+            (_fonte.Text ?? "").Trim(),
+            (double)(_tamanho.Value ?? (decimal)atuais.Tamanho),
+            (_painel.Text ?? "").Trim(),
+            _avisar.IsChecked == true));
+        var rodape = new StackPanel
         {
-            Field("Fonte do terminal", fonteBox),
-            Label("Para os ícones do prompt aparecerem, escolha uma Nerd Font. Em branco, usa a padrão."),
-            new Border { Height = 10 },
-            Field("Tamanho", tamanhoBox),
-            Field("Painel lateral (script de PowerShell)", painelBox),
-            Label("Roda na pasta e na conta do projeto, sem carregar o perfil. Em branco, o botão do painel some."),
-            avisarBox,
-            Label("O nome do projeto fica em destaque na árvore, o título da janela diz quantos esperam e, " +
-                  "com o GTerm atrás de outra janela, o botão dele pisca na barra de tarefas."),
-            new Border { Height = 14 },
-            new TextBlock { Text = "CONTAS DO CLAUDE CODE", Classes = { "sectionTitle" }, Margin = new Thickness(0, 0, 0, 6) },
-            Label("Instala hooks no settings.json da conta para o ponto das abas e da árvore mostrar o estado " +
-                  "real do Claude: rodando, esperando por você ou concluído. Vale para as sessões abertas depois. " +
-                  "Uma cópia do arquivo original fica ao lado dele (settings.json.antes-do-gterm)."),
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 8,
+            Margin = new Thickness(0, 10, 0, 0),
+            Children = { cancelar, salvar },
         };
-        corpo.AddRange(contas.Select(LinhaDaConta));
 
-        Compose("Preferências", corpo, new[] { notas, cancelar, salvar });
+        var grade = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("190,*"),
+            RowDefinitions = new RowDefinitions("*,Auto"),
+            Margin = new Thickness(10, 10, 12, 12),
+        };
+        Grid.SetColumn(cartao, 1);
+        Grid.SetRow(rodape, 1);
+        Grid.SetColumnSpan(rodape, 2);
+        grade.Children.Add(_lista);
+        grade.Children.Add(cartao);
+        grade.Children.Add(rodape);
+        Content = grade;
+
+        _lista.SelectedItem = Secoes.Contains(secao) ? secao : Secoes[0];
+    }
+
+    /// <summary>A seção aberta (os testes trocam por aqui).</summary>
+    public string? Secao
+    {
+        get => _lista.SelectedItem as string;
+        set => _lista.SelectedItem = value;
+    }
+
+    private void Mostrar(string? secao)
+    {
+        if (secao is null) return;
+        if (!_montadas.TryGetValue(secao, out var c))
+            _montadas[secao] = c = secao switch
+            {
+                "Terminal" => Pagina("Terminal",
+                    Campo("Fonte", _fonte, "Para os ícones do prompt aparecerem, escolha uma Nerd Font. Em branco, usa a padrão."),
+                    Campo("Tamanho", _tamanho, "Também muda com Ctrl+= e Ctrl+- (ou Ctrl+roda) em cima do terminal; Ctrl+0 volta ao padrão."),
+                    Campo("Painel lateral", _painel, "Um script de PowerShell, que roda na pasta e na conta do projeto, sem carregar o perfil. " +
+                                                     "Em branco, o botão do painel some.")),
+                "Avisos" => Pagina("Avisos",
+                    Campo("Projeto fora da vista", _avisar, "O nome do projeto fica em destaque na árvore, o título da janela diz quantos " +
+                                                             "esperam e, com o GTerm atrás de outra janela, o botão dele pisca na barra de tarefas.")),
+                "Claude Code" => ClaudeCode(),
+                "GNotas" => DoGNotas(),
+                _ => Sobre(),
+            };
+        _conteudo.Content = c;
+        _conteudo.Offset = default;
+    }
+
+    // ------------------------------------------------------------ as peças, como as do GNotas
+
+    private static StackPanel Pagina(string titulo, params Control[] filhos)
+    {
+        var p = new StackPanel { Spacing = 20, Margin = new Thickness(26, 22, 26, 26) };
+        p.Children.Add(new TextBlock { Text = titulo, FontSize = 17, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+        foreach (var f in filhos) p.Children.Add(f);
+        return p;
+    }
+
+    /// <summary>Um campo: o nome, o controle e, embaixo, a explicação (apagada).</summary>
+    private static StackPanel Campo(string nome, Control controle, string? ajuda = null)
+    {
+        var p = new StackPanel { Spacing = 8 };
+        p.Children.Add(new TextBlock { Text = nome, FontSize = 13, FontWeight = FontWeight.SemiBold });
+        p.Children.Add(controle);
+        if (ajuda is not null) p.Children.Add(Ajuda(ajuda));
+        return p;
+    }
+
+    private static TextBlock Ajuda(string texto) => new()
+    {
+        Text = texto,
+        FontSize = 11.5,
+        TextWrapping = TextWrapping.Wrap,
+        MaxWidth = 520,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        Classes = { "faint" },
+    };
+
+    private Control ClaudeCode()
+    {
+        var contas = new StackPanel { Spacing = 0 };
+        foreach (var c in _contas) contas.Children.Add(LinhaDaConta(c));
+        return Pagina("Claude Code",
+            Campo("Contas", contas,
+                "Instala hooks no settings.json da conta para o ponto das abas e da árvore mostrar o estado real do Claude: " +
+                "rodando, esperando por você ou concluído. Vale para as sessões abertas depois. Uma cópia do arquivo original " +
+                "fica ao lado dele (settings.json.antes-do-gterm)."));
+    }
+
+    private Control DoGNotas()
+    {
+        var pasta = _vm?.PastaDasNotas ?? GNotas.Pasta(null);
+        var caminho = new TextBlock
+        {
+            Text = pasta ?? "GNotas não encontrado nesta máquina",
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Classes = { pasta is null ? "faint" : "mono" },
+        };
+        return Pagina("GNotas",
+            Campo("Pasta das notas", caminho,
+                $"O que falta em cada projeto fica no caderno {GNotas.Caderno} do GNotas, numa nota com o nome da pasta dele " +
+                $"({GNotas.Caderno}\\GTerm.md), em Melhorias e Bugs. O quadro do projeto mostra quantos itens faltam, e o botão Notas " +
+                $"abre o Claude na /gnotas para fazê-los: ele marca {GNotas.Feito} no que ficou pronto e tira da galeria as imagens " +
+                "dos itens feitos. A pasta é a das configurações do GNotas."));
+    }
+
+    private Control Sobre()
+    {
+        var versao = new TextBlock { Text = _vm?.Versao ?? "GTerm", FontSize = 14, FontWeight = FontWeight.SemiBold };
+
+        // procurar e, achando versão nova, atualizar: quem atualiza é o mesmo clique do convite no pé
+        // da árvore, que pergunta antes, e reiniciar encerra os terminais. A janela fecha antes
+        var botao = new Button { Classes = { "pilula", "azul" }, HorizontalAlignment = HorizontalAlignment.Left };
+        var situacao = new TextBlock { FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Classes = { "faint" } };
+        void Rotulo()
+        {
+            var nova = _vm?.TemAtualizacao == true;
+            botao.Classes.Set("azul", !nova);
+            botao.Classes.Set("verde", nova);
+            botao.Content = new StackPanel
+            {
+                Classes = { "comIcone" },
+                Children =
+                {
+                    new TextBlock { Classes = { "glifo" }, Text = nova ? Glifos.Instalar : Glifos.Atualizar },
+                    new TextBlock { Text = _vm?.RotuloDeAtualizar ?? "Procurar atualização" },
+                },
+            };
+            situacao.Text = _vm?.SituacaoDaVersao ?? "";
+        }
+        Rotulo();
+        if (_vm is { } vm)
+        {
+            vm.PropertyChanged += Mudou;
+            Closed += (_, _) => vm.PropertyChanged -= Mudou;
+            void Mudou(object? _, System.ComponentModel.PropertyChangedEventArgs e)
+            {
+                if (e.PropertyName is nameof(MainViewModel.SituacaoDaVersao) or nameof(MainViewModel.RotuloDeAtualizar)) Rotulo();
+            }
+            botao.Click += (_, _) =>
+            {
+                if (!vm.TemAtualizacao)
+                {
+                    vm.ProcurarAtualizacaoCommand.Execute(null);
+                    return;
+                }
+                Close(null);
+                vm.AtualizacaoCommand.Execute(null);
+            };
+        }
+
+        var cabecalho = new StackPanel
+        {
+            Spacing = 10,
+            Children =
+            {
+                versao,
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { botao, situacao } },
+                Ajuda($"As configurações ficam em {WorkspaceStore.FilePath}."),
+            },
+        };
+        return Pagina("Sobre", cabecalho, Campo("Notas da versão", NotasDaVersaoNaTela()));
+    }
+
+    /// <summary>O que mudou em cada versão, da mais nova para a mais antiga. Vem dentro do app.</summary>
+    private static Control NotasDaVersaoNaTela()
+    {
+        var notas = NotasDaVersao.Carregar();
+        var lista = new StackPanel { Spacing = 14 };
+        if (notas.Count == 0) lista.Children.Add(Ajuda("Sem notas nesta versão."));
+        foreach (var n in notas)
+        {
+            var itens = new StackPanel { Spacing = 4 };
+            itens.Children.Add(new SelectableTextBlock { Text = n.Rotulo, FontSize = 12.5, FontWeight = FontWeight.SemiBold });
+            foreach (var linha in n.Notas.Replace("**", "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                itens.Children.Add(new SelectableTextBlock
+                {
+                    Text = linha.StartsWith("- ", StringComparison.Ordinal) ? "•  " + linha[2..] : linha,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 520,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                });
+            lista.Children.Add(itens);
+        }
+        return lista;
     }
 
     /// <summary>
@@ -389,32 +614,5 @@ public sealed class PreferenciasWindow : DialogWindow
         linha.Children.Add(situacao);
         linha.Children.Add(botao);
         return linha;
-    }
-}
-// ----------------------------------------------------------- notas da versão
-
-/// <summary>O que mudou em cada versão, da mais nova para a mais antiga. Vem dentro do app.</summary>
-public sealed class NotasWindow : DialogWindow
-{
-    public NotasWindow() : base("Notas da versão", 560)
-    {
-        var notas = NotasDaVersao.Carregar();
-        var texto = notas.Count == 0
-            ? "Sem notas nesta versão."
-            : string.Join("\n\n", notas.Select(n => n.Rotulo + "\n" + n.Notas.Replace("**", "")));
-
-        var fechar = Btn("Fechar", true);
-        fechar.Click += (_, _) => Close();
-
-        Compose("Notas da versão",
-            new Control[]
-            {
-                new ScrollViewer
-                {
-                    MaxHeight = 420,
-                    Content = new SelectableTextBlock { Text = texto, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 10, 0) },
-                },
-            },
-            new[] { fechar });
     }
 }

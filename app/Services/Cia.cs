@@ -532,6 +532,7 @@ public static class Cia
 
         var limpo = modo == "-Limpo";
         var pr = modo == "-Pr";
+        var notas = modo == ModoNotas;
         var pedido = modo is { Length: > 0 } m && m.All(char.IsAsciiDigit) ? m : "";
         var sessao = modo switch
         {
@@ -542,6 +543,7 @@ public static class Cia
 
         var prompt = limpo ? null
             : pr ? "/delphi-pr"
+            : notas ? "/gnotas"
             : pedido.Length > 0 ? "/pedido " + pedido
             : daBmsoft ? "/delphi-writer"
             : "/retomar";
@@ -550,9 +552,16 @@ public static class Cia
             : prompt is null ? "" : Aspas(prompt);
 
         // o modo que o cia grava no recente
-        var gravado = limpo ? "limpo" : pr ? "pr" : sessao is not null ? "retomada" : daBmsoft ? "writer" : "memória";
+        var gravado = limpo ? "limpo" : pr ? "pr" : notas ? "gnotas"
+            : sessao is not null ? "retomada" : daBmsoft ? "writer" : "memória";
         return new Abertura(argumentos, gravado, pedido);
     }
+
+    /// <summary>
+    /// Sessão nova na skill /gnotas: o Claude lê no caderno Projetos do GNotas o que falta no
+    /// projeto, faz, e marca ✅ no que ficou pronto. Não existe no cia: é o botão Notas.
+    /// </summary>
+    public const string ModoNotas = "-Notas";
 
     /// <summary>O começo do modo que abre uma conversa escolhida; o resto é o id dela.</summary>
     public const string ModoConversa = "conversa:";

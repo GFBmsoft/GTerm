@@ -45,7 +45,19 @@ public static class Glifos
     public const string Ocultar = "";
     public const string Lista = "";
 
-    // diálogos e preferências
+    // o que falta no projeto, pela nota dele no GNotas (QuickNote)
+    public const string Notas = "";
+
+    // a pesquisa da árvore (Search)
+    public const string Pesquisar = "";
+
+    // as seções das Configurações, como as do GNotas: os avisos (Ringer), o Claude Code (Code) e o
+    // Sobre (Info). O terminal e o GNotas usam o glifo deles
+    public const string Avisos = "";
+    public const string Codigo = "";
+    public const string Sobre = "";
+
+    // diálogos e configurações
     public const string Confirmar = "";
     public const string Fechar = "";
     public const string Salvar = "";

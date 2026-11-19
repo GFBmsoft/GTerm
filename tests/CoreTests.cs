@@ -745,6 +745,75 @@ public class CiaTests : IDisposable
         Assert.Equal(new Abertura("\"/pedido 6529\"", "writer", "6529"), Cia.Decidir("6529", true, NaoProcura));
         Assert.Equal(new Abertura("/delphi-pr", "pr", ""), Cia.Decidir("-Pr", true, NaoProcura));
         Assert.Equal(new Abertura("", "limpo", ""), Cia.Decidir("-Limpo", false, NaoProcura));
+
+        // o botão Notas: sessão nova na /gnotas, nas duas bases, sem retomar nada
+        Assert.Equal(new Abertura("/gnotas", "gnotas", ""), Cia.Decidir(Cia.ModoNotas, false, NaoProcura));
+        Assert.Equal(new Abertura("/gnotas", "gnotas", ""), Cia.Decidir(Cia.ModoNotas, true, NaoProcura));
+    }
+
+    /// <summary>
+    /// A nota do projeto no caderno Projetos do GNotas: os itens são as linhas "- " na margem, o
+    /// recuado é detalhe deles, e o ✅ (ou o [x] de tarefa) marca o feito. O ";" do fim, que o
+    /// usuário põe, não entra no texto.
+    /// </summary>
+    [Fact]
+    public void ItensDaNotaDoGNotas()
+    {
+        var itens = GNotas.Itens(
+            "## Melhorias\r\n" +
+            "- Melhorar o design dos botões;\r\n" +
+            "  - O ícone se sobrepõe;\r\n" +
+            "  - ![](../anexos/gterm-1.png);\r\n" +
+            "- ✅ Campo de busca compacto;\r\n" +
+            "- [x] Tarefa feita\r\n" +
+            "- [ ] Tarefa por fazer\r\n" +
+            "texto solto\r\n" +
+            "-  \r\n" +
+            "## Bugs\r\n" +
+            "* Abre sem cursor\r\n");
+
+        Assert.Equal(new[]
+        {
+            new ItemDaNota("Melhorias", "Melhorar o design dos botões", false),
+            new ItemDaNota("Melhorias", "Campo de busca compacto", true),
+            new ItemDaNota("Melhorias", "Tarefa feita", true),
+            new ItemDaNota("Melhorias", "Tarefa por fazer", false),
+            new ItemDaNota("Bugs", "Abre sem cursor", false),
+        }, itens);
+        Assert.Empty(GNotas.Itens("## Melhorias\n  \n## Bugs"));
+    }
+
+    /// <summary>
+    /// A nota é a do nome da pasta do projeto, sem diferença de maiúsculas, no caderno Projetos.
+    /// Nos testes, sem pasta no workspace, nunca chega ao GNotas do usuário.
+    /// </summary>
+    [Fact]
+    public void NotaDoProjetoPeloNome()
+    {
+        var pasta = Directory.CreateTempSubdirectory("gterm-gnotas-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(pasta, GNotas.Caderno));
+            var arquivo = Path.Combine(pasta, GNotas.Caderno, "Windock.md");
+            File.WriteAllText(arquivo, "## Melhorias\n- Um\n- ✅ Dois\n");
+
+            Assert.Equal(arquivo, GNotas.NotaDo(pasta, "WinDock"));
+            Assert.Null(GNotas.NotaDo(pasta, "GTerm"));
+            Assert.Null(GNotas.NotaDo(null, "WinDock"));
+            Assert.Null(GNotas.NotaDo(Path.Combine(pasta, "nao-existe"), "WinDock"));
+
+            var nota = GNotas.Ler(arquivo)!;
+            Assert.Equal(1, nota.Pendentes);
+            Assert.Equal(1, nota.Feitos);
+
+            Assert.Equal(pasta, GNotas.Pasta(pasta));
+            Assert.Null(GNotas.Pasta(""));
+            Assert.StartsWith(Path.GetTempPath(), new Workspace().PastaDoGNotas, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(pasta, true);
+        }
     }
 
     [Fact]
@@ -1255,18 +1324,32 @@ public class JanelaTests : IDisposable
             Assert.False(financeiro.TemSessao);
             Assert.False(financeiro.TemAbertura);
 
-            // a pesquisa começa na altura do cartão do terminal; os outros jeitos de abrir são
-            // pílulas, como Projetos e Sessões em cima, e a escolhida é a acesa. Todas da mesma altura,
-            // inclusive a versão no rodapé
+            // a pesquisa, compacta (28), fica no meio da faixa da altura do cabeçalho do cartão do
+            // terminal (32), ao lado; os botões redondos ao lado dela têm a altura dela. Os outros
+            // jeitos de abrir são pílulas de 24, como Projetos e Sessões em cima, e a escolhida é a acesa
             double Topo(Visual v) => v.TranslatePoint(default, janela)!.Value.Y;
-            Assert.Equal(Topo(janela.FindControl<Border>("Cartao")!), Topo(janela.FindControl<TextBox>("CaixaDoFiltro")!));
+            double Esquerda(Visual v) => v.TranslatePoint(default, janela)!.Value.X;
+            var linhaDaPesquisa = janela.FindControl<Grid>("LinhaDaPesquisa")!;
+            var caixa = janela.FindControl<TextBox>("CaixaDoFiltro")!;
+            Assert.Equal(Topo(janela.FindControl<Border>("Cartao")!), Topo(linhaDaPesquisa));
+            Assert.Equal(32, linhaDaPesquisa.Bounds.Height);
+            Assert.Equal(28, caixa.Bounds.Height);
+            Assert.Equal(Topo(linhaDaPesquisa) + 2, Topo(caixa));
             List<Button> Pilulas() => janela.GetVisualDescendants().OfType<Button>()
                 .Where(b => b.IsEffectivelyVisible && (b.Classes.Contains("pilula") || b.Classes.Contains("aba")))
                 .ToList();
-            Assert.Equal(9, Pilulas().Count(b => b.Classes.Contains("pilula"))); // com a do Consumo, no canto
-            Assert.DoesNotContain("apagada", Pilulas().Single(b => b.Command == vm.VerProjetosCommand).Classes);
-            Assert.Contains("apagada", Pilulas().Single(b => b.Command == vm.VerSessoesCommand).Classes);
-            Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
+            Assert.Equal(8, Pilulas().Count(b => b.Classes.Contains("pilula"))); // com a do Consumo, no canto
+            var projetos = Pilulas().Single(b => b.Command == vm.VerProjetosCommand);
+            var sessoes = Pilulas().Single(b => b.Command == vm.VerSessoesCommand);
+            Assert.DoesNotContain("apagada", projetos.Classes);
+            Assert.Contains("apagada", sessoes.Classes);
+            Assert.All(Pilulas().Where(b => b.Parent != linhaDaPesquisa), b => Assert.Equal(24, b.Bounds.Height));
+            Assert.All(Pilulas().Where(b => b.Parent == linhaDaPesquisa), b => Assert.Equal(28, b.Bounds.Height));
+
+            // Projetos e Sessões do mesmo tamanho, de ponta a ponta da pesquisa embaixo
+            Assert.Equal(projetos.Bounds.Size, sessoes.Bounds.Size);
+            Assert.Equal(Esquerda(linhaDaPesquisa), Esquerda(projetos));
+            Assert.Equal(Esquerda(linhaDaPesquisa) + linhaDaPesquisa.Bounds.Width, Esquerda(sessoes) + sessoes.Bounds.Width, 1);
             Foto(janela, "arvore.png");
 
             // o recente mostra quando e o pedido; a base aberta mostra os projetos dela
@@ -1316,15 +1399,15 @@ public class JanelaTests : IDisposable
             Assert.Single(janela.GetVisualDescendants().OfType<TerminalControl>());
 
             // a primeira aba não muda a altura da faixa: a pesquisa fica onde estava. A barra
-            // embaixo das abas tem a altura da pesquisa, e os botões dela são as mesmas pílulas
+            // embaixo das abas tem a altura da faixa da pesquisa, e os botões dela são as mesmas pílulas
             Dispatcher.UIThread.RunJobs();
             var barra = janela.FindControl<Border>("BarraDaAba")!;
-            var filtro = janela.FindControl<TextBox>("CaixaDoFiltro")!;
+            var filtro = janela.FindControl<Grid>("LinhaDaPesquisa")!;
             Assert.Equal(Topo(barra), Topo(filtro));
             Assert.Equal(filtro.Bounds.Height, barra.Bounds.Height);
             Assert.All(barra.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible),
                 b => Assert.Contains("pilula", b.Classes));
-            Assert.All(Pilulas(), b => Assert.Equal(24, b.Bounds.Height));
+            Assert.All(Pilulas().Where(b => b.Parent != filtro), b => Assert.Equal(24, b.Bounds.Height));
 
             // o Claude sobe direto, sem shell, com o que o cia escolheria (sem sessão: a skill),
             // e o projeto vai para a frente dos recentes do cia
@@ -2069,13 +2152,31 @@ public class JanelaTests : IDisposable
         Assert.Equal("#DB4C9B", Assert.Single(WorkspaceStore.Load().Projetos).Cor);
         Assert.Equal("#DB4C9B", Projeto(new MainViewModel(new Dialogos()), "Notas").CorHex);
 
+        // as configurações, como as do GNotas: cada seção montada, com as contas na do Claude Code
+        // e a versão e as notas dela no Sobre
         var padrao = ClaudeHooks.PastaDaConta(null);
-        var tela = new PreferenciasWindow(new Preferencias("", 13, ""), new[] { padrao, conta });
+        var tela = new ConfiguracoesWindow(new Preferencias("", 13, ""), new[] { padrao, conta }, vm);
         try
         {
             tela.Show();
             Dispatcher.UIThread.RunJobs();
-            Foto(tela, "preferencias.png");
+            Assert.Equal("Configurações", tela.Title);
+            Assert.Equal("Terminal", tela.Secao);
+            foreach (var secao in ConfiguracoesWindow.Secoes)
+            {
+                tela.Secao = secao;
+                Dispatcher.UIThread.RunJobs();
+                var textos = tela.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
+                Assert.Contains(secao, textos);
+                if (secao == "Claude Code") Assert.Contains(conta, textos);
+                if (secao == "Sobre")
+                {
+                    Assert.Contains(vm.Versao, textos);
+                    Assert.Contains("Procurar atualização", textos);
+                    Assert.Contains(textos, t => t?.StartsWith("1.0.0.", StringComparison.Ordinal) == true); // as notas da versão
+                }
+                Foto(tela, "config-" + secao.ToLowerInvariant().Replace(' ', '-') + ".png");
+            }
         }
         finally
         {
@@ -3057,7 +3158,7 @@ public class JanelaTests : IDisposable
             // na largura da barra da aba, sem mexer na altura dela nem no terminal embaixo
             var faixa = janela.FindControl<Border>("BarraDaAba")!;
             Assert.True(barra.Bounds.Width > 500, "largura " + barra.Bounds.Width);
-            Assert.Equal(janela.FindControl<TextBox>("CaixaDoFiltro")!.Bounds.Height, faixa.Bounds.Height);
+            Assert.Equal(janela.FindControl<Grid>("LinhaDaPesquisa")!.Bounds.Height, faixa.Bounds.Height);
             Assert.Equal(4, barra.Bounds.Height);
             Foto(janela, "revisao-rodando.png");
 
@@ -3252,11 +3353,14 @@ public class JanelaTests : IDisposable
         Assert.Equal(new[] { "https://exemplo/1.0.0.18" }, paginas);
         Assert.Equal(3, dialogos.Perguntas);
 
-        // sem versão nova, nem pergunta nem convite: a release sumiu, ou já está nela
+        // sem versão nova, nem pergunta nem convite: a release sumiu, ou já está nela. A pílula do
+        // rodapé some, e o Sobre das configurações diz que está em dia
         vm.VersaoEmUso = "1.0.0.18";
         await vm.AtualizacaoCommand.ExecuteAsync(null);
         Assert.False(vm.TemAtualizacao);
-        Assert.Equal("GTerm 1.0.0.18  ✓", vm.Rodape);
+        Assert.Equal("", vm.Rodape);
+        Assert.False(vm.RodapeAVista);
+        Assert.Equal("Em dia: é a versão mais nova", vm.SituacaoDaVersao);
         Assert.Equal("Procurar atualização", vm.DicaDoRodape);
         Assert.Equal(3, dialogos.Perguntas);
 
@@ -3264,6 +3368,7 @@ public class JanelaTests : IDisposable
         vm.ProcurarRelease = () => throw new InvalidOperationException("sem rede nesta máquina");
         await vm.AtualizacaoCommand.ExecuteAsync(null);
         Assert.Equal("Não foi possível procurar: sem rede nesta máquina", vm.Rodape);
+        Assert.True(vm.RodapeAVista);
         Assert.Equal(vm.Rodape, vm.DicaDoRodape);
         Assert.True(vm.AtualizacaoCommand.CanExecute(null));
 
@@ -3271,8 +3376,45 @@ public class JanelaTests : IDisposable
         vm.VersaoEmUso = "";
         consultas = 0;
         await vm.AtualizacaoCommand.ExecuteAsync(null);
-        Assert.Equal("Build local, sem versão", vm.Rodape);
+        Assert.StartsWith("Build local", vm.SituacaoDaVersao);
         Assert.Equal(0, consultas);
+    }
+
+    /// <summary>
+    /// O botão do Sobre só procura: diz o que achou e, com versão nova, o convite aparece no pé
+    /// da árvore e o botão passa a ser o de atualizar. Nunca pergunta nada por conta própria.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task OSobreProcuraEDizOQueAchou()
+    {
+        Montar();
+        var dialogos = new Dialogos();
+        var vm = new MainViewModel(dialogos) { VersaoEmUso = "1.0.0.16" };
+        var release = ReleaseDe("1.0.0.16");
+        vm.ProcurarRelease = () => Task.FromResult<Release?>(release);
+
+        Assert.Equal("GTerm 1.0.0.16", vm.Versao);
+        Assert.False(vm.RodapeAVista);
+        Assert.Equal("Procurar atualização", vm.RotuloDeAtualizar);
+
+        await vm.ProcurarAtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal("Em dia: é a versão mais nova", vm.SituacaoDaVersao);
+        Assert.False(vm.RodapeAVista);
+
+        release = ReleaseDe("1.0.0.17");
+        await vm.ProcurarAtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal("Versão nova: 1.0.0.17", vm.SituacaoDaVersao);
+        Assert.True(vm.RodapeAVista);
+        Assert.Equal("Atualizar para 1.0.0.17", vm.Rodape);
+        Assert.Equal("Atualizar para 1.0.0.17", vm.RotuloDeAtualizar);
+        Assert.Equal(0, dialogos.Perguntas);
+
+        vm.ProcurarRelease = () => throw new InvalidOperationException("sem rede");
+        await vm.ProcurarAtualizacaoCommand.ExecuteAsync(null);
+        Assert.Equal("Não foi possível procurar: sem rede", vm.SituacaoDaVersao);
+
+        vm.VersaoEmUso = "";
+        Assert.Equal("GTerm (build local)", vm.Versao);
     }
 
     /// <summary>
@@ -3295,9 +3437,9 @@ public class JanelaTests : IDisposable
             await financeiro.IniciarCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();
 
-            // a área do app vai até a barra, na altura da faixa: a pesquisa começa logo embaixo
+            // a área do app vai até a barra, na altura da faixa: a faixa da pesquisa começa logo embaixo
             Assert.True(janela.ExtendClientAreaToDecorationsHint);
-            var filtro = janela.FindControl<TextBox>("CaixaDoFiltro")!;
+            var filtro = janela.FindControl<Grid>("LinhaDaPesquisa")!;
             Assert.Equal(janela.ExtendClientAreaTitleBarHeightHint, filtro.TranslatePoint(default, janela)!.Value.Y);
 
             // o fundo dela, de ponta a ponta, é barra de título para o Windows
@@ -3533,8 +3675,9 @@ public class JanelaTests : IDisposable
     }
 
     /// <summary>
-    /// O botão do rodapé é pílula como as outras, com ícone e cor: azul com a versão em uso e
-    /// verde (instalar) quando há uma nova. Procurando, não aceita clique, mas continua na cor.
+    /// O rodapé da árvore é o do GNotas: só a engrenagem das configurações, à esquerda e sem fundo;
+    /// a versão fica no Sobre delas. Com versão nova, ao lado dela, a pílula verde do convite.
+    /// Procurando, ela não aceita clique, mas continua na cor.
     /// </summary>
     [AvaloniaFact]
     public void BotaoDoRodapeNaJanela()
@@ -3546,24 +3689,30 @@ public class JanelaTests : IDisposable
         {
             janela.Show();
             Dispatcher.UIThread.RunJobs();
+            var engrenagem = janela.FindControl<Button>("BotaoDasConfiguracoes")!;
             var botao = janela.FindControl<Button>("BotaoDoRodape")!;
-            var fundo = botao.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First();
             string Texto() => Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(botao).OfType<TextBlock>().Last().Text!;
             Avalonia.Media.Color Cor(Avalonia.Media.IBrush? b) => ((Avalonia.Media.ISolidColorBrush)b!).Color;
             static Avalonia.Media.Color Hex(string h) => Avalonia.Media.Color.Parse(h);
 
-            Assert.Equal(24, botao.Bounds.Height);
-            Assert.Contains("pilula", botao.Classes);
-            Assert.Equal(Hex("#242F7BE8"), Cor(fundo.Background));
-            Assert.Equal(Glifos.Atualizar, Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(botao).OfType<TextBlock>().First().Text);
-            Assert.StartsWith("GTerm", Texto());
+            // sozinha, no canto esquerdo da árvore, sem a pílula da versão
+            Assert.True(engrenagem.IsEffectivelyVisible);
+            Assert.Equal(Glifos.Ajustes, Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(engrenagem).OfType<TextBlock>().Single().Text);
+            Assert.True(engrenagem.TranslatePoint(default, janela)!.Value.X < 12);
+            Assert.Equal(Avalonia.Media.Colors.Transparent, Cor(engrenagem.Background));
+            Assert.False(botao.IsVisible);
             Foto(janela, "rodape.png");
 
             vm.AtualizacaoTag = "1.0.0.18";
             Dispatcher.UIThread.RunJobs();
+            var fundo = botao.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First();
+            Assert.True(botao.IsEffectivelyVisible);
+            Assert.Contains("pilula", botao.Classes);
             Assert.Equal(Hex("#241F9D55"), Cor(fundo.Background));
+            Assert.Equal(Glifos.Atualizar, Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(botao).OfType<TextBlock>().First().Text);
             Assert.Equal("Atualizar para 1.0.0.18", Texto());
             Assert.Equal(24, botao.Bounds.Height);
+            Assert.True(botao.TranslatePoint(default, janela)!.Value.X > engrenagem.TranslatePoint(default, janela)!.Value.X);
             Foto(janela, "rodape-versao-nova.png");
 
             // procurando: desligado, mas na cor e com o andamento legível
@@ -3571,6 +3720,80 @@ public class JanelaTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(Hex("#241F9D55"), Cor(fundo.Background));
             Assert.Equal(1, botao.Opacity);
+        }
+        finally
+        {
+            vm.EncerrarTudo();
+            janela.Close();
+        }
+    }
+
+    /// <summary>
+    /// A nota do projeto no caderno Projetos do GNotas: o quadro do projeto parado diz quantos
+    /// itens faltam e qual é o primeiro, e a pílula Notas (no quadro e no cabeçalho da aba) abre o
+    /// Claude na /gnotas. Projeto sem nota não tem a pílula. De quebra, a linha da árvore: a
+    /// estrela e o ▶ são bolinhas do mesmo tamanho, e uma não encosta na outra.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task NotasDoGNotasNoQuadroENaAba()
+    {
+        var ws = Montar();
+        var gnotas = Path.Combine(_raiz, "gnotas");
+        Directory.CreateDirectory(Path.Combine(gnotas, GNotas.Caderno));
+        File.WriteAllText(Path.Combine(gnotas, GNotas.Caderno, "financeiro.md"),
+            "## Melhorias\r\n- Exportar o razão;\r\n  - ![](../anexos/ev1.png)\r\n- ✅ Filtro por conta;\r\n## Bugs\r\n- Total errado\r\n");
+        ws.PastaDoGNotas = gnotas;
+        WorkspaceStore.Save(ws);
+
+        var janela = new MainWindow();
+        var vm = (MainViewModel)janela.DataContext!;
+        try
+        {
+            janela.Show();
+            Dispatcher.UIThread.RunJobs();
+            var financeiro = Projeto(vm, "Financeiro");
+            Assert.Same(financeiro, vm.Selecionado);
+            Assert.True(await Esperar(() => financeiro.TemNota && financeiro.GitLido));
+
+            var quadro = Quadro(janela);
+            Assert.Contains("2 a fazer no GNotas", quadro);
+            Assert.Contains("Exportar o razão", quadro);
+            Assert.Contains("1 feito", quadro);
+            bool TemBotaoDeNotas(ProjetoViewModel p) =>
+                janela.GetVisualDescendants().OfType<Button>().Any(b => b.IsEffectivelyVisible && b.Command == p.NotasCommand);
+            Assert.True(TemBotaoDeNotas(financeiro));
+            Assert.Contains("2 a fazer", financeiro.DicaDasNotas);
+            Foto(janela, "quadro-notas.png");
+
+            // a linha escolhida mostra a estrela e o ▶: duas bolinhas de 22, com respiro entre elas
+            var linha = janela.GetVisualDescendants().OfType<Border>()
+                .First(b => b.Classes.Contains("linha") && b.DataContext is LinhaDoProjeto l && l.Projeto == financeiro);
+            var estrela = linha.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("estrela"));
+            var play = linha.GetVisualDescendants().OfType<Button>().Single(b => b.Command == financeiro.IniciarCommand);
+            Assert.Equal(new Size(22, 22), estrela.Bounds.Size);
+            Assert.Equal(new Size(22, 22), play.Bounds.Size);
+            double X(Visual v) => v.TranslatePoint(default, janela)!.Value.X;
+            Assert.True(X(play) - (X(estrela) + estrela.Bounds.Width) >= 3, "a estrela encosta no ▶");
+            Assert.True(linha.Bounds.Width - (X(play) - X(linha) + play.Bounds.Width) >= 4, "o ▶ encosta na beira da linha");
+
+            // sem nota no GNotas, sem a pílula
+            var notas = Projeto(vm, "Notas");
+            vm.Selecionado = notas;
+            Assert.True(await Esperar(() => notas.GitLido));
+            Assert.False(notas.TemNota);
+            Assert.False(TemBotaoDeNotas(notas));
+
+            // a pílula abre o Claude na /gnotas, e o cia grava o modo no recente
+            vm.Selecionado = financeiro;
+            await financeiro.NotasCommand.ExecuteAsync(null);
+            var sessao = financeiro.Sessao!;
+            sessao.Medir(160, 50);
+            Assert.True(await Esperar(() => Tela(sessao).Contains("/gnotas")), Tela(sessao));
+            Assert.Equal("gnotas", Cia.LerEstado(Estado)!.Recentes[0].Modo);
+
+            // com a aba à frente, a mesma pílula no cabeçalho do terminal
+            Assert.True(await Esperar(() => janela.FindControl<Button>("NotasDaAba")!.IsEffectivelyVisible));
+            Foto(janela, "aba-notas.png");
         }
         finally
         {

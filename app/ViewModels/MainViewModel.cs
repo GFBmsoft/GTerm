@@ -439,8 +439,40 @@ public sealed partial class ProjetoViewModel : ObservableObject
     [RelayCommand] private Task SemSkill() => _main.AbrirAsync(this, "-Limpo");
     [RelayCommand] private Task PullRequest() => _main.AbrirAsync(this, "-Pr");
     [RelayCommand] private Task Pedido() => _main.AbrirPedidoAsync(this);
+    [RelayCommand] private Task Notas() => _main.AbrirAsync(this, Cia.ModoNotas);
     [RelayCommand] private void Favoritar() => _main.AlternarFavorito(this);
     [RelayCommand] private Task Encerrar() => _main.EncerrarAsync(this);
+
+    // ------------------------------------------------------------ o que falta, no GNotas
+
+    /// <summary>
+    /// A nota do projeto no caderno Projetos do GNotas; null sem ela. Relida a cada escolha do
+    /// projeto parado e quando a aba dele vem para a frente: é o que mostra o botão Notas.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TemNota), nameof(TextoDaNota), nameof(DetalheDaNota), nameof(FeitosDaNota),
+        nameof(TemFeitosNaNota), nameof(DicaDasNotas))]
+    private NotaDoProjeto? _nota;
+
+    public bool TemNota => Nota is not null;
+
+    public string TextoDaNota => Nota?.Pendentes switch
+    {
+        null => "",
+        0 => "nada a fazer no GNotas",
+        1 => "1 a fazer no GNotas",
+        var n => $"{n} a fazer no GNotas",
+    };
+
+    /// <summary>O primeiro que falta, como está na nota.</summary>
+    public string DetalheDaNota => Nota?.Itens.FirstOrDefault(i => !i.Feito)?.Texto ?? "";
+
+    public bool TemFeitosNaNota => Nota is { Feitos: > 0 };
+    public string FeitosDaNota => Nota?.Feitos == 1 ? "1 feito" : $"{Nota?.Feitos} feitos";
+
+    public string DicaDasNotas =>
+        $"Sessão nova na /gnotas: o Claude lê o que falta na nota {Nome} do caderno {GNotas.Caderno} do GNotas, " +
+        $"faz, e marca {GNotas.Feito} no que ficou pronto" + (Nota is not null ? $" ({TextoDaNota.Replace(" no GNotas", "")})" : "");
 
     /// <summary>
     /// O /compact, quando o usuário pede: abrir não compacta mais sozinho. Só com o Claude
@@ -584,7 +616,6 @@ public sealed partial class MainViewModel : ObservableObject
         _dialogos = dialogos;
         _workspace = WorkspaceStore.Load();
         Atualizador.LimparAntigo();
-        _rodape = RodapePadrao;
         _releitura = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _releitura.Tick += (_, _) => Reler();
         _releituraDasSessoes = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
@@ -661,12 +692,23 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var git = Task.Run(() => Cia.Git(p.Pasta));
         p.TemClaudeMd = File.Exists(Path.Combine(p.Pasta, "CLAUDE.md"));
+        await LerNotaAsync(p);
         await LerSessaoAsync(p);
         p.Git = await git;
 
         var contaDasRevisoes = ClaudeHooks.PastaDaConta(_workspace.ContaDasSessoes);
         p.MostrarRevisao(await Task.Run(() => _revisoes.UltimaDoProjeto(contaDasRevisoes, p.Pasta)));
     }
+
+    /// <summary>A pasta das notas do GNotas; null quando ele não está nesta máquina.</summary>
+    public string? PastaDasNotas => GNotas.Pasta(_workspace.PastaDoGNotas);
+
+    /// <summary>O arquivo da nota do projeto no caderno Projetos do GNotas; null sem ela.</summary>
+    internal string? ArquivoDaNota(ProjetoViewModel p) => GNotas.NotaDo(PastaDasNotas, p.Nome);
+
+    /// <summary>O que falta no projeto, pela nota dele no GNotas, lido fora da tela.</summary>
+    internal async Task LerNotaAsync(ProjetoViewModel p) =>
+        p.Nota = await Task.Run(() => ArquivoDaNota(p) is { } arquivo ? GNotas.Ler(arquivo) : null);
 
     /// <summary>A sessão que o abrir retomaria, com o contexto medido, lida fora da tela.</summary>
     internal async Task LerSessaoAsync(ProjetoViewModel p) =>
@@ -1262,6 +1304,8 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(PainelVisivel));
         OnPropertyChanged(nameof(AuxiliarVisivel));
         OnPropertyChanged(nameof(PodeAuxiliar));
+        // o botão Notas do cabeçalho só aparece com nota no GNotas, e ela muda fora daqui
+        if (AbaAtiva is { } aba) _ = LerNotaAsync(aba);
         OnPropertyChanged(nameof(AbaAtiva));
         OnPropertyChanged(nameof(TemAbaAtiva));
         AcompanharConsumo();
@@ -1594,6 +1638,7 @@ public sealed partial class MainViewModel : ObservableObject
         "-Novo" => " numa sessão nova",
         "-Limpo" => " sem skill",
         "-Pr" => " no pull request",
+        Cia.ModoNotas => " no que falta no GNotas",
         _ when modo.StartsWith(Cia.ModoConversa, StringComparison.Ordinal) => " na conversa escolhida",
         _ => " no pedido " + modo,
     };
@@ -1676,15 +1721,21 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Tag da release mais nova que a versão em uso; vazia quando não há.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TemAtualizacao), nameof(DicaDoRodape))]
+    [NotifyPropertyChangedFor(nameof(TemAtualizacao), nameof(DicaDoRodape), nameof(RodapeAVista), nameof(RotuloDeAtualizar))]
     private string _atualizacaoTag = "";
 
     public bool TemAtualizacao => AtualizacaoTag.Length > 0;
 
-    /// <summary>A linha do pé da árvore: a versão, o convite para atualizar ou o andamento.</summary>
+    /// <summary>
+    /// A pílula ao lado da engrenagem, no pé da árvore: o convite para a versão nova, o andamento
+    /// dela ou o erro. Vazia, a pílula some: a versão em uso fica no Sobre das configurações, como
+    /// no GNotas.
+    /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DicaDoRodape))]
-    private string _rodape;
+    [NotifyPropertyChangedFor(nameof(DicaDoRodape), nameof(RodapeAVista))]
+    private string _rodape = "";
+
+    public bool RodapeAVista => TemAtualizacao || Rodape.Length > 0;
 
     /// <summary>A mensagem de erro não cabe na largura da árvore: inteira, fica aqui.</summary>
     public string DicaDoRodape =>
@@ -1692,11 +1743,45 @@ public sealed partial class MainViewModel : ObservableObject
         : TemAtualizacao ? $"Baixar e instalar a versão {AtualizacaoTag}. O GTerm pergunta antes, porque reiniciar encerra os terminais"
         : "Procurar atualização";
 
-    private string RodapePadrao => VersaoEmUso is { Length: > 0 } versao ? "GTerm " + versao : "GTerm (build local)";
+    /// <summary>"GTerm 1.0.0.34", ou "GTerm (build local)": o que o Sobre das configurações mostra.</summary>
+    public string Versao => VersaoEmUso is { Length: > 0 } versao ? "GTerm " + versao : "GTerm (build local)";
+
+    /// <summary>O que deu a última procura pedida no Sobre: procurando, em dia, versão nova ou o erro.</summary>
+    [ObservableProperty]
+    private string _situacaoDaVersao = "";
+
+    public string RotuloDeAtualizar => TemAtualizacao ? "Atualizar para " + AtualizacaoTag : "Procurar atualização";
 
     partial void OnAtualizacaoTagChanged(string value)
     {
         if (value.Length > 0) Rodape = $"Atualizar para {value}";
+        else if (Rodape.StartsWith("Atualizar para", StringComparison.Ordinal)) Rodape = "";
+    }
+
+    /// <summary>
+    /// O botão do Sobre, sem versão nova à vista: só procura e diz o que achou. Achando, aparece o
+    /// convite no pé da árvore, e o mesmo botão passa a ser o de atualizar (que é o do rodapé).
+    /// </summary>
+    [RelayCommand]
+    private async Task ProcurarAtualizacao()
+    {
+        if (VersaoEmUso.Length == 0)
+        {
+            SituacaoDaVersao = "Build local, sem versão: não há com o que comparar";
+            return;
+        }
+
+        SituacaoDaVersao = "Procurando atualização…";
+        try
+        {
+            await VerificarAtualizacaoAsync(forcar: true);
+        }
+        catch (Exception e)
+        {
+            SituacaoDaVersao = "Não foi possível procurar: " + e.Message;
+            return;
+        }
+        SituacaoDaVersao = TemAtualizacao ? $"Versão nova: {AtualizacaoTag}" : "Em dia: é a versão mais nova";
     }
 
     /// <summary>
@@ -1747,7 +1832,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (VersaoEmUso.Length == 0)
         {
-            Rodape = "Build local, sem versão";
+            SituacaoDaVersao = "Build local, sem versão: não há com o que comparar";
             return;
         }
 
@@ -1759,13 +1844,15 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception e)
         {
             Rodape = "Não foi possível procurar: " + e.Message;
+            SituacaoDaVersao = Rodape;
             return;
         }
 
-        // o rodapé tem a largura da árvore: frase inteira ali sai cortada
+        // a versão nova sumiu (ou já é esta): o convite sai do rodapé, e o Sobre diz que está em dia
         if (!TemAtualizacao)
         {
-            Rodape = RodapePadrao + "  ✓";
+            Rodape = "";
+            SituacaoDaVersao = "Em dia: é a versão mais nova";
             return;
         }
 

@@ -350,6 +350,8 @@ public partial class MainWindow : Window, IDialogService
                     Comando("Pedido do Mantis…", Glifos.Pedido, "amarelo", p.PedidoCommand);
                     Comando("Pull request", Glifos.PullRequest, "roxo", p.PullRequestCommand);
                 }
+                if (_vm.ArquivoDaNota(p) is not null)
+                    Comando("O que falta no GNotas", Glifos.Notas, "amarelo", p.NotasCommand);
                 Comando("Sem skill", Glifos.SemSkill, "cinza", p.SemSkillCommand);
                 menu.Items.Add(new Separator());
                 Comando(p.RotuloDoFavorito, p.GlifoDoFavorito, "amarelo", p.FavoritarCommand);
@@ -472,7 +474,7 @@ public partial class MainWindow : Window, IDialogService
         await new PromptWindow(title, label).ShowDialog<string?>(this);
 
     public async Task<Preferencias?> PreferenciasAsync(Preferencias atuais, IReadOnlyList<string> contas) =>
-        await new PreferenciasWindow(atuais, contas).ShowDialog<Preferencias?>(this);
+        await new ConfiguracoesWindow(atuais, contas, DataContext as MainViewModel).ShowDialog<Preferencias?>(this);
 
     public async Task<GrupoEscolhido?> GrupoAsync(string titulo, string nome, string cor, string? paiId,
         IReadOnlyList<GrupoNaArvore>? pais) =>

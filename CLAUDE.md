@@ -46,7 +46,7 @@ Mesmo esquema do GRepos. O workflow `.github/workflows/build.yml` compila e test
 push na main (artefatos de 30 dias) e, num push de tag `1.0.0.N`, publica a Release com
 dois executáveis de arquivo único: `GTerm-<tag>.exe` (precisa do .NET 8 Desktop Runtime) e
 `GTerm-<tag>-standalone.exe`. A versão do executável vem da tag; build local não tem
-versão e mostra "build local" no rodapé. Os dois saem com `PublishReadyToRun`: sem ele o
+versão e mostra "build local" no Sobre das Configurações. Os dois saem com `PublishReadyToRun`: sem ele o
 app leva o dobro para abrir e para montar a árvore, compilando na hora.
 
 Para medir a abertura, publique **sem** versão (`-p:Version` ou `VersionPrefix`): um
@@ -55,12 +55,15 @@ executável com versão, ao abrir, aponta os hooks do Claude do usuário para el
 
 **Antes de criar a tag**, acrescente a versão no topo de `app/Assets/notas-da-versao.md`
 (`## 1.0.0.N — dd/mm/aaaa` e os itens), escrita para quem usa o app, não como assunto de
-commit. É o que aparece em Preferências → Notas da versão; `AtualizadorTests` falha se o
+commit. É o que aparece em Configurações → Sobre; `AtualizadorTests` falha se o
 arquivo sair do formato ou da ordem.
 
-**Atualização do app** (`Atualizador`): uma consulta por dia à release mais nova; o convite
-aparece no rodapé da árvore. O clique ali procura de novo e, com versão nova, já pergunta:
-um só. O Windows não deixa sobrescrever um .exe em execução, mas
+**Atualização do app** (`Atualizador`): uma consulta por dia à release mais nova. O pé da
+árvore é o do GNotas (pedido de 18/11/2026, nota do caderno Projetos): só a engrenagem das
+Configurações, à esquerda, e a versão em uso no Sobre delas, com o "Procurar atualização"
+(`ProcurarAtualizacao`, que só procura e diz o que achou). Com versão nova, aparece ao lado da
+engrenagem a pílula verde do convite (`RodapeAVista`), que mostra também o andamento e o erro.
+O clique nela procura de novo e, com versão nova, já pergunta: um só. O Windows não deixa sobrescrever um .exe em execução, mas
 deixa renomear: a troca é `atual → .old`, `novo → atual`, reabre, e o `.old` some na
 abertura seguinte. Só vale no arquivo único (`Assembly.GetEntryAssembly()?.Location` vazio);
 no `dist` de pasta o clique abre a página da release. Atualizar encerra todos os terminais,
@@ -148,7 +151,12 @@ e por isso confirma antes.
   `LinhaDoProjeto` (o mesmo projeto aparece em mais de um grupo; as linhas ficam num cache
   por grupo e pasta para a lista não perder a seleção). A estrela e o ▶ da linha só
   aparecem com o mouse em cima e na escolhida (escondidos, guardam o lugar): a estrela
-  favorita ou tira. Cheia, nos favoritos, fica sempre à vista. O filtro em cima vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
+  favorita ou tira. Cheia, nos favoritos, fica sempre à vista. As duas são bolinhas de 22, com
+  3 entre elas e 4 até a beira, e o ▶ vai 1 px para a direita (`TextBlock.play`): a estrela
+  tinha 20 × 22, e o fundo oval dela encostava no ▶ (pareciam um em cima do outro, 18/11/2026).
+  O filtro em cima é a pesquisa compacta do GIsam (28, letra 12, a lupa dentro), no meio de uma
+  faixa de 32 que começa na altura do cartão do terminal; os botões redondos ao lado dela
+  (conversa nova, só nas Sessões, e grupo novo) têm a altura dela. Ele vira o grupo Resultados. `Selecionado` é o projeto à vista; a linha marcada é a primeira dele.
   A lista não rola sozinha até ela (`AutoScrollToSelectedItem` desligado): o Avalonia agenda
   uma rolagem a cada vez que a linha muda de lugar, com o lugar daquele instante, e soltar
   um projeto num subgrupo levava a lista até o fim e de volta. Quem rola é a janela, uma
@@ -243,10 +251,12 @@ e por isso confirma antes.
 - **Botões** — uma medida só: pílula de 24 (`Button.pilula` com a classe da cor: fundo
   diluído, contorno e texto na cor de cada um, com ícone), no cabeçalho do cartão do terminal
   (lá, `quieta`), no projeto
-  parado, na conversa e em Projetos/Sessões/+ (a escolha que não está ativa fica `apagada`,
-  só com o ícone na cor, como as abas). O mesmo botão tem a mesma cor e o mesmo ícone em
+  parado, na conversa e em Projetos/Sessões (a escolha que não está ativa fica `apagada`,
+  só com o ícone na cor, como as abas). Projetos e Sessões dividem a largura da árvore em duas
+  pílulas iguais (`Grid.modos`), de ponta a ponta da pesquisa embaixo: com a largura do texto,
+  e o + ao lado nas Sessões, ficavam de tamanhos diferentes e desalinhadas. O mesmo botão tem a mesma cor e o mesmo ícone em
   qualquer lugar. O principal (retomar) é a pílula verde de 28 em negrito (`principal`); o
-  cabeçalho do cartão tem os 32 da pesquisa ao lado. Painel e Terminal, no canto, ficam
+  cabeçalho do cartão tem os 32 da faixa da pesquisa ao lado. Painel e Terminal, no canto, ficam
   `destacado` enquanto abertos. Na linha da árvore, o ▶ é a bolinha verde do Retomar e a
   estrela é só o símbolo (`simbolo`), sem pílula.
 - **Encerrar o Claude** — encerrar, ou abrir de novo de outro jeito, manda o `/exit` antes
@@ -254,8 +264,24 @@ e por isso confirma antes.
   digitado ou rodando, o comando, e o Enter depois de uma pausa). Não saindo em
   `MainViewModel.PrazoDaSaida`, o processo é encerrado à força. Fechar a janela não passa
   por isso: mata direto.
+- **Configurações** — a engrenagem do pé da árvore abre a `ConfiguracoesWindow` (`Dialogs.cs`),
+  no padrão das do GNotas (a EV05 dele): as seções numa lista à esquerda (Terminal, Avisos,
+  Claude Code, GNotas, Sobre) e a escolhida num cartão. O Salvar continua: os campos são
+  criados todos ao abrir, e valem mesmo sem a seção ter sido vista. O Sobre tem a versão, o
+  procurar/atualizar e as notas da versão (não há mais a janela solta das notas). Atualizar
+  dali fecha as Configurações antes: a pergunta é da janela principal.
+- **GNotas** — o caderno Projetos do GNotas (`D:\Projetos\Private\GNotas`) é onde o usuário
+  junta o que falta em cada programa (pedido de 18/11/2026): uma nota com o nome da pasta do
+  projeto (`Projetos\GTerm.md`), com `## Melhorias` e `## Bugs`, um item por linha `- ` na
+  margem, e as imagens na galeria do GNotas (`anexos`), não mais numa pasta `EVs`. Feito, o
+  item ganha `✅` no começo e as imagens dele saem da galeria. `Services/GNotas.cs` acha a pasta
+  (`PastaDasNotas` do `%LOCALAPPDATA%\GNotas\config.json`, ou `Workspace.PastaDoGNotas`; nos
+  testes nunca a do usuário) e conta os itens. O quadro do projeto parado mostra quantos faltam
+  e o primeiro; a pílula Notas (amarela, no quadro, no cabeçalho da aba e no menu da linha) só
+  aparece com nota e abre o Claude na skill `/gnotas` (`Cia.ModoNotas`, `~\.claude\skills\gnotas`),
+  que faz, marca o ✅ e limpa a galeria. O GTerm só lê a nota.
 - **Claude Code** — `ClaudeHooks` instala hooks no `settings.json` de cada conta (botão em
-  Preferências); o hook chama o próprio `GTerm.exe --estado <nome>`, que grava o nome no
+  Configurações → Claude Code); o hook chama o próprio `GTerm.exe --estado <nome>`, que grava o nome no
   arquivo apontado por `GTERM_ESTADO` (um por terminal) e sai sem abrir janela. A sessão lê
   o arquivo a cada meio segundo e, enquanto o Claude está aberto, é isso que manda no
   estado. Os projetos do cia usam todos a conta padrão (o `cim`, da outra conta, fica de
@@ -305,7 +331,7 @@ e por isso confirma antes.
   o caminho que o Claude quebrou em duas linhas é juntado pela vizinha; o que rodaria (.exe,
   script) só aparece marcado no Explorer. O terminal entrega a linha pelo evento
   `LinkRequested` e o app decide. Ctrl+=, Ctrl+-, Ctrl+0 e Ctrl+roda em cima do terminal
-  mudam a fonte (`MainViewModel.MudarFonte`): é o tamanho das Preferências, gravado, igual
+  mudam a fonte (`MainViewModel.MudarFonte`): é o tamanho das Configurações, gravado, igual
   em todos os terminais. Ctrl+Shift+- segue para o terminal (o Ctrl+_ do Claude).
 - **ViewModels** — CommunityToolkit.Mvvm. `MainViewModel` tem os projetos, a árvore, a
   seleção e as sessões abertas; `TerminalSessao` é o shell de um projeto, criado quando o
@@ -326,7 +352,7 @@ e por isso confirma antes.
   Claude e precisa sair em ~100 ms. Nada de inicialização antes desse `if`.
 - Os hooks apontam para o caminho do executável que os instalou. Uma versão publicada
   corrige isso sozinha ao abrir (`MainViewModel.CorrigirHooks`); build local não, para não
-  tomar os hooks do GTerm instalado, e mostra "Corrigir" em Preferências.
+  tomar os hooks do GTerm instalado, e mostra "Corrigir" em Configurações → Claude Code.
 - O cursor é sempre a barra (`CaretStyle="Bar"`; sem o foco, parada e esmaecida). O
   Claude, por padrão, esconde o cursor do terminal e desenha um bloco invertido dele, que
   nada aqui alcança: por isso `Arranque.DoClaude` sobe com `CLAUDE_CODE_NATIVE_CURSOR=1`,
@@ -376,7 +402,7 @@ e por isso confirma antes.
   nunca Foreground/Background/BorderBrush fixos no botão. Tamanho `pilula` (24, a medida do
   GTerm) ou `pequena` (= `tiny`); só ícone, `redonda`; botão sem classe já é a pílula cinza;
   `primary` = azul em negrito. Desligado fica cinza, e o estilo vem depois das cores (senão
-  a cor vence); o Code review rodando (`revisando`) e a versão do rodapé ficam legíveis de
+  a cor vence); o Code review rodando (`revisando`) e o convite do rodapé ficam legíveis de
   propósito. `quieta` (só no cabeçalho do cartão do terminal, e só no GTerm) não troca a cor
   nem o ícone da ação: esconde o fundo e o contorno até o mouse chegar. **Glifo sai de `Controls\Glifos`** (no XAML `{x:Static c:Glifos.Nome}`), nunca
   escrito direto; os da Nerd Font (tipo do projeto, git do quadro, classe `nerd`) são de
