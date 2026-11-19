@@ -510,7 +510,7 @@
                        A bolinha verde do Retomar, como na barra da aba -->
                   <Button Grid.Column="5" Classes="redonda pequena verde acao" Margin="0,0,4,0"
                           Command="{Binding Projeto.IniciarCommand}" IsVisible="{Binding Projeto.Parado}"
-                          ToolTip.Tip="Abrir o Claude neste projeto">
+                          ToolTip.Tip="Abrir o Claude neste projeto: na /gnotas, se a nota dele no GNotas tiver o que fazer">
                     <TextBlock Classes="glifo play" Text="{x:Static c:Glifos.Retomar}" />
                   </Button>
 
@@ -873,7 +873,8 @@
                 </StackPanel>
 
                 <!-- o que falta no projeto, pela nota dele no caderno Projetos do GNotas: a conta e
-                     o primeiro da lista. O botão Notas, embaixo, manda o Claude fazer -->
+                     o primeiro da lista. Com o que fazer, o botão de abrir manda o Claude fazer; com
+                     tudo feito, a pílula Notas embaixo -->
                 <StackPanel Spacing="1" IsVisible="{Binding Selecionado.TemNota}">
                   <Grid ColumnDefinitions="22,Auto,*">
                     <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Notas}" FontSize="11" Foreground="{DynamicResource Yellow}" />
@@ -939,7 +940,7 @@
                 </StackPanel>
               </Button>
               <Button Classes="pilula amarelo" Command="{Binding Selecionado.NotasCommand}"
-                      IsVisible="{Binding Selecionado.TemNota}" ToolTip.Tip="{Binding Selecionado.DicaDasNotas}">
+                      IsVisible="{Binding Selecionado.NotasAParte}" ToolTip.Tip="{Binding Selecionado.DicaDasNotas}">
                 <StackPanel Classes="comIcone">
                   <TextBlock Classes="glifo" Text="{x:Static c:Glifos.Notas}" />
                   <TextBlock Text="Notas" />

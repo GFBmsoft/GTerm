@@ -3730,9 +3730,10 @@ public class JanelaTests : IDisposable
 
     /// <summary>
     /// A nota do projeto no caderno Projetos do GNotas: o quadro do projeto parado diz quantos
-    /// itens faltam e qual é o primeiro, e a pílula Notas (no quadro e no cabeçalho da aba) abre o
-    /// Claude na /gnotas. Projeto sem nota não tem a pílula. De quebra, a linha da árvore: a
-    /// estrela e o ▶ são bolinhas do mesmo tamanho, e uma não encosta na outra.
+    /// itens faltam e qual é o primeiro. Com o que fazer, o ▶ abre o Claude na /gnotas, antes da
+    /// regra do cia, e a sessão de hoje fica no Continuar; com tudo feito, abre como o cia, e a
+    /// pílula Notas fica à parte. Projeto sem nota não tem a pílula. De quebra, a linha da árvore:
+    /// a estrela e o ▶ são bolinhas do mesmo tamanho, e uma não encosta na outra.
     /// </summary>
     [AvaloniaFact]
     public async Task NotasDoGNotasNoQuadroENaAba()
@@ -3742,6 +3743,7 @@ public class JanelaTests : IDisposable
         Directory.CreateDirectory(Path.Combine(gnotas, GNotas.Caderno));
         File.WriteAllText(Path.Combine(gnotas, GNotas.Caderno, "financeiro.md"),
             "## Melhorias\r\n- Exportar o razão;\r\n  - ![](../anexos/ev1.png)\r\n- ✅ Filtro por conta;\r\n## Bugs\r\n- Total errado\r\n");
+        File.WriteAllText(Path.Combine(gnotas, GNotas.Caderno, "GTerm.md"), "## Melhorias\r\n- ✅ Abas na barra;\r\n## Bugs\r\n");
         ws.PastaDoGNotas = gnotas;
         WorkspaceStore.Save(ws);
 
@@ -3761,8 +3763,24 @@ public class JanelaTests : IDisposable
             Assert.Contains("1 feito", quadro);
             bool TemBotaoDeNotas(ProjetoViewModel p) =>
                 janela.GetVisualDescendants().OfType<Button>().Any(b => b.IsEffectivelyVisible && b.Command == p.NotasCommand);
-            Assert.True(TemBotaoDeNotas(financeiro));
             Assert.Contains("2 a fazer", financeiro.DicaDasNotas);
+
+            // com o que fazer, o botão de abrir é o das Notas, e a pílula Notas não se repete ao lado
+            // dele. A sessão de hoje, que o cia retomaria, fica no Continuar
+            Assert.True(financeiro.AbreNasNotas);
+            Assert.Equal("Abrir nas Notas", financeiro.RotuloDeAbrir);
+            Assert.Contains("Abrir nas Notas", janela.GetVisualDescendants().OfType<TextBlock>()
+                .Where(t => t.IsEffectivelyVisible).Select(t => t.Text));
+            Assert.False(TemBotaoDeNotas(financeiro));
+            Assert.Equal("2 a fazer no GNotas: abre na /gnotas.", financeiro.TextoDaSessao);
+            Assert.True(await Esperar(() => financeiro.SessaoLida));
+            var agora = DateTime.Now;
+            vm.Relogio = () => agora;
+            financeiro.UltimaSessao = new UltimaSessao("abc", agora, 40, "Razão por conta", 40_000);
+            Assert.True(financeiro.Retomavel);
+            Assert.True(financeiro.PodeContinuar);
+            Assert.EndsWith("A sessão de hoje fica no Continuar a última.", financeiro.TextoDaSessao);
+            Dispatcher.UIThread.RunJobs();
             Foto(janela, "quadro-notas.png");
 
             // a linha escolhida mostra a estrela e o ▶: duas bolinhas de 22, com respiro entre elas
@@ -3783,15 +3801,29 @@ public class JanelaTests : IDisposable
             Assert.False(notas.TemNota);
             Assert.False(TemBotaoDeNotas(notas));
 
-            // a pílula abre o Claude na /gnotas, e o cia grava o modo no recente
-            vm.Selecionado = financeiro;
-            await financeiro.NotasCommand.ExecuteAsync(null);
+            // com tudo feito, o ▶ abre como o cia (o /retomar, fora da BMSoft), e a pílula Notas
+            // fica ao lado
+            var gterm = Projeto(vm, "GTerm");
+            vm.Selecionado = gterm;
+            Assert.True(await Esperar(() => gterm.TemNota && gterm.GitLido));
+            Assert.False(gterm.AbreNasNotas);
+            Assert.True(gterm.NotasAParte);
+            Assert.True(TemBotaoDeNotas(gterm));
+            Assert.Equal("Abrir o Claude", gterm.RotuloDeAbrir);
+            await gterm.IniciarCommand.ExecuteAsync(null);
+            var doGTerm = gterm.Sessao!;
+            doGTerm.Medir(160, 50);
+            Assert.True(await Esperar(() => Tela(doGTerm).Contains("/retomar")), Tela(doGTerm));
+            Assert.DoesNotContain("/gnotas", Tela(doGTerm));
+
+            // o ▶ do que tem o que fazer abre o Claude na /gnotas, e o cia grava o modo no recente
+            await financeiro.IniciarCommand.ExecuteAsync(null);
             var sessao = financeiro.Sessao!;
             sessao.Medir(160, 50);
             Assert.True(await Esperar(() => Tela(sessao).Contains("/gnotas")), Tela(sessao));
             Assert.Equal("gnotas", Cia.LerEstado(Estado)!.Recentes[0].Modo);
 
-            // com a aba à frente, a mesma pílula no cabeçalho do terminal
+            // com a aba à frente, a pílula no cabeçalho do terminal
             Assert.True(await Esperar(() => janela.FindControl<Button>("NotasDaAba")!.IsEffectivelyVisible));
             Foto(janela, "aba-notas.png");
         }

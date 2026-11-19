@@ -94,7 +94,8 @@ e por isso confirma antes.
   turno relê o contexto inteiro, e as sessões retomadas dia após dia chegavam perto de 1M.
   **Mudou lá, muda aqui.** A exceção de propósito é o `/compact` que o cia manda ao
   continuar uma sessão grande (mediana de 49 s até o Claude responder): aqui ele é o botão
-  Compactar da barra da aba. Com um Claude já aberto, outro modo só depois de confirmar. Ao sair do
+  Compactar da barra da aba. A outra é a nota do GNotas, que vem antes da regra no ▶ (seção
+  GNotas). Com um Claude já aberto, outro modo só depois de confirmar. Ao sair do
   Claude o terminal fica com o aviso, e o Enter sobe outro na sessão que estava ali, grande
   ou não (`Cia.ModoDoEnter`: a última com conversa, se gravada depois da subida; senão a que
   subiu retomando). Sem nenhuma (aberto sem skill e fechado), abre como o cia: a última do
@@ -279,7 +280,12 @@ e por isso confirma antes.
   testes nunca a do usuário) e conta os itens. O quadro do projeto parado mostra quantos faltam
   e o primeiro; a pílula Notas (amarela, no quadro, no cabeçalho da aba e no menu da linha) só
   aparece com nota e abre o Claude na skill `/gnotas` (`Cia.ModoNotas`, `~\.claude\skills\gnotas`),
-  que faz, marca o ✅ e limpa a galeria. O GTerm só lê a nota.
+  que faz, marca o ✅ e limpa a galeria. O GTerm só lê a nota. O ▶ olha a nota antes da regra do
+  cia (pedido de 19/11/2026): com item pendente, ele, o Enter, o duplo clique e o botão principal
+  do quadro abrem na `/gnotas` (`ProjetoViewModel.AbreNasNotas`; a nota é relida no clique, em
+  `MainViewModel.IniciarAsync`), e sem nada pendente abrem como o cia. Nesse caso a pílula Notas
+  do quadro some (quem abre nas Notas é o botão principal) e a sessão de hoje fica no Continuar.
+  O Abrir o Claude do clique direito continua sendo o do cia, para pular as notas.
 - **Claude Code** — `ClaudeHooks` instala hooks no `settings.json` de cada conta (botão em
   Configurações → Claude Code); o hook chama o próprio `GTerm.exe --estado <nome>`, que grava o nome no
   arquivo apontado por `GTERM_ESTADO` (um por terminal) e sai sem abrir janela. A sessão lê

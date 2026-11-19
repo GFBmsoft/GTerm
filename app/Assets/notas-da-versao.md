@@ -1,3 +1,6 @@
+## 1.0.0.36 — 19/11/2026
+- **O ▶ abre no que falta no GNotas**: num projeto com item pendente na nota do caderno Projetos, o ▶ da árvore, o Enter, o duplo clique e o botão verde do quadro abrem o Claude direto na /gnotas. Sem nada pendente, abrem como sempre: retomam a sessão de hoje ou abrem na skill do projeto. O botão do quadro passa a dizer "Abrir nas Notas", e a sessão de hoje fica no Continuar a última. Para abrir sem as notas, use o Abrir o Claude do clique direito ou a Sessão nova.
+
 ## 1.0.0.35 — 19/11/2026
 - **O que falta em cada projeto, pelo GNotas**: com uma nota do projeto no caderno Projetos do GNotas (Projetos\GTerm.md, por exemplo), o quadro do projeto parado diz quantos itens faltam e qual é o primeiro. A pílula Notas, no quadro, no cabeçalho do terminal e no clique direito da árvore, abre o Claude para fazê-los: ele marca ✅ no que ficou pronto e tira da galeria do GNotas as imagens dos itens feitos.
 - **Configurações no jeito do GNotas**: a engrenagem no pé da árvore abre as seções à esquerda (Terminal, Avisos, Claude Code, GNotas e Sobre) e a escolhida à direita. A versão em uso, o procurar atualização e as notas da versão ficam no Sobre. Com versão nova, o convite verde aparece ao lado da engrenagem, e só então.

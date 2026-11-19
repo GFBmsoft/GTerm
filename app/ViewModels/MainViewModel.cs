@@ -242,17 +242,24 @@ public sealed partial class ProjetoViewModel : ObservableObject
             OnPropertyChanged(nome);
     }
 
-    /// <summary>O botão de abrir retoma a última sessão: ela é de hoje e pequena (<see cref="Cia.Retomavel"/>).</summary>
+    /// <summary>
+    /// A última sessão é de hoje e pequena (<see cref="Cia.Retomavel"/>): sem nada a fazer no
+    /// GNotas, o botão de abrir a retoma.
+    /// </summary>
     public bool Retomavel => UltimaSessao is { } s && Cia.Retomavel(s, Agora);
 
-    /// <summary>Há uma sessão que o abrir não retoma: o Continuar retoma mesmo assim.</summary>
-    public bool PodeContinuar => UltimaSessao is not null && !Retomavel;
+    /// <summary>
+    /// Há uma sessão que o abrir não retoma (antiga, grande, ou o abrir vai para as Notas): o
+    /// Continuar retoma mesmo assim.
+    /// </summary>
+    public bool PodeContinuar => UltimaSessao is not null && (!Retomavel || AbreNasNotas);
 
-    public string RotuloDeAbrir => Retomavel ? "Retomar a sessão" : "Abrir o Claude";
+    public string RotuloDeAbrir => AbreNasNotas ? "Abrir nas Notas" : Retomavel ? "Retomar a sessão" : "Abrir o Claude";
 
     /// <summary>A dica do botão de abrir, com o limite que a regra usa de verdade.</summary>
     public static string DicaDeAbrir { get; } =
-        "Abre como o cia: retoma a última sessão só se ela for de hoje e tiver menos de " +
+        "Com o que fazer na nota do GNotas, abre na /gnotas. Sem nada pendente, abre como o cia: " +
+        "retoma a última sessão só se ela for de hoje e tiver menos de " +
         Cia.Tokens(Cia.LimiteParaRetomar) + " de contexto";
 
     private string Skill => EhDaBmsoft ? "na /delphi-writer" : "no /retomar, com a memória do projeto";
@@ -261,7 +268,9 @@ public sealed partial class ProjetoViewModel : ObservableObject
     /// Embaixo do botão de abrir, o que o cia vai fazer de diferente: sem sessão, ou com uma
     /// antiga ou grande, a skill numa sessão nova. A sessão em si está no quadro.
     /// </summary>
-    public string TextoDaSessao => !SessaoLida || Retomavel ? ""
+    public string TextoDaSessao => AbreNasNotas
+            ? $"{TextoDaNota}: abre na /gnotas." + (Retomavel ? " A sessão de hoje fica no Continuar a última." : "")
+        : !SessaoLida || Retomavel ? ""
         : UltimaSessao is not { } s ? "Nenhuma sessão com conversa: abre " + Skill
         : $"A última sessão {PorQueNaoRetoma(s)}: abre uma sessão nova {Skill}. Ela fica guardada.";
 
@@ -451,10 +460,20 @@ public sealed partial class ProjetoViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TemNota), nameof(TextoDaNota), nameof(DetalheDaNota), nameof(FeitosDaNota),
-        nameof(TemFeitosNaNota), nameof(DicaDasNotas))]
+        nameof(TemFeitosNaNota), nameof(DicaDasNotas), nameof(AbreNasNotas), nameof(NotasAParte),
+        nameof(RotuloDeAbrir), nameof(TextoDaSessao), nameof(TemTextoDaSessao), nameof(PodeContinuar))]
     private NotaDoProjeto? _nota;
 
     public bool TemNota => Nota is not null;
+
+    /// <summary>
+    /// O ▶ abre na /gnotas: a nota do projeto tem o que fazer. Vem antes da regra do cia (pedido
+    /// do usuário, 19/11/2026), e sem nada pendente abre como ele. Não existe no cia.
+    /// </summary>
+    public bool AbreNasNotas => Nota is { Pendentes: > 0 };
+
+    /// <summary>A pílula Notas do quadro: com o que fazer na nota, quem abre nela é o botão principal.</summary>
+    public bool NotasAParte => TemNota && !AbreNasNotas;
 
     public string TextoDaNota => Nota?.Pendentes switch
     {
@@ -1577,14 +1596,25 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// O ▶ da linha, o Enter e o duplo clique na árvore: abre o Claude num projeto sem
-    /// terminal; no que já tem, só o traz para a frente.
+    /// O ▶ da linha, o Enter e o duplo clique na árvore, e o botão principal do quadro: abre o
+    /// Claude num projeto sem terminal; no que já tem, só o traz para a frente. Primeiro vem a
+    /// nota do GNotas: com o que fazer, abre na /gnotas; sem nada, como o cia abriria.
     /// </summary>
-    public Task IniciarAsync(ProjetoViewModel p)
+    public async Task IniciarAsync(ProjetoViewModel p)
     {
-        if (p.Sessao is null) return AbrirAsync(p);
+        if (p.Sessao is null)
+        {
+            // relida agora: o projeto pode nunca ter estado à vista, e o GNotas grava nela a
+            // qualquer hora
+            await LerNotaAsync(p);
+            // um segundo clique, enquanto a nota era lida, já abriu
+            if (p.Sessao is null)
+            {
+                await AbrirAsync(p, p.AbreNasNotas ? Cia.ModoNotas : null);
+                return;
+            }
+        }
         Selecionado = p;
-        return Task.CompletedTask;
     }
 
     /// <summary>
